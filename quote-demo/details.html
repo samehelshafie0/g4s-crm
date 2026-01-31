@@ -1,0 +1,1074 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quote Details - G4S CRM</title>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.1/css/all.min.css">
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <link rel="stylesheet" href="../../assets/css/tables.css">
+    <link rel="stylesheet" href="../../assets/css/dashboard.css">
+    <link rel="stylesheet" href="../../assets/css/quotes.css">
+</head>
+<body>
+    <!-- Top Navbar -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+        <a class="navbar-brand" href="../../index.html">
+            <img src="../../assets/img/logo.svg" width="30" height="30" class="d-inline-block align-top mr-2" alt="G4S Logo">
+            G4S CRM
+        </a>
+        <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarNav">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="navbarNav">
+            <ul class="navbar-nav mr-auto">
+                <li class="nav-item">
+                    <a class="nav-link" href="../../dashboard.html">Dashboard</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="../leads/list.html">Leads</a>
+                </li>
+                <li class="nav-item active">
+                    <a class="nav-link" href="list.html">Quotes <span class="sr-only">(current)</span></a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="../products/list.html">Products</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="../customers/list.html">Customers</a>
+                </li>
+            </ul>
+            <!-- Language Selector -->
+            <div class="nav-item dropdown mr-3">
+                <a class="nav-link dropdown-toggle text-white" href="#" id="languageDropdown" role="button" data-toggle="dropdown">
+                    <i class="fas fa-globe-americas mr-1"></i> English
+                </a>
+                <div class="dropdown-menu dropdown-menu-right">
+                    <a class="dropdown-item" href="#english">English</a>
+                    <a class="dropdown-item" href="#arabic">العربية</a>
+                </div>
+            </div>
+            <!-- User Menu -->
+            <ul class="navbar-nav">
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle" href="#" id="userDropdown" role="button" data-toggle="dropdown">
+                        <i class="fas fa-user-circle mr-1"></i> Mohammed Al-Farsi
+                    </a>
+                    <div class="dropdown-menu dropdown-menu-right">
+                        <a class="dropdown-item" href="#"><i class="fas fa-user mr-2"></i>Profile</a>
+                        <a class="dropdown-item" href="#"><i class="fas fa-cog mr-2"></i>Settings</a>
+                        <div class="dropdown-divider"></div>
+                        <a class="dropdown-item text-danger" href="../auth/login.html"><i class="fas fa-sign-out-alt mr-2"></i>Logout</a>
+                    </div>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="#" id="notifications">
+                        <i class="fas fa-bell"></i>
+                        <span class="badge badge-danger">3</span>
+                    </a>
+                </li>
+            </ul>
+        </div>
+    </nav>
+
+    <div class="container-fluid mt-5 pt-3">
+        <div class="row">
+            <!-- Sidebar -->
+            <div class="col-md-3 col-lg-2 d-md-block bg-light sidebar mt-2">
+                <div class="sidebar-sticky pt-3">
+                    <ul class="nav flex-column">
+                        <li class="nav-item">
+                            <a class="nav-link" href="../../dashboard.html">
+                                <i class="fas fa-tachometer-alt mr-2"></i>
+                                Dashboard
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="../leads/list.html">
+                                <i class="fas fa-funnel-dollar mr-2"></i>
+                                Leads
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link active" href="list.html">
+                                <i class="fas fa-file-invoice-dollar mr-2"></i>
+                                Quotes
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="../products/list.html">
+                                <i class="fas fa-box-open mr-2"></i>
+                                Products
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="../customers/list.html">
+                                <i class="fas fa-users mr-2"></i>
+                                Customers
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="#">
+                                <i class="fas fa-chart-bar mr-2"></i>
+                                Reports
+                            </a>
+                        </li>
+                    </ul>
+
+                    <h6 class="sidebar-heading d-flex justify-content-between align-items-center px-3 mt-4 mb-1 text-muted">
+                        <span>Quote Actions</span>
+                    </h6>
+                    <ul class="nav flex-column mb-2">
+                        <li class="nav-item">
+                            <a class="nav-link" href="edit.html?id=Q-2025-0045">
+                                <i class="fas fa-edit mr-2"></i>
+                                Edit Quote
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="#" onclick="generatePDF()">
+                                <i class="fas fa-file-pdf mr-2"></i>
+                                Download PDF
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="#" onclick="generateExcel()">
+                                <i class="fas fa-file-excel mr-2"></i>
+                                Export to Excel
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="#" onclick="duplicateQuote()">
+                                <i class="fas fa-copy mr-2"></i>
+                                Duplicate Quote
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Main content -->
+            <main class="col-md-9 ml-sm-auto col-lg-10 px-md-4">
+                <!-- Quote Header -->
+                <div class="quote-header my-4">
+                    <div class="row align-items-center">
+                        <div class="col-md-8">
+                            <div class="d-flex align-items-center">
+                                <h1 class="h2 mb-0">Quote #Q-2025-0045</h1>
+                                <span class="badge badge-primary ml-3">Manager Approved</span>
+                            </div>
+                            <p class="text-muted mb-0">Saudi Aramco - Dhahran HQ Security Upgrade</p>
+                        </div>
+                        <div class="col-md-4 text-right">
+                            <div class="btn-group">
+                                <button type="button" class="btn btn-outline-secondary" onclick="window.location.href='list.html'">
+                                    <i class="fas fa-arrow-left mr-1"></i> Back to List
+                                </button>
+                                <button type="button" class="btn btn-primary" data-toggle="modal" data-target="#workflowModal">
+                                    <i class="fas fa-tasks mr-1"></i> Workflow Actions
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Quote Progress and Status -->
+                <div class="card mb-4">
+                    <div class="card-header bg-white">
+                        <h5 class="mb-0">Quote Status</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="progress-track">
+                            <ul class="progressbar">
+                                <li class="completed">Draft</li>
+                                <li class="completed">Ready for Review</li>
+                                <li class="active">Manager Approved</li>
+                                <li>Submitted</li>
+                                <li>Won/Lost</li>
+                            </ul>
+                        </div>
+                        
+                        <div class="row mt-4">
+                            <div class="col-md-6">
+                                <div class="alert alert-info">
+                                    <strong>Next Action:</strong> Submit quote to the customer for review
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="card bg-light">
+                                    <div class="card-body">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <div>
+                                                <span class="text-muted">Last Updated</span>
+                                                <h6 class="mb-0">June 15, 2025</h6>
+                                            </div>
+                                            <div>
+                                                <span class="text-muted">Created By</span>
+                                                <h6 class="mb-0">Mohammed Al-Farsi</h6>
+                                            </div>
+                                            <div>
+                                                <span class="text-muted">Validity</span>
+                                                <h6 class="mb-0">30 Days</h6>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Quote Details -->
+                <div class="row">
+                    <!-- Quote Summary -->
+                    <div class="col-md-4">
+                        <div class="card mb-4">
+                            <div class="card-header bg-white">
+                                <h5 class="mb-0">Quote Summary</h5>
+                            </div>
+                            <div class="card-body">
+                                <table class="table table-borderless">
+                                    <tbody>
+                                        <tr>
+                                            <th>Customer</th>
+                                            <td>Saudi Aramco</td>
+                                        </tr>
+                                        <tr>
+                                            <th>Project</th>
+                                            <td>Dhahran HQ Security Upgrade</td>
+                                        </tr>
+                                        <tr>
+                                            <th>Contact</th>
+                                            <td>Abdullah Al-Ghamdi</td>
+                                        </tr>
+                                        <tr>
+                                            <th>Quote Date</th>
+                                            <td>June 10, 2025</td>
+                                        </tr>
+                                        <tr>
+                                            <th>Valid Until</th>
+                                            <td>July 10, 2025</td>
+                                        </tr>
+                                        <tr>
+                                            <th>Payment Terms</th>
+                                            <td>Net 30</td>
+                                        </tr>
+                                        <tr>
+                                            <th>Delivery Time</th>
+                                            <td>6-8 weeks</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Financial Summary -->
+                    <div class="col-md-4">
+                        <div class="card mb-4">
+                            <div class="card-header bg-white">
+                                <h5 class="mb-0">Financial Summary</h5>
+                            </div>
+                            <div class="card-body">
+                                <table class="table table-borderless">
+                                    <tbody>
+                                        <tr>
+                                            <th>Subtotal</th>
+                                            <td class="text-right">SAR 1,150,000.00</td>
+                                        </tr>
+                                        <tr>
+                                            <th>Discount (5%)</th>
+                                            <td class="text-right">SAR 57,500.00</td>
+                                        </tr>
+                                        <tr>
+                                            <th>Net Amount</th>
+                                            <td class="text-right">SAR 1,092,500.00</td>
+                                        </tr>
+                                        <tr>
+                                            <th>VAT (15%)</th>
+                                            <td class="text-right">SAR 157,500.00</td>
+                                        </tr>
+                                        <tr class="border-top">
+                                            <th>Total Amount</th>
+                                            <td class="text-right"><strong>SAR 1,250,000.00</strong></td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Margin Analysis (Visible only to authorized roles) -->
+                    <div class="col-md-4">
+                        <div class="card mb-4 authorized-only">
+                            <div class="card-header bg-white">
+                                <h5 class="mb-0">Margin Analysis</h5>
+                                <span class="badge badge-info">Restricted</span>
+                            </div>
+                            <div class="card-body">
+                                <table class="table table-borderless">
+                                    <tbody>
+                                        <tr>
+                                            <th>Total Cost</th>
+                                            <td class="text-right">SAR 960,125.00</td>
+                                        </tr>
+                                        <tr>
+                                            <th>Revenue</th>
+                                            <td class="text-right">SAR 1,092,500.00</td>
+                                        </tr>
+                                        <tr>
+                                            <th>Gross Profit</th>
+                                            <td class="text-right">SAR 132,375.00</td>
+                                        </tr>
+                                        <tr>
+                                            <th>Margin %</th>
+                                            <td class="text-right margin-positive">16.5%</td>
+                                        </tr>
+                                        <tr>
+                                            <th>Target Margin</th>
+                                            <td class="text-right">15.0%</td>
+                                        </tr>
+                                        <tr>
+                                            <th>Variance</th>
+                                            <td class="text-right margin-positive">+1.5%</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                                <div class="alert alert-success mt-2 mb-0">
+                                    <i class="fas fa-check-circle mr-1"></i> Margin exceeds target by 1.5%
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Line Items -->
+                <div class="card mb-4">
+                    <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">Line Items</h5>
+                        <div class="btn-group">
+                            <button class="btn btn-sm btn-outline-secondary" data-toggle="modal" data-target="#addItemModal">
+                                <i class="fas fa-plus mr-1"></i> Add Item
+                            </button>
+                            <button class="btn btn-sm btn-outline-secondary">
+                                <i class="fas fa-upload mr-1"></i> Import Items
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <!-- Materials Category -->
+                        <div class="category-section mb-4">
+                            <h5 class="category-header">
+                                <i class="fas fa-box-open mr-2"></i> Materials & Equipment
+                            </h5>
+                            <div class="table-responsive">
+                                <table class="table table-bordered table-hover">
+                                    <thead class="thead-light">
+                                        <tr>
+                                            <th width="5%">#</th>
+                                            <th width="15%">Item Code</th>
+                                            <th width="35%">Description</th>
+                                            <th width="10%">Quantity</th>
+                                            <th width="10%">Unit</th>
+                                            <th width="12%">Unit Price</th>
+                                            <th width="13%">Total</th>
+                                            <th width="5%">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr>
+                                            <td>1</td>
+                                            <td>HIK-DS-2CD2T85G1-I5</td>
+                                            <td>
+                                                <div>Hikvision 8MP Outdoor Bullet Network Camera</div>
+                                                <div class="comments-section">
+                                                    <button class="btn btn-sm btn-link text-info" data-toggle="collapse" data-target="#comments-1">
+                                                        <i class="fas fa-comments"></i> Comments (2)
+                                                    </button>
+                                                    <div id="comments-1" class="collapse mt-2">
+                                                        <div class="comment">
+                                                            <div class="comment-header">
+                                                                <strong>Ahmed Abdullah</strong> <small class="text-muted">June 12, 2025 14:30</small>
+                                                            </div>
+                                                            <div class="comment-body">
+                                                                Is this model rated for the extreme heat in Dhahran?
+                                                            </div>
+                                                        </div>
+                                                        <div class="comment">
+                                                            <div class="comment-header">
+                                                                <strong>Mohammed Al-Farsi</strong> <small class="text-muted">June 12, 2025 15:45</small>
+                                                            </div>
+                                                            <div class="comment-body">
+                                                                Yes, operating temperature range is -40°C to 60°C. We've used these at other Aramco sites without issues.
+                                                            </div>
+                                                        </div>
+                                                        <div class="add-comment mt-2">
+                                                            <input type="text" class="form-control form-control-sm" placeholder="Add a comment...">
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td>45</td>
+                                            <td>Each</td>
+                                            <td>SAR 1,062.50</td>
+                                            <td>SAR 47,812.50</td>
+                                            <td>
+                                                <div class="dropdown">
+                                                    <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-toggle="dropdown">
+                                                        <i class="fas fa-ellipsis-v"></i>
+                                                    </button>
+                                                    <div class="dropdown-menu dropdown-menu-right">
+                                                        <a class="dropdown-item" href="#"><i class="fas fa-edit mr-2"></i>Edit</a>
+                                                        <a class="dropdown-item" href="#"><i class="fas fa-comment mr-2"></i>Add Comment</a>
+                                                        <div class="dropdown-divider"></div>
+                                                        <a class="dropdown-item text-danger" href="#"><i class="fas fa-trash-alt mr-2"></i>Delete</a>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                        <tr>
+                                            <td>2</td>
+                                            <td>LEN-NVR516-16</td>
+                                            <td>
+                                                <div>Lenel NVR 16-Channel 4K Network Video Recorder</div>
+                                            </td>
+                                            <td>6</td>
+                                            <td>Each</td>
+                                            <td>SAR 7,056.00</td>
+                                            <td>SAR 42,336.00</td>
+                                            <td>
+                                                <div class="dropdown">
+                                                    <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-toggle="dropdown">
+                                                        <i class="fas fa-ellipsis-v"></i>
+                                                    </button>
+                                                    <div class="dropdown-menu dropdown-menu-right">
+                                                        <a class="dropdown-item" href="#"><i class="fas fa-edit mr-2"></i>Edit</a>
+                                                        <a class="dropdown-item" href="#"><i class="fas fa-comment mr-2"></i>Add Comment</a>
+                                                        <div class="dropdown-divider"></div>
+                                                        <a class="dropdown-item text-danger" href="#"><i class="fas fa-trash-alt mr-2"></i>Delete</a>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                        <tr>
+                                            <td>3</td>
+                                            <td>HID-RPK40-H</td>
+                                            <td>
+                                                <div>HID multiCLASS SE RPK40 Card Reader and Keypad</div>
+                                                <div class="comments-section">
+                                                    <button class="btn btn-sm btn-link text-info" data-toggle="collapse" data-target="#comments-3">
+                                                        <i class="fas fa-comments"></i> Comments (1)
+                                                    </button>
+                                                    <div id="comments-3" class="collapse mt-2">
+                                                        <div class="comment">
+                                                            <div class="comment-header">
+                                                                <strong>Fatima Al-Harbi</strong> <small class="text-muted">June 14, 2025 10:15</small>
+                                                            </div>
+                                                            <div class="comment-body">
+                                                                Client requested compatibility with existing HID credentials. Confirmed with supplier.
+                                                            </div>
+                                                        </div>
+                                                        <div class="add-comment mt-2">
+                                                            <input type="text" class="form-control form-control-sm" placeholder="Add a comment...">
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td>120</td>
+                                            <td>Each</td>
+                                            <td>SAR 513.00</td>
+                                            <td>SAR 61,560.00</td>
+                                            <td>
+                                                <div class="dropdown">
+                                                    <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-toggle="dropdown">
+                                                        <i class="fas fa-ellipsis-v"></i>
+                                                    </button>
+                                                    <div class="dropdown-menu dropdown-menu-right">
+                                                        <a class="dropdown-item" href="#"><i class="fas fa-edit mr-2"></i>Edit</a>
+                                                        <a class="dropdown-item" href="#"><i class="fas fa-comment mr-2"></i>Add Comment</a>
+                                                        <div class="dropdown-divider"></div>
+                                                        <a class="dropdown-item text-danger" href="#"><i class="fas fa-trash-alt mr-2"></i>Delete</a>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                        <tr>
+                                            <td>4</td>
+                                            <td>GAL-9600LSP</td>
+                                            <td>
+                                                <div>Gallagher Controller 9600LSP with PSU</div>
+                                            </td>
+                                            <td>8</td>
+                                            <td>Each</td>
+                                            <td>SAR 10,332.00</td>
+                                            <td>SAR 82,656.00</td>
+                                            <td>
+                                                <div class="dropdown">
+                                                    <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-toggle="dropdown">
+                                                        <i class="fas fa-ellipsis-v"></i>
+                                                    </button>
+                                                    <div class="dropdown-menu dropdown-menu-right">
+                                                        <a class="dropdown-item" href="#"><i class="fas fa-edit mr-2"></i>Edit</a>
+                                                        <a class="dropdown-item" href="#"><i class="fas fa-comment mr-2"></i>Add Comment</a>
+                                                        <div class="dropdown-divider"></div>
+                                                        <a class="dropdown-item text-danger" href="#"><i class="fas fa-trash-alt mr-2"></i>Delete</a>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                    <tfoot class="bg-light">
+                                        <tr>
+                                            <th colspan="6" class="text-right">Materials Subtotal:</th>
+                                            <th>SAR 234,364.50</th>
+                                            <td></td>
+                                        </tr>
+                                    </tfoot>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- Manpower Category -->
+                        <div class="category-section mb-4">
+                            <h5 class="category-header">
+                                <i class="fas fa-hard-hat mr-2"></i> Manpower & Services
+                            </h5>
+                            <div class="table-responsive">
+                                <table class="table table-bordered table-hover">
+                                    <thead class="thead-light">
+                                        <tr>
+                                            <th width="5%">#</th>
+                                            <th width="15%">Item Code</th>
+                                            <th width="35%">Description</th>
+                                            <th width="10%">Quantity</th>
+                                            <th width="10%">Unit</th>
+                                            <th width="12%">Unit Price</th>
+                                            <th width="13%">Total</th>
+                                            <th width="5%">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr>
+                                            <td>5</td>
+                                            <td>LABOR-TECH-SR</td>
+                                            <td>
+                                                <div>Senior Technician - Installation</div>
+                                            </td>
+                                            <td>480</td>
+                                            <td>Hours</td>
+                                            <td>SAR 175.00</td>
+                                            <td>SAR 84,000.00</td>
+                                            <td>
+                                                <div class="dropdown">
+                                                    <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-toggle="dropdown">
+                                                        <i class="fas fa-ellipsis-v"></i>
+                                                    </button>
+                                                    <div class="dropdown-menu dropdown-menu-right">
+                                                        <a class="dropdown-item" href="#"><i class="fas fa-edit mr-2"></i>Edit</a>
+                                                        <a class="dropdown-item" href="#"><i class="fas fa-comment mr-2"></i>Add Comment</a>
+                                                        <div class="dropdown-divider"></div>
+                                                        <a class="dropdown-item text-danger" href="#"><i class="fas fa-trash-alt mr-2"></i>Delete</a>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                        <tr>
+                                            <td>6</td>
+                                            <td>LABOR-ENG</td>
+                                            <td>
+                                                <div>Systems Engineer - Configuration</div>
+                                            </td>
+                                            <td>240</td>
+                                            <td>Hours</td>
+                                            <td>SAR 250.00</td>
+                                            <td>SAR 60,000.00</td>
+                                            <td>
+                                                <div class="dropdown">
+                                                    <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-toggle="dropdown">
+                                                        <i class="fas fa-ellipsis-v"></i>
+                                                    </button>
+                                                    <div class="dropdown-menu dropdown-menu-right">
+                                                        <a class="dropdown-item" href="#"><i class="fas fa-edit mr-2"></i>Edit</a>
+                                                        <a class="dropdown-item" href="#"><i class="fas fa-comment mr-2"></i>Add Comment</a>
+                                                        <div class="dropdown-divider"></div>
+                                                        <a class="dropdown-item text-danger" href="#"><i class="fas fa-trash-alt mr-2"></i>Delete</a>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                        <tr>
+                                            <td>7</td>
+                                            <td>LABOR-PM</td>
+                                            <td>
+                                                <div>Project Manager</div>
+                                            </td>
+                                            <td>320</td>
+                                            <td>Hours</td>
+                                            <td>SAR 300.00</td>
+                                            <td>SAR 96,000.00</td>
+                                            <td>
+                                                <div class="dropdown">
+                                                    <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-toggle="dropdown">
+                                                        <i class="fas fa-ellipsis-v"></i>
+                                                    </button>
+                                                    <div class="dropdown-menu dropdown-menu-right">
+                                                        <a class="dropdown-item" href="#"><i class="fas fa-edit mr-2"></i>Edit</a>
+                                                        <a class="dropdown-item" href="#"><i class="fas fa-comment mr-2"></i>Add Comment</a>
+                                                        <div class="dropdown-divider"></div>
+                                                        <a class="dropdown-item text-danger" href="#"><i class="fas fa-trash-alt mr-2"></i>Delete</a>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                        <tr>
+                                            <td>8</td>
+                                            <td>SERVICE-MAINT-1Y</td>
+                                            <td>
+                                                <div>Annual Maintenance Service - Basic</div>
+                                                <div class="comments-section">
+                                                    <button class="btn btn-sm btn-link text-info" data-toggle="collapse" data-target="#comments-8">
+                                                        <i class="fas fa-comments"></i> Comments (1)
+                                                    </button>
+                                                    <div id="comments-8" class="collapse mt-2">
+                                                        <div class="comment">
+                                                            <div class="comment-header">
+                                                                <strong>Mohammed Al-Farsi</strong> <small class="text-muted">June 14, 2025 09:30</small>
+                                                            </div>
+                                                            <div class="comment-body">
+                                                                Client requested first year maintenance to be included in the quote.
+                                                            </div>
+                                                        </div>
+                                                        <div class="add-comment mt-2">
+                                                            <input type="text" class="form-control form-control-sm" placeholder="Add a comment...">
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td>1</td>
+                                            <td>Year</td>
+                                            <td>SAR 85,000.00</td>
+                                            <td>SAR 85,000.00</td>
+                                            <td>
+                                                <div class="dropdown">
+                                                    <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-toggle="dropdown">
+                                                        <i class="fas fa-ellipsis-v"></i>
+                                                    </button>
+                                                    <div class="dropdown-menu dropdown-menu-right">
+                                                        <a class="dropdown-item" href="#"><i class="fas fa-edit mr-2"></i>Edit</a>
+                                                        <a class="dropdown-item" href="#"><i class="fas fa-comment mr-2"></i>Add Comment</a>
+                                                        <div class="dropdown-divider"></div>
+                                                        <a class="dropdown-item text-danger" href="#"><i class="fas fa-trash-alt mr-2"></i>Delete</a>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                    <tfoot class="bg-light">
+                                        <tr>
+                                            <th colspan="6" class="text-right">Manpower Subtotal:</th>
+                                            <th>SAR 325,000.00</th>
+                                            <td></td>
+                                        </tr>
+                                    </tfoot>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- Miscellaneous Category -->
+                        <div class="category-section mb-4">
+                            <h5 class="category-header">
+                                <i class="fas fa-random mr-2"></i> Miscellaneous
+                            </h5>
+                            <div class="table-responsive">
+                                <table class="table table-bordered table-hover">
+                                    <thead class="thead-light">
+                                        <tr>
+                                            <th width="5%">#</th>
+                                            <th width="15%">Item Code</th>
+                                            <th width="35%">Description</th>
+                                            <th width="10%">Quantity</th>
+                                            <th width="10%">Unit</th>
+                                            <th width="12%">Unit Price</th>
+                                            <th width="13%">Total</th>
+                                            <th width="5%">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr>
+                                            <td>9</td>
+                                            <td>MISC-CABLE</td>
+                                            <td>
+                                                <div>Cabling and Accessories</div>
+                                            </td>
+                                            <td>1</td>
+                                            <td>Lot</td>
+                                            <td>SAR 68,500.00</td>
+                                            <td>SAR 68,500.00</td>
+                                            <td>
+                                                <div class="dropdown">
+                                                    <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-toggle="dropdown">
+                                                        <i class="fas fa-ellipsis-v"></i>
+                                                    </button>
+                                                    <div class="dropdown-menu dropdown-menu-right">
+                                                        <a class="dropdown-item" href="#"><i class="fas fa-edit mr-2"></i>Edit</a>
+                                                        <a class="dropdown-item" href="#"><i class="fas fa-comment mr-2"></i>Add Comment</a>
+                                                        <div class="dropdown-divider"></div>
+                                                        <a class="dropdown-item text-danger" href="#"><i class="fas fa-trash-alt mr-2"></i>Delete</a>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                        <tr>
+                                            <td>10</td>
+                                            <td>MISC-TRAVEL</td>
+                                            <td>
+                                                <div>Travel and Accommodation</div>
+                                            </td>
+                                            <td>1</td>
+                                            <td>Lot</td>
+                                            <td>SAR 35,000.00</td>
+                                            <td>SAR 35,000.00</td>
+                                            <td>
+                                                <div class="dropdown">
+                                                    <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-toggle="dropdown">
+                                                        <i class="fas fa-ellipsis-v"></i>
+                                                    </button>
+                                                    <div class="dropdown-menu dropdown-menu-right">
+                                                        <a class="dropdown-item" href="#"><i class="fas fa-edit mr-2"></i>Edit</a>
+                                                        <a class="dropdown-item" href="#"><i class="fas fa-comment mr-2"></i>Add Comment</a>
+                                                        <div class="dropdown-divider"></div>
+                                                        <a class="dropdown-item text-danger" href="#"><i class="fas fa-trash-alt mr-2"></i>Delete</a>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                    <tfoot class="bg-light">
+                                        <tr>
+                                            <th colspan="6" class="text-right">Miscellaneous Subtotal:</th>
+                                            <th>SAR 103,500.00</th>
+                                            <td></td>
+                                        </tr>
+                                    </tfoot>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- Quote Totals -->
+                        <div class="row mt-4">
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="quoteNotes">Terms and Conditions</label>
+                                    <textarea class="form-control" id="quoteNotes" rows="4" readonly>
+1. Prices are valid for 30 days from the date of this quotation.
+2. Delivery time is 6-8 weeks from receipt of PO and advance payment.
+3. Payment terms: 30% advance, 40% upon delivery, 30% upon completion.
+4. Warranty: 1 year for equipment, 90 days for labor.
+5. This quotation does not include civil works unless specifically mentioned.
+                                    </textarea>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="card bg-light">
+                                    <div class="card-body">
+                                        <table class="table table-borderless mb-0">
+                                            <tbody>
+                                                <tr>
+                                                    <th>Subtotal (Materials)</th>
+                                                    <td class="text-right">SAR 234,364.50</td>
+                                                </tr>
+                                                <tr>
+                                                    <th>Subtotal (Manpower)</th>
+                                                    <td class="text-right">SAR 325,000.00</td>
+                                                </tr>
+                                                <tr>
+                                                    <th>Subtotal (Miscellaneous)</th>
+                                                    <td class="text-right">SAR 103,500.00</td>
+                                                </tr>
+                                                <tr>
+                                                    <th>Total Before Discount</th>
+                                                    <td class="text-right">SAR 662,864.50</td>
+                                                </tr>
+                                                <tr>
+                                                    <th>Discount (5%)</th>
+                                                    <td class="text-right">SAR 33,143.23</td>
+                                                </tr>
+                                                <tr>
+                                                    <th>Net Amount</th>
+                                                    <td class="text-right">SAR 629,721.27</td>
+                                                </tr>
+                                                <tr>
+                                                    <th>VAT (15%)</th>
+                                                    <td class="text-right">SAR 94,458.19</td>
+                                                </tr>
+                                                <tr class="border-top">
+                                                    <th><h5 class="mb-0">Grand Total</h5></th>
+                                                    <td class="text-right"><h5 class="mb-0">SAR 724,179.46</h5></td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Approval History -->
+                <div class="card mb-4">
+                    <div class="card-header bg-white">
+                        <h5 class="mb-0">Approval History</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-bordered">
+                                <thead class="thead-light">
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Status</th>
+                                        <th>User</th>
+                                        <th>Comments</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td>June 10, 2025</td>
+                                        <td><span class="badge badge-secondary">Draft</span></td>
+                                        <td>Mohammed Al-Farsi</td>
+                                        <td>Initial quote created</td>
+                                    </tr>
+                                    <tr>
+                                        <td>June 12, 2025</td>
+                                        <td><span class="badge badge-info">Ready for Review</span></td>
+                                        <td>Mohammed Al-Farsi</td>
+                                        <td>Submitted for manager approval</td>
+                                    </tr>
+                                    <tr>
+                                        <td>June 15, 2025</td>
+                                        <td><span class="badge badge-primary">Manager Approved</span></td>
+                                        <td>Ahmed Abdullah</td>
+                                        <td>Approved with minor changes to the manpower allocation. Please proceed with customer submission.</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <!-- Workflow Action Modal -->
+    <div class="modal fade" id="workflowModal" tabindex="-1" role="dialog" aria-labelledby="workflowModalLabel" aria-hidden="true">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="workflowModalLabel">Workflow Actions</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <div class="current-status mb-3">
+                        <h6>Current Status</h6>
+                        <span class="badge badge-primary">Manager Approved</span>
+                    </div>
+                    
+                    <div class="next-actions">
+                        <h6>Next Actions</h6>
+                        <div class="list-group">
+                            <a href="#" class="list-group-item list-group-item-action">
+                                <div class="d-flex w-100 justify-content-between">
+                                    <h5 class="mb-1">Submit to Customer</h5>
+                                    <small class="text-primary">Recommended</small>
+                                </div>
+                                <p class="mb-1">Send the quote to the customer for review and consideration.</p>
+                            </a>
+                            <a href="#" class="list-group-item list-group-item-action">
+                                <div class="d-flex w-100 justify-content-between">
+                                    <h5 class="mb-1">Return to Draft</h5>
+                                </div>
+                                <p class="mb-1">Revert to draft status to make further changes.</p>
+                            </a>
+                            <a href="#" class="list-group-item list-group-item-action">
+                                <div class="d-flex w-100 justify-content-between">
+                                    <h5 class="mb-1">Cancel Quote</h5>
+                                    <small class="text-danger">Caution</small>
+                                </div>
+                                <p class="mb-1">Cancel this quote and stop the process.</p>
+                            </a>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group mt-3">
+                        <label for="workflowComment">Comments</label>
+                        <textarea class="form-control" id="workflowComment" rows="3" placeholder="Add any additional comments about this status change..."></textarea>
+                    </div>
+                    
+                    <div class="form-group">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="notifyCheck" checked>
+                            <label class="form-check-label" for="notifyCheck">
+                                Notify team members via email
+                            </label>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="confirmWorkflowAction">Confirm Action</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Item Modal -->
+    <div class="modal fade" id="addItemModal" tabindex="-1" role="dialog" aria-labelledby="addItemModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="addItemModalLabel">Add Line Item</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label for="itemCategory">Category</label>
+                        <select class="form-control" id="itemCategory">
+                            <option value="materials">Materials & Equipment</option>
+                            <option value="manpower">Manpower & Services</option>
+                            <option value="misc">Miscellaneous</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="itemSearch">Search Products</label>
+                        <div class="input-group">
+                            <input type="text" class="form-control" id="itemSearch" placeholder="Type to search for products...">
+                            <div class="input-group-append">
+                                <button class="btn btn-outline-secondary" type="button">Search</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="table-responsive mt-3">
+                        <table class="table table-bordered table-hover">
+                            <thead class="thead-light">
+                                <tr>
+                                    <th>Item Code</th>
+                                    <th>Description</th>
+                                    <th>Unit Price</th>
+                                    <th>Add</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td>HIK-DS-2CD2T45G1-I5</td>
+                                    <td>Hikvision 4MP Outdoor Bullet Network Camera</td>
+                                    <td>SAR 845.00</td>
+                                    <td><button class="btn btn-sm btn-primary">Add</button></td>
+                                </tr>
+                                <tr>
+                                    <td>AXIS-M3105-LVE</td>
+                                    <td>AXIS M3105-LVE Network Camera</td>
+                                    <td>SAR 1,250.00</td>
+                                    <td><button class="btn btn-sm btn-primary">Add</button></td>
+                                </tr>
+                                <tr>
+                                    <td>HID-R10-K</td>
+                                    <td>HID R10 iCLASS SE Card Reader</td>
+                                    <td>SAR 425.00</td>
+                                    <td><button class="btn btn-sm btn-primary">Add</button></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <hr>
+                    <div class="custom-item-section">
+                        <h6>Or Add Custom Item</h6>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="customItemCode">Item Code</label>
+                                    <input type="text" class="form-control" id="customItemCode">
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="customUnit">Unit</label>
+                                    <select class="form-control" id="customUnit">
+                                        <option value="Each">Each</option>
+                                        <option value="Hours">Hours</option>
+                                        <option value="Days">Days</option>
+                                        <option value="Lot">Lot</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="customDescription">Description</label>
+                            <input type="text" class="form-control" id="customDescription">
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="customQuantity">Quantity</label>
+                                    <input type="number" class="form-control" id="customQuantity" value="1">
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="customUnitPrice">Unit Price (SAR)</label>
+                                    <input type="number" class="form-control" id="customUnitPrice">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary">Add Item</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- JavaScript Libraries -->
+    <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/popper.js@1.16.1/dist/umd/popper.min.js"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+    
+    <!-- Custom JavaScript -->
+    <script src="../../assets/js/main.js"></script>
+    <script src="../../assets/js/quotes.js"></script>
+    
+    <script>
+        // Function to generate PDF
+        function generatePDF() {
+            alert('Generating PDF for quote #Q-2025-0045');
+            // In a real application, this would trigger the PDF generation
+        }
+
+        // Function to generate Excel
+        function generateExcel() {
+            alert('Exporting quote #Q-2025-0045 to Excel');
+            // In a real application, this would trigger the Excel export
+        }
+
+        // Function to duplicate quote
+        function duplicateQuote() {
+            if (confirm('Are you sure you want to create a duplicate of this quote?')) {
+                alert('Quote duplicated successfully');
+                // In a real app, you would create a duplicate and redirect
+            }
+        }
+
+        // Workflow action confirmation
+        document.getElementById('confirmWorkflowAction').addEventListener('click', function() {
+            alert('Status updated successfully');
+            $('#workflowModal').modal('hide');
+            // In a real app, you would update the status and refresh the page
+        });
+    </script>
+</body>
+</html>

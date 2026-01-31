@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Create Quote</title>
+    <link rel="stylesheet" href="../../assets/css/main.css">
+    <link rel="stylesheet" href="../../assets/css/forms.css">
+    <link rel="stylesheet" href="../../assets/css/dashboard.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Create a New Quote</h1>
+        <form id="create-quote-form">
+            <div class="form-group">
+                <label for="quote-title">Quote Title</label>
+                <input type="text" id="quote-title" name="quote-title" required>
+            </div>
+            <div class="form-group">
+                <label for="customer-name">Customer Name</label>
+                <input type="text" id="customer-name" name="customer-name" required>
+            </div>
+            <div class="form-group">
+                <label for="quote-amount">Quote Amount</label>
+                <input type="number" id="quote-amount" name="quote-amount" required>
+            </div>
+            <div class="form-group">
+                <label for="quote-description">Description</label>
+                <textarea id="quote-description" name="quote-description" rows="4"></textarea>
+            </div>
+            <button type="submit">Create Quote</button>
+        </form>
+        <div id="message"></div>
+    </div>
+    <script src="../../assets/js/quotes.js"></script>
+    <script>
+        document.getElementById('create-quote-form').addEventListener('submit', function(event) {
+            event.preventDefault();
+            // Logic to handle form submission and quote creation
+            const messageDiv = document.getElementById('message');
+            messageDiv.textContent = 'Quote created successfully!';
+            messageDiv.style.color = 'green';
+        });
+    </script>
+</body>
+</html>
