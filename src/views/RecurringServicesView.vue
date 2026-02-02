@@ -60,8 +60,11 @@
         </template>
 
         <template #cell-type="{ value }">
-          <BaseBadge :variant="value === 'product' ? 'info' : 'warning'" size="sm">
-            {{ value === 'product' ? '📦 Product Rental' : '👷 Labor Service' }}
+          <BaseBadge
+            :variant="value === 'product' ? 'info' : 'warning'"
+            size="sm"
+          >
+            {{ value === "product" ? "📦 Product Rental" : "👷 Labor Service" }}
           </BaseBadge>
         </template>
 
@@ -74,11 +77,14 @@
                 size="sm"
                 class="source-badge"
               >
-                {{ row.source === 'owned' ? '🏢 Owned' : '🏭 Rented' }}
+                {{ row.source === "owned" ? "🏢 Owned" : "🏭 Rented" }}
               </BaseBadge>
             </div>
             <div v-if="row.sourceId" class="source-id">{{ row.sourceId }}</div>
-            <div v-if="row.source === 'rented' && row.vendorQuote" class="vendor-info">
+            <div
+              v-if="row.source === 'rented' && row.vendorQuote"
+              class="vendor-info"
+            >
               Vendor: {{ row.vendorQuote.vendorName }}
             </div>
           </div>
@@ -86,9 +92,13 @@
 
         <template #cell-pricing="{ row }">
           <div class="pricing-cell">
-            <div class="monthly-price">{{ formatCurrency(row.monthlyPrice) }}/month</div>
+            <div class="monthly-price">
+              {{ formatCurrency(row.monthlyPrice) }}/month
+            </div>
             <div class="min-period">Min: {{ row.minimumMonths }} months</div>
-            <div v-if="row.setupFee" class="setup-fee">Setup: {{ formatCurrency(row.setupFee) }}</div>
+            <div v-if="row.setupFee" class="setup-fee">
+              Setup: {{ formatCurrency(row.setupFee) }}
+            </div>
           </div>
         </template>
 
@@ -101,22 +111,43 @@
         </template>
 
         <template #cell-status="{ value }">
-          <BaseBadge :variant="value === 'active' ? 'success' : 'default'" size="sm">
-            {{ value === 'active' ? 'Active' : 'Inactive' }}
+          <BaseBadge
+            :variant="value === 'active' ? 'success' : 'default'"
+            size="sm"
+          >
+            {{ value === "active" ? "Active" : "Inactive" }}
           </BaseBadge>
         </template>
 
         <template #cell-actions="{ row }">
           <div class="action-buttons">
-            <button class="action-btn" title="View Details" @click.stop="viewServiceDetails(row)">👁️</button>
-            <button class="action-btn" title="Edit" @click.stop="editService(row)">✏️</button>
-            <button class="action-btn" title="Duplicate" @click.stop="duplicateService(row)">📋</button>
+            <button
+              class="action-btn"
+              title="View Details"
+              @click.stop="viewServiceDetails(row)"
+            >
+              👁️
+            </button>
+            <button
+              class="action-btn"
+              title="Edit"
+              @click.stop="editService(row)"
+            >
+              ✏️
+            </button>
+            <button
+              class="action-btn"
+              title="Duplicate"
+              @click.stop="duplicateService(row)"
+            >
+              📋
+            </button>
             <button
               class="action-btn"
               :title="row.status === 'active' ? 'Deactivate' : 'Activate'"
               @click.stop="toggleStatus(row)"
             >
-              {{ row.status === 'active' ? '⏸️' : '▶️' }}
+              {{ row.status === "active" ? "⏸️" : "▶️" }}
             </button>
           </div>
         </template>
@@ -126,7 +157,11 @@
     <!-- Create/Edit Service Modal -->
     <BaseModal
       v-model="showServiceModal"
-      :title="editingService ? 'Edit Recurring Service' : 'Create New Recurring Service'"
+      :title="
+        editingService
+          ? 'Edit Recurring Service'
+          : 'Create New Recurring Service'
+      "
       size="lg"
       hide-confirm
       cancel-text="Cancel"
@@ -137,7 +172,12 @@
 
           <div class="form-group">
             <label class="form-label">Service Type *</label>
-            <select v-model="serviceForm.type" class="form-input" required @change="onTypeChange">
+            <select
+              v-model="serviceForm.type"
+              class="form-input"
+              required
+              @change="onTypeChange"
+            >
               <option value="">-- Select Type --</option>
               <option value="product">📦 Product Rental</option>
               <option value="labor">👷 Labor Service</option>
@@ -146,19 +186,34 @@
 
           <div class="form-group">
             <label class="form-label">Source Type *</label>
-            <select v-model="serviceForm.source" class="form-input" required @change="onSourceTypeChange">
+            <select
+              v-model="serviceForm.source"
+              class="form-input"
+              required
+              @change="onSourceTypeChange"
+            >
               <option value="">-- Select Source --</option>
               <option value="owned">🏢 Owned (Our Products/Services)</option>
               <option value="rented">🏭 Rented (From Vendor)</option>
             </select>
             <small class="form-hint">
-              Owned: Your own products/services | Rented: Equipment/services leased from vendor
+              Owned: Your own products/services | Rented: Equipment/services
+              leased from vendor
             </small>
           </div>
 
           <!-- Source Selection: Only for OWNED products/services -->
-          <div v-if="serviceForm.source === 'owned' && serviceForm.type" class="form-group autocomplete-container">
-            <label class="form-label">Search {{ serviceForm.type === 'product' ? 'Product' : 'Labor Position' }} *</label>
+          <div
+            v-if="serviceForm.source === 'owned' && serviceForm.type"
+            class="form-group autocomplete-container"
+          >
+            <label class="form-label"
+              >Search
+              {{
+                serviceForm.type === "product" ? "Product" : "Labor Position"
+              }}
+              *</label
+            >
             <div class="autocomplete-wrapper">
               <input
                 v-model="sourceSearchQuery"
@@ -171,9 +226,16 @@
                 @blur="handleSourceSearchBlur"
                 autocomplete="off"
               />
-              <div v-if="showSourceSuggestions && filteredSourceSuggestions.length > 0" class="autocomplete-dropdown">
+              <div
+                v-if="
+                  showSourceSuggestions && filteredSourceSuggestions.length > 0
+                "
+                class="autocomplete-dropdown"
+              >
                 <div class="autocomplete-header">
-                  <span class="suggestion-count">{{ filteredSourceSuggestions.length }} results found</span>
+                  <span class="suggestion-count"
+                    >{{ filteredSourceSuggestions.length }} results found</span
+                  >
                 </div>
                 <div
                   v-for="item in filteredSourceSuggestions"
@@ -182,12 +244,18 @@
                   @mousedown.prevent="selectSourceItem(item)"
                 >
                   <div class="suggestion-main">
-                    <span class="suggestion-icon">{{ serviceForm.type === 'product' ? '📦' : '👷' }}</span>
-                    <span class="suggestion-sku" v-if="item.sku">{{ item.sku }}</span>
+                    <span class="suggestion-icon">{{
+                      serviceForm.type === "product" ? "📦" : "👷"
+                    }}</span>
+                    <span class="suggestion-sku" v-if="item.sku">{{
+                      item.sku
+                    }}</span>
                     <span class="suggestion-name">{{ item.name }}</span>
                   </div>
                   <div class="suggestion-meta">
-                    <span class="suggestion-price">{{ formatCurrency(item.price) }}</span>
+                    <span class="suggestion-price">{{
+                      formatCurrency(item.price)
+                    }}</span>
                   </div>
                 </div>
               </div>
@@ -198,35 +266,63 @@
           </div>
 
           <!-- Vendor Product/Service Entry: Only for RENTED -->
-          <div v-if="serviceForm.source === 'rented'" class="vendor-product-section">
+          <div
+            v-if="serviceForm.source === 'rented'"
+            class="vendor-product-section"
+          >
             <h5 class="subsection-title">
-              {{ serviceForm.type === 'product' ? '📦 Vendor Product Details' : '👷 Vendor Service Details' }}
+              {{
+                serviceForm.type === "product"
+                  ? "📦 Vendor Product Details"
+                  : "👷 Vendor Service Details"
+              }}
             </h5>
             <div class="form-grid">
               <div class="form-group">
                 <label class="form-label">
-                  {{ serviceForm.type === 'product' ? 'Product SKU' : 'Service Code' }}
+                  {{
+                    serviceForm.type === "product"
+                      ? "Product SKU"
+                      : "Service Code"
+                  }}
                 </label>
                 <input
                   v-model="vendorProductForm.sku"
                   type="text"
                   class="form-input"
-                  :placeholder="serviceForm.type === 'product' ? 'e.g., HIK-CAM-8MP-001' : 'e.g., GUARD-SVC-001'"
+                  :placeholder="
+                    serviceForm.type === 'product'
+                      ? 'e.g., HIK-CAM-8MP-001'
+                      : 'e.g., GUARD-SVC-001'
+                  "
                 />
                 <small class="form-hint">
-                  {{ serviceForm.type === 'product' ? 'Vendor\'s product SKU' : 'Vendor\'s service code' }}
+                  {{
+                    serviceForm.type === "product"
+                      ? "Vendor's product SKU"
+                      : "Vendor's service code"
+                  }}
                 </small>
               </div>
 
               <div class="form-group">
                 <label class="form-label">
-                  {{ serviceForm.type === 'product' ? 'Product Name' : 'Service Name' }} *
+                  {{
+                    serviceForm.type === "product"
+                      ? "Product Name"
+                      : "Service Name"
+                  }}
+                  *
                 </label>
                 <input
                   v-model="vendorProductForm.name"
                   type="text"
                   class="form-input"
-                  :placeholder="serviceForm.type === 'product' ? 'e.g., 8MP IP Camera' : 'e.g., Security Guard Service'"
+                  :placeholder="
+                    serviceForm.type === 'product'
+                      ? 'e.g., 8MP IP Camera'
+                      : 'e.g., Security Guard Service'
+                  "
                   required
                 />
               </div>
@@ -237,7 +333,11 @@
                   v-model="vendorProductForm.description"
                   class="form-input"
                   rows="2"
-                  :placeholder="serviceForm.type === 'product' ? 'Product specifications and details...' : 'Service scope and responsibilities...'"
+                  :placeholder="
+                    serviceForm.type === 'product'
+                      ? 'Product specifications and details...'
+                      : 'Service scope and responsibilities...'
+                  "
                 ></textarea>
               </div>
             </div>
@@ -245,17 +345,30 @@
 
           <div class="form-group full-width">
             <label class="form-label">
-              {{ serviceForm.type === 'product' ? 'Product Rental Name' : 'Service Name' }} *
+              {{
+                serviceForm.type === "product"
+                  ? "Product Rental Name"
+                  : "Service Name"
+              }}
+              *
             </label>
             <input
               v-model="serviceForm.name"
               type="text"
               class="form-input"
-              :placeholder="serviceForm.type === 'product' ? 'e.g., CCTV Camera - Monthly Rental' : 'e.g., Security Guard - Monthly Service'"
+              :placeholder="
+                serviceForm.type === 'product'
+                  ? 'e.g., CCTV Camera - Monthly Rental'
+                  : 'e.g., Security Guard - Monthly Service'
+              "
               required
             />
             <small class="form-hint">
-              {{ serviceForm.type === 'product' ? 'What you call this product rental offering' : 'What you call this service offering' }}
+              {{
+                serviceForm.type === "product"
+                  ? "What you call this product rental offering"
+                  : "What you call this service offering"
+              }}
             </small>
           </div>
 
@@ -265,7 +378,11 @@
               v-model="serviceForm.description"
               class="form-input"
               rows="2"
-              :placeholder="serviceForm.type === 'product' ? 'Describe the product rental terms, what\'s included, specifications...' : 'Describe the service scope, hours, responsibilities...'"
+              :placeholder="
+                serviceForm.type === 'product'
+                  ? 'Describe the product rental terms, what\'s included, specifications...'
+                  : 'Describe the service scope, hours, responsibilities...'
+              "
               required
             ></textarea>
           </div>
@@ -277,7 +394,12 @@
           <div class="form-grid">
             <div class="form-group">
               <label class="form-label">
-                {{ serviceForm.type === 'product' ? 'Monthly Rental Price (SAR)' : 'Monthly Service Price (SAR)' }} *
+                {{
+                  serviceForm.type === "product"
+                    ? "Monthly Rental Price (SAR)"
+                    : "Monthly Service Price (SAR)"
+                }}
+                *
               </label>
               <input
                 v-model.number="serviceForm.monthlyPrice"
@@ -288,7 +410,11 @@
                 required
               />
               <small class="form-hint">
-                {{ serviceForm.type === 'product' ? 'What you charge customer per month' : 'What you charge for monthly service' }}
+                {{
+                  serviceForm.type === "product"
+                    ? "What you charge customer per month"
+                    : "What you charge for monthly service"
+                }}
               </small>
             </div>
 
@@ -303,12 +429,19 @@
                 required
               />
               <small class="form-hint">
-                {{ serviceForm.source === 'owned' ? 'Your internal cost' : 'Vendor charges you' }} | Margin: {{ calculateFormMargin() }}%
+                {{
+                  serviceForm.source === "owned"
+                    ? "Your internal cost"
+                    : "Vendor charges you"
+                }}
+                | Margin: {{ calculateFormMargin() }}%
               </small>
             </div>
 
             <div class="form-group">
-              <label class="form-label">Minimum Contract Period (Months) *</label>
+              <label class="form-label"
+                >Minimum Contract Period (Months) *</label
+              >
               <input
                 v-model.number="serviceForm.minimumMonths"
                 type="number"
@@ -317,13 +450,21 @@
                 required
               />
               <small class="form-hint">
-                {{ serviceForm.type === 'product' ? 'Minimum rental period' : 'Minimum service contract' }}
+                {{
+                  serviceForm.type === "product"
+                    ? "Minimum rental period"
+                    : "Minimum service contract"
+                }}
               </small>
             </div>
 
             <div class="form-group">
               <label class="form-label">
-                {{ serviceForm.type === 'product' ? 'Installation/Setup Fee (SAR)' : 'Onboarding Fee (SAR)' }}
+                {{
+                  serviceForm.type === "product"
+                    ? "Installation/Setup Fee (SAR)"
+                    : "Onboarding Fee (SAR)"
+                }}
               </label>
               <input
                 v-model.number="serviceForm.setupFee"
@@ -333,17 +474,26 @@
                 class="form-input"
               />
               <small class="form-hint">
-                {{ serviceForm.type === 'product' ? 'One-time installation cost' : 'One-time onboarding/training cost' }}
+                {{
+                  serviceForm.type === "product"
+                    ? "One-time installation cost"
+                    : "One-time onboarding/training cost"
+                }}
               </small>
             </div>
           </div>
         </div>
 
         <!-- Vendor Quote Section (only for rented services) -->
-        <div v-if="serviceForm.source === 'rented'" class="form-section vendor-quote-section">
+        <div
+          v-if="serviceForm.source === 'rented'"
+          class="form-section vendor-quote-section"
+        >
           <h4 class="section-title">
             🏭 Vendor Rental Information
-            <span class="section-subtitle">Quote details from the vendor we're renting from</span>
+            <span class="section-subtitle"
+              >Quote details from the vendor we're renting from</span
+            >
           </h4>
 
           <div class="form-grid">
@@ -400,7 +550,9 @@
                 required
                 @input="serviceForm.monthlyCost = vendorQuoteForm.monthlyRate"
               />
-              <small class="form-hint">This will auto-fill your monthly cost</small>
+              <small class="form-hint"
+                >This will auto-fill your monthly cost</small
+              >
             </div>
 
             <div class="form-group">
@@ -439,15 +591,24 @@
           <!-- File Upload Section -->
           <div class="file-upload-section">
             <h5 class="subsection-title">
-              📎 Attach Vendor {{ serviceForm.type === 'product' ? 'Product' : 'Service' }} Quote (Optional)
+              📎 Attach Vendor
+              {{ serviceForm.type === "product" ? "Product" : "Service" }} Quote
+              (Optional)
             </h5>
             <p class="upload-hint">
-              {{ serviceForm.type === 'product' ? 'Attach vendor product quote/catalog for reference' : 'Attach vendor service agreement/quote for reference' }} (PDF, Excel, images, etc.)
+              {{
+                serviceForm.type === "product"
+                  ? "Attach vendor product quote/catalog for reference"
+                  : "Attach vendor service agreement/quote for reference"
+              }}
+              (PDF, Excel, images, etc.)
             </p>
 
             <!-- Previously Uploaded Files Library -->
             <div v-if="uploadedFiles.length > 0" class="file-library">
-              <label class="form-label">Or select from previously uploaded files:</label>
+              <label class="form-label"
+                >Or select from previously uploaded files:</label
+              >
               <div class="file-library-grid">
                 <div
                   v-for="file in uploadedFiles"
@@ -456,18 +617,31 @@
                   :class="{ selected: selectedLibraryFile?.id === file.id }"
                   @click="selectLibraryFile(file)"
                 >
-                  <span class="file-icon-small">{{ getFileIcon(file.name) }}</span>
+                  <span class="file-icon-small">{{
+                    getFileIcon(file.name)
+                  }}</span>
                   <div class="library-file-info">
                     <p class="library-file-name">{{ file.name }}</p>
-                    <p class="library-file-meta">{{ formatFileSize(file.size) }} • {{ file.uploadedAt }}</p>
+                    <p class="library-file-meta">
+                      {{ formatFileSize(file.size) }} • {{ file.uploadedAt }}
+                    </p>
                   </div>
-                  <span v-if="selectedLibraryFile?.id === file.id" class="check-icon">✓</span>
+                  <span
+                    v-if="selectedLibraryFile?.id === file.id"
+                    class="check-icon"
+                    >✓</span
+                  >
                 </div>
               </div>
             </div>
 
             <!-- Upload New File -->
-            <div class="file-upload-area" @drop.prevent="handleFileDrop" @dragover.prevent @dragenter.prevent>
+            <div
+              class="file-upload-area"
+              @drop.prevent="handleFileDrop"
+              @dragover.prevent
+              @dragenter.prevent
+            >
               <input
                 ref="fileInput"
                 type="file"
@@ -475,26 +649,55 @@
                 @change="handleFileSelect"
                 class="file-input-hidden"
               />
-              <div v-if="!uploadedFile && !selectedLibraryFile" class="upload-placeholder" @click="triggerFileInput">
+              <div
+                v-if="!uploadedFile && !selectedLibraryFile"
+                class="upload-placeholder"
+                @click="triggerFileInput"
+              >
                 <span class="upload-icon">📁</span>
                 <p class="upload-text">Click to upload or drag & drop</p>
-                <p class="upload-subtext">PDF, Excel, Word, Images, or Text files</p>
+                <p class="upload-subtext">
+                  PDF, Excel, Word, Images, or Text files
+                </p>
               </div>
               <div v-else-if="uploadedFile" class="uploaded-file-info">
-                <span class="file-icon">{{ getFileIcon(uploadedFile.name) }}</span>
+                <span class="file-icon">{{
+                  getFileIcon(uploadedFile.name)
+                }}</span>
                 <div class="file-details">
                   <p class="file-name">{{ uploadedFile.name }}</p>
-                  <p class="file-size">{{ formatFileSize(uploadedFile.size) }}</p>
+                  <p class="file-size">
+                    {{ formatFileSize(uploadedFile.size) }}
+                  </p>
                 </div>
-                <button type="button" class="btn-remove-file" @click="removeFile">✕</button>
+                <button
+                  type="button"
+                  class="btn-remove-file"
+                  @click="removeFile"
+                >
+                  ✕
+                </button>
               </div>
               <div v-else-if="selectedLibraryFile" class="uploaded-file-info">
-                <span class="file-icon">{{ getFileIcon(selectedLibraryFile.name) }}</span>
+                <span class="file-icon">{{
+                  getFileIcon(selectedLibraryFile.name)
+                }}</span>
                 <div class="file-details">
-                  <p class="file-name">{{ selectedLibraryFile.name }} <span class="library-badge">(From Library)</span></p>
-                  <p class="file-size">{{ formatFileSize(selectedLibraryFile.size) }}</p>
+                  <p class="file-name">
+                    {{ selectedLibraryFile.name }}
+                    <span class="library-badge">(From Library)</span>
+                  </p>
+                  <p class="file-size">
+                    {{ formatFileSize(selectedLibraryFile.size) }}
+                  </p>
                 </div>
-                <button type="button" class="btn-remove-file" @click="clearLibrarySelection">✕</button>
+                <button
+                  type="button"
+                  class="btn-remove-file"
+                  @click="clearLibrarySelection"
+                >
+                  ✕
+                </button>
               </div>
             </div>
           </div>
@@ -560,9 +763,15 @@
         </div>
 
         <div class="form-actions">
-          <button type="button" class="btn btn-secondary" @click="closeServiceModal">Cancel</button>
+          <button
+            type="button"
+            class="btn btn-secondary"
+            @click="closeServiceModal"
+          >
+            Cancel
+          </button>
           <button type="submit" class="btn btn-primary">
-            {{ editingService ? 'Update Service' : 'Create Service' }}
+            {{ editingService ? "Update Service" : "Create Service" }}
           </button>
         </div>
       </form>
@@ -582,16 +791,34 @@
             <div class="detail-item">
               <span class="detail-label">Type:</span>
               <span class="detail-value">
-                <BaseBadge :variant="selectedService.type === 'product' ? 'info' : 'warning'" size="sm">
-                  {{ selectedService.type === 'product' ? 'Product Rental' : 'Labor Service' }}
+                <BaseBadge
+                  :variant="
+                    selectedService.type === 'product' ? 'info' : 'warning'
+                  "
+                  size="sm"
+                >
+                  {{
+                    selectedService.type === "product"
+                      ? "Product Rental"
+                      : "Labor Service"
+                  }}
                 </BaseBadge>
               </span>
             </div>
             <div class="detail-item">
               <span class="detail-label">Source Type:</span>
               <span class="detail-value">
-                <BaseBadge :variant="selectedService.source === 'owned' ? 'success' : 'warning'" size="sm">
-                  {{ selectedService.source === 'owned' ? '🏢 Owned' : '🏭 Rented from Vendor' }}
+                <BaseBadge
+                  :variant="
+                    selectedService.source === 'owned' ? 'success' : 'warning'
+                  "
+                  size="sm"
+                >
+                  {{
+                    selectedService.source === "owned"
+                      ? "🏢 Owned"
+                      : "🏭 Rented from Vendor"
+                  }}
                 </BaseBadge>
               </span>
             </div>
@@ -606,14 +833,23 @@
             <div class="detail-item">
               <span class="detail-label">Status:</span>
               <span class="detail-value">
-                <BaseBadge :variant="selectedService.status === 'active' ? 'success' : 'default'" size="sm">
-                  {{ selectedService.status === 'active' ? 'Active' : 'Inactive' }}
+                <BaseBadge
+                  :variant="
+                    selectedService.status === 'active' ? 'success' : 'default'
+                  "
+                  size="sm"
+                >
+                  {{
+                    selectedService.status === "active" ? "Active" : "Inactive"
+                  }}
                 </BaseBadge>
               </span>
             </div>
             <div class="detail-item full-width">
               <span class="detail-label">Description:</span>
-              <span class="detail-value">{{ selectedService.description }}</span>
+              <span class="detail-value">{{
+                selectedService.description
+              }}</span>
             </div>
           </div>
         </div>
@@ -623,84 +859,150 @@
           <div class="details-grid">
             <div class="detail-item">
               <span class="detail-label">Monthly Price:</span>
-              <span class="detail-value price-value">{{ formatCurrency(selectedService.monthlyPrice) }}/month</span>
+              <span class="detail-value price-value"
+                >{{ formatCurrency(selectedService.monthlyPrice) }}/month</span
+              >
             </div>
             <div class="detail-item">
               <span class="detail-label">Monthly Cost:</span>
-              <span class="detail-value">{{ formatCurrency(selectedService.monthlyCost) }}</span>
+              <span class="detail-value">{{
+                formatCurrency(selectedService.monthlyCost)
+              }}</span>
             </div>
             <div class="detail-item">
               <span class="detail-label">Margin:</span>
-              <span class="detail-value" :class="getMarginClass(calculateMargin(selectedService))">
+              <span
+                class="detail-value"
+                :class="getMarginClass(calculateMargin(selectedService))"
+              >
                 {{ calculateMargin(selectedService).toFixed(1) }}%
               </span>
             </div>
             <div class="detail-item">
               <span class="detail-label">Minimum Period:</span>
-              <span class="detail-value">{{ selectedService.minimumMonths }} months</span>
+              <span class="detail-value"
+                >{{ selectedService.minimumMonths }} months</span
+              >
             </div>
             <div v-if="selectedService.setupFee" class="detail-item">
               <span class="detail-label">Setup Fee:</span>
-              <span class="detail-value">{{ formatCurrency(selectedService.setupFee) }}</span>
+              <span class="detail-value">{{
+                formatCurrency(selectedService.setupFee)
+              }}</span>
             </div>
           </div>
         </div>
 
         <!-- Vendor Quote Information (for rented services) -->
-        <div v-if="selectedService.source === 'rented' && selectedService.vendorQuote" class="details-section vendor-quote-details">
+        <div
+          v-if="
+            selectedService.source === 'rented' && selectedService.vendorQuote
+          "
+          class="details-section vendor-quote-details"
+        >
           <h3>🏭 Vendor Rental Information</h3>
           <div class="details-grid">
             <div class="detail-item">
               <span class="detail-label">Vendor:</span>
-              <span class="detail-value">{{ selectedService.vendorQuote.vendorName }}</span>
+              <span class="detail-value">{{
+                selectedService.vendorQuote.vendorName
+              }}</span>
             </div>
             <div class="detail-item">
               <span class="detail-label">Quote Number:</span>
-              <span class="detail-value">{{ selectedService.vendorQuote.quoteNumber }}</span>
+              <span class="detail-value">{{
+                selectedService.vendorQuote.quoteNumber
+              }}</span>
             </div>
             <div class="detail-item">
               <span class="detail-label">Quote Date:</span>
-              <span class="detail-value">{{ selectedService.vendorQuote.quoteDate }}</span>
+              <span class="detail-value">{{
+                selectedService.vendorQuote.quoteDate
+              }}</span>
             </div>
             <div class="detail-item">
               <span class="detail-label">Valid Until:</span>
-              <span class="detail-value">{{ selectedService.vendorQuote.validUntil }}</span>
+              <span class="detail-value">{{
+                selectedService.vendorQuote.validUntil
+              }}</span>
             </div>
             <div class="detail-item">
               <span class="detail-label">Vendor Monthly Rate:</span>
-              <span class="detail-value cost-value">{{ formatCurrency(selectedService.vendorQuote.monthlyRate) }}/month</span>
+              <span class="detail-value cost-value"
+                >{{
+                  formatCurrency(selectedService.vendorQuote.monthlyRate)
+                }}/month</span
+              >
             </div>
             <div class="detail-item">
               <span class="detail-label">Minimum Period:</span>
-              <span class="detail-value">{{ selectedService.vendorQuote.minimumPeriodMonths }} months</span>
+              <span class="detail-value"
+                >{{
+                  selectedService.vendorQuote.minimumPeriodMonths
+                }}
+                months</span
+              >
             </div>
-            <div v-if="selectedService.vendorQuote.setupCost" class="detail-item">
+            <div
+              v-if="selectedService.vendorQuote.setupCost"
+              class="detail-item"
+            >
               <span class="detail-label">Vendor Setup Cost:</span>
-              <span class="detail-value">{{ formatCurrency(selectedService.vendorQuote.setupCost) }}</span>
+              <span class="detail-value">{{
+                formatCurrency(selectedService.vendorQuote.setupCost)
+              }}</span>
             </div>
-            <div v-if="selectedService.vendorQuote.notes" class="detail-item full-width">
+            <div
+              v-if="selectedService.vendorQuote.notes"
+              class="detail-item full-width"
+            >
               <span class="detail-label">Quote Notes:</span>
-              <span class="detail-value">{{ selectedService.vendorQuote.notes }}</span>
+              <span class="detail-value">{{
+                selectedService.vendorQuote.notes
+              }}</span>
             </div>
           </div>
 
           <!-- Current Rental Period -->
-          <div v-if="selectedService.currentRentalPeriod" class="rental-period-info">
+          <div
+            v-if="selectedService.currentRentalPeriod"
+            class="rental-period-info"
+          >
             <h4>Current Rental Period</h4>
             <div class="details-grid">
               <div class="detail-item">
                 <span class="detail-label">Start Date:</span>
-                <span class="detail-value">{{ selectedService.currentRentalPeriod.startDate }}</span>
+                <span class="detail-value">{{
+                  selectedService.currentRentalPeriod.startDate
+                }}</span>
               </div>
               <div class="detail-item">
                 <span class="detail-label">End Date:</span>
-                <span class="detail-value">{{ selectedService.currentRentalPeriod.endDate }}</span>
+                <span class="detail-value">{{
+                  selectedService.currentRentalPeriod.endDate
+                }}</span>
               </div>
               <div class="detail-item">
                 <span class="detail-label">Months Remaining:</span>
-                <span class="detail-value" :class="selectedService.currentRentalPeriod.monthsRemaining <= 3 ? 'warning-text' : ''">
-                  {{ selectedService.currentRentalPeriod.monthsRemaining }} months
-                  <span v-if="selectedService.currentRentalPeriod.monthsRemaining <= 3" class="warning-badge">⚠️ Expiring Soon</span>
+                <span
+                  class="detail-value"
+                  :class="
+                    selectedService.currentRentalPeriod.monthsRemaining <= 3
+                      ? 'warning-text'
+                      : ''
+                  "
+                >
+                  {{
+                    selectedService.currentRentalPeriod.monthsRemaining
+                  }}
+                  months
+                  <span
+                    v-if="
+                      selectedService.currentRentalPeriod.monthsRemaining <= 3
+                    "
+                    class="warning-badge"
+                    >⚠️ Expiring Soon</span
+                  >
                 </span>
               </div>
             </div>
@@ -726,11 +1028,23 @@
               </tr>
             </thead>
             <tbody>
-              <tr v-for="months in [selectedService.minimumMonths, 12, 24, 36]" :key="months">
+              <tr
+                v-for="months in [selectedService.minimumMonths, 12, 24, 36]"
+                :key="months"
+              >
                 <td>{{ months }} months</td>
-                <td>{{ formatCurrency(selectedService.monthlyPrice * months) }}</td>
+                <td>
+                  {{ formatCurrency(selectedService.monthlyPrice * months) }}
+                </td>
                 <td>{{ formatCurrency(selectedService.setupFee || 0) }}</td>
-                <td class="total-cost">{{ formatCurrency((selectedService.monthlyPrice * months) + (selectedService.setupFee || 0)) }}</td>
+                <td class="total-cost">
+                  {{
+                    formatCurrency(
+                      selectedService.monthlyPrice * months +
+                        (selectedService.setupFee || 0),
+                    )
+                  }}
+                </td>
               </tr>
             </tbody>
           </table>
@@ -739,7 +1053,9 @@
 
       <template #footer>
         <div class="modal-actions">
-          <button class="btn btn-secondary" @click="closeDetailsModal">Close</button>
+          <button class="btn btn-secondary" @click="closeDetailsModal">
+            Close
+          </button>
           <button class="btn btn-primary" @click="editService(selectedService)">
             Edit Service
           </button>
@@ -750,382 +1066,407 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
-import { useRecurringServicesStore } from '@/stores/recurringServices'
-import { useProductsStore } from '@/stores/products'
-import { useLaborPositionsStore } from '@/stores/laborPositions'
-import { useToast } from '@/composables/useToast'
-import BaseCard from '@/components/UI/BaseCard.vue'
-import BaseTable from '@/components/UI/BaseTable.vue'
-import BaseBadge from '@/components/UI/BaseBadge.vue'
-import BaseModal from '@/components/UI/BaseModal.vue'
-import type { TableColumn } from '@/components/UI/BaseTable.vue'
-import type { RecurringService, RecurringServiceType, RecurringServiceSource } from '@/stores/recurringServices'
+import { ref, computed } from "vue";
+import { useRecurringServicesStore } from "@/stores/recurringServices";
+import { useProductsStore } from "@/stores/products";
+import { useLaborPositionsStore } from "@/stores/laborPositions";
+import { useToast } from "@/composables/useToast";
+import BaseCard from "@/components/UI/BaseCard.vue";
+import BaseTable from "@/components/UI/BaseTable.vue";
+import BaseBadge from "@/components/UI/BaseBadge.vue";
+import BaseModal from "@/components/UI/BaseModal.vue";
+import type { TableColumn } from "@/components/UI/BaseTable.vue";
+import type {
+  RecurringService,
+  RecurringServiceType,
+  RecurringServiceSource,
+} from "@/stores/recurringServices";
 
-const recurringStore = useRecurringServicesStore()
-const productsStore = useProductsStore()
-const laborStore = useLaborPositionsStore()
-const { success, info } = useToast()
+const recurringStore = useRecurringServicesStore();
+const productsStore = useProductsStore();
+const laborStore = useLaborPositionsStore();
+const { success, info } = useToast();
 
-const searchQuery = ref('')
-const typeFilter = ref<'all' | RecurringServiceType>('all')
-const statusFilter = ref<'all' | 'active' | 'inactive'>('all')
-const showServiceModal = ref(false)
-const showDetailsModal = ref(false)
-const editingService = ref<RecurringService | null>(null)
-const selectedService = ref<RecurringService | null>(null)
+const searchQuery = ref("");
+const typeFilter = ref<"all" | RecurringServiceType>("all");
+const statusFilter = ref<"all" | "active" | "inactive">("all");
+const showServiceModal = ref(false);
+const showDetailsModal = ref(false);
+const editingService = ref<RecurringService | null>(null);
+const selectedService = ref<RecurringService | null>(null);
 
 const serviceForm = ref({
-  type: '' as RecurringServiceType | '',
-  source: '' as RecurringServiceSource | '',
-  sourceId: '',
-  sourceName: '',
-  name: '',
-  description: '',
+  type: "" as RecurringServiceType | "",
+  source: "" as RecurringServiceSource | "",
+  sourceId: "",
+  sourceName: "",
+  name: "",
+  description: "",
   monthlyPrice: 0,
   monthlyCost: 0,
   minimumMonths: 1,
   setupFee: 0,
-  status: 'active' as 'active' | 'inactive',
-  notes: ''
-})
+  status: "active" as "active" | "inactive",
+  notes: "",
+});
 
 const vendorQuoteForm = ref({
-  vendorId: '',
-  vendorName: '',
-  quoteNumber: '',
-  quoteDate: '',
-  validUntil: '',
+  vendorId: "",
+  vendorName: "",
+  quoteNumber: "",
+  quoteDate: "",
+  validUntil: "",
   monthlyRate: 0,
   minimumPeriodMonths: 1,
   setupCost: 0,
-  notes: ''
-})
+  notes: "",
+});
 
 const rentalPeriodForm = ref({
-  startDate: '',
-  endDate: '',
-  monthsRemaining: 0
-})
+  startDate: "",
+  endDate: "",
+  monthsRemaining: 0,
+});
 
 const vendorProductForm = ref({
-  sku: '',
-  name: '',
-  description: '',
+  sku: "",
+  name: "",
+  description: "",
   monthlyRate: 0,
-  setupCost: 0
-})
+  setupCost: 0,
+});
 
 // Autocomplete for owned products
-const sourceSearchQuery = ref('')
-const showSourceSuggestions = ref(false)
+const sourceSearchQuery = ref("");
+const showSourceSuggestions = ref(false);
 
 // File upload state - simplified to attachment only
-const fileInput = ref<HTMLInputElement | null>(null)
-const uploadedFile = ref<File | null>(null)
+const fileInput = ref<HTMLInputElement | null>(null);
+const uploadedFile = ref<File | null>(null);
 
 // File library for reusing uploaded files
 interface UploadedFileInfo {
-  id: string
-  name: string
-  size: number
-  uploadedAt: string
-  url: string
+  id: string;
+  name: string;
+  size: number;
+  uploadedAt: string;
+  url: string;
 }
-const uploadedFiles = ref<UploadedFileInfo[]>([])
-const selectedLibraryFile = ref<UploadedFileInfo | null>(null)
+const uploadedFiles = ref<UploadedFileInfo[]>([]);
+const selectedLibraryFile = ref<UploadedFileInfo | null>(null);
 
 // Table columns
 const servicesColumns: TableColumn[] = [
-  { key: 'name', label: 'Service Name', sortable: true },
-  { key: 'type', label: 'Type', sortable: true },
-  { key: 'source', label: 'Source', sortable: false },
-  { key: 'pricing', label: 'Pricing', sortable: false },
-  { key: 'margin', label: 'Margin', sortable: false },
-  { key: 'status', label: 'Status', sortable: true },
-  { key: 'actions', label: 'Actions', align: 'right' }
-]
+  { key: "name", label: "Service Name", sortable: true },
+  { key: "type", label: "Type", sortable: true },
+  { key: "source", label: "Source", sortable: false },
+  { key: "pricing", label: "Pricing", sortable: false },
+  { key: "margin", label: "Margin", sortable: false },
+  { key: "status", label: "Status", sortable: true },
+  { key: "actions", label: "Actions", align: "right" },
+];
 
 // Computed
 const filteredServices = computed(() => {
-  let filtered = recurringStore.recurringServices
+  let filtered = recurringStore.recurringServices;
 
-  if (typeFilter.value !== 'all') {
-    filtered = filtered.filter(s => s.type === typeFilter.value)
+  if (typeFilter.value !== "all") {
+    filtered = filtered.filter((s) => s.type === typeFilter.value);
   }
 
-  if (statusFilter.value !== 'all') {
-    filtered = filtered.filter(s => s.status === statusFilter.value)
+  if (statusFilter.value !== "all") {
+    filtered = filtered.filter((s) => s.status === statusFilter.value);
   }
 
   if (searchQuery.value) {
-    const query = searchQuery.value.toLowerCase()
-    filtered = filtered.filter(s =>
-      s.name.toLowerCase().includes(query) ||
-      s.description.toLowerCase().includes(query) ||
-      s.sourceName.toLowerCase().includes(query)
-    )
+    const query = searchQuery.value.toLowerCase();
+    filtered = filtered.filter(
+      (s) =>
+        s.name.toLowerCase().includes(query) ||
+        s.description.toLowerCase().includes(query) ||
+        s.sourceName.toLowerCase().includes(query),
+    );
   }
 
-  return filtered
-})
+  return filtered;
+});
 
-const activeServicesCount = computed(() =>
-  recurringStore.recurringServices.filter(s => s.status === 'active').length
-)
+const activeServicesCount = computed(
+  () =>
+    recurringStore.recurringServices.filter((s) => s.status === "active")
+      .length,
+);
 
 const availableSources = computed(() => {
-  if (serviceForm.value.type === 'product') {
-    return productsStore.getActiveProducts()
-  } else if (serviceForm.value.type === 'labor') {
-    return laborStore.getActivePositions()
+  if (serviceForm.value.type === "product") {
+    return productsStore.getActiveProducts();
+  } else if (serviceForm.value.type === "labor") {
+    return laborStore.getActivePositions();
   }
-  return []
-})
+  return [];
+});
 
 // Helper functions
 function formatCurrency(amount: number) {
-  return new Intl.NumberFormat('en-SA', {
-    style: 'currency',
-    currency: 'SAR',
+  return new Intl.NumberFormat("en-SA", {
+    style: "currency",
+    currency: "SAR",
     minimumFractionDigits: 0,
-    maximumFractionDigits: 0
-  }).format(amount)
+    maximumFractionDigits: 0,
+  }).format(amount);
 }
 
 function calculateMargin(service: RecurringService): number {
-  if (service.monthlyPrice === 0) return 0
-  return ((service.monthlyPrice - service.monthlyCost) / service.monthlyPrice) * 100
+  if (service.monthlyPrice === 0) return 0;
+  return (
+    ((service.monthlyPrice - service.monthlyCost) / service.monthlyPrice) * 100
+  );
 }
 
 function calculateFormMargin(): string {
-  if (serviceForm.value.monthlyPrice === 0) return '0.00'
-  const margin = ((serviceForm.value.monthlyPrice - serviceForm.value.monthlyCost) / serviceForm.value.monthlyPrice) * 100
-  return margin.toFixed(2)
+  if (serviceForm.value.monthlyPrice === 0) return "0.00";
+  const margin =
+    ((serviceForm.value.monthlyPrice - serviceForm.value.monthlyCost) /
+      serviceForm.value.monthlyPrice) *
+    100;
+  return margin.toFixed(2);
 }
 
 function getMarginClass(margin: number): string {
-  if (margin >= 30) return 'margin-good'
-  if (margin >= 20) return 'margin-ok'
-  return 'margin-low'
+  if (margin >= 30) return "margin-good";
+  if (margin >= 20) return "margin-ok";
+  return "margin-low";
 }
 
 function onSourceTypeChange() {
   // Clear vendor quote when switching between owned/rented
-  if (serviceForm.value.source === 'owned') {
+  if (serviceForm.value.source === "owned") {
     vendorQuoteForm.value = {
-      vendorId: '',
-      vendorName: '',
-      quoteNumber: '',
-      quoteDate: '',
-      validUntil: '',
+      vendorId: "",
+      vendorName: "",
+      quoteNumber: "",
+      quoteDate: "",
+      validUntil: "",
       monthlyRate: 0,
       minimumPeriodMonths: 1,
       setupCost: 0,
-      notes: ''
-    }
+      notes: "",
+    };
     rentalPeriodForm.value = {
-      startDate: '',
-      endDate: '',
-      monthsRemaining: 0
-    }
+      startDate: "",
+      endDate: "",
+      monthsRemaining: 0,
+    };
   }
 }
 
 function calculateRemainingMonths(): number {
-  if (!rentalPeriodForm.value.startDate || !rentalPeriodForm.value.endDate) return 0
+  if (!rentalPeriodForm.value.startDate || !rentalPeriodForm.value.endDate)
+    return 0;
 
-  const now = new Date()
-  const endDate = new Date(rentalPeriodForm.value.endDate)
-  const monthsRemaining = Math.max(0, Math.ceil((endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24 * 30.44)))
+  const now = new Date();
+  const endDate = new Date(rentalPeriodForm.value.endDate);
+  const monthsRemaining = Math.max(
+    0,
+    Math.ceil(
+      (endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24 * 30.44),
+    ),
+  );
 
-  return monthsRemaining
+  return monthsRemaining;
 }
 
 // Autocomplete for owned products
 const filteredSourceSuggestions = computed(() => {
-  if (!sourceSearchQuery.value || sourceSearchQuery.value.length < 2 || !serviceForm.value.type) {
-    return []
+  if (
+    !sourceSearchQuery.value ||
+    sourceSearchQuery.value.length < 2 ||
+    !serviceForm.value.type
+  ) {
+    return [];
   }
 
-  const query = sourceSearchQuery.value.toLowerCase()
-  const sources = availableSources.value
+  const query = sourceSearchQuery.value.toLowerCase();
+  const sources = availableSources.value;
 
-  const filtered = sources.filter(item =>
-    item.name.toLowerCase().includes(query) ||
-    (item.sku && item.sku.toLowerCase().includes(query))
-  )
+  const filtered = sources.filter(
+    (item) =>
+      item.name.toLowerCase().includes(query) ||
+      (item.sku && item.sku.toLowerCase().includes(query)),
+  );
 
-  return filtered.slice(0, 10)
-})
+  return filtered.slice(0, 10);
+});
 
 function handleSourceSearchInput() {
   if (sourceSearchQuery.value.length >= 2) {
-    showSourceSuggestions.value = true
+    showSourceSuggestions.value = true;
   } else {
-    showSourceSuggestions.value = false
+    showSourceSuggestions.value = false;
   }
 }
 
 function handleSourceSearchBlur() {
   setTimeout(() => {
-    showSourceSuggestions.value = false
-  }, 200)
+    showSourceSuggestions.value = false;
+  }, 200);
 }
 
 function selectSourceItem(item: any) {
-  sourceSearchQuery.value = `${item.sku ? item.sku + ' - ' : ''}${item.name}`
-  serviceForm.value.sourceId = item.id
-  serviceForm.value.sourceName = item.name
-  showSourceSuggestions.value = false
-  onSourceSelect()
+  sourceSearchQuery.value = `${item.sku ? item.sku + " - " : ""}${item.name}`;
+  serviceForm.value.sourceId = item.id;
+  serviceForm.value.sourceName = item.name;
+  showSourceSuggestions.value = false;
+  onSourceSelect();
 }
 
 // File handling - simple attachment only (no parsing)
 function triggerFileInput() {
-  fileInput.value?.click()
+  fileInput.value?.click();
 }
 
 function handleFileSelect(event: Event) {
-  const target = event.target as HTMLInputElement
-  const file = target.files?.[0]
+  const target = event.target as HTMLInputElement;
+  const file = target.files?.[0];
   if (file) {
-    uploadedFile.value = file
-    selectedLibraryFile.value = null // Clear library selection when uploading new
-    success('File attached successfully')
+    uploadedFile.value = file;
+    selectedLibraryFile.value = null; // Clear library selection when uploading new
+    success("File attached successfully");
   }
 }
 
 function handleFileDrop(event: DragEvent) {
-  const file = event.dataTransfer?.files[0]
+  const file = event.dataTransfer?.files[0];
   if (file) {
-    uploadedFile.value = file
-    selectedLibraryFile.value = null // Clear library selection when uploading new
-    success('File attached successfully')
+    uploadedFile.value = file;
+    selectedLibraryFile.value = null; // Clear library selection when uploading new
+    success("File attached successfully");
   }
 }
 
 function removeFile() {
-  uploadedFile.value = null
-  selectedLibraryFile.value = null
+  uploadedFile.value = null;
+  selectedLibraryFile.value = null;
   if (fileInput.value) {
-    fileInput.value.value = ''
+    fileInput.value.value = "";
   }
 }
 
 function formatFileSize(bytes: number): string {
-  if (bytes < 1024) return bytes + ' B'
-  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
-  return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
+  if (bytes < 1024) return bytes + " B";
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
+  return (bytes / (1024 * 1024)).toFixed(1) + " MB";
 }
 
 // File library functions
 function getFileIcon(fileName: string): string {
-  const ext = fileName.split('.').pop()?.toLowerCase()
-  if (ext === 'pdf') return '📄'
-  if (ext === 'xlsx' || ext === 'xls') return '📊'
-  if (ext === 'doc' || ext === 'docx') return '📝'
-  if (ext === 'jpg' || ext === 'jpeg' || ext === 'png') return '🖼️'
-  return '📎'
+  const ext = fileName.split(".").pop()?.toLowerCase();
+  if (ext === "pdf") return "📄";
+  if (ext === "xlsx" || ext === "xls") return "📊";
+  if (ext === "doc" || ext === "docx") return "📝";
+  if (ext === "jpg" || ext === "jpeg" || ext === "png") return "🖼️";
+  return "📎";
 }
 
 function selectLibraryFile(file: UploadedFileInfo) {
   if (selectedLibraryFile.value?.id === file.id) {
-    selectedLibraryFile.value = null // Deselect if clicking same file
+    selectedLibraryFile.value = null; // Deselect if clicking same file
   } else {
-    selectedLibraryFile.value = file
-    uploadedFile.value = null // Clear uploaded file when selecting from library
+    selectedLibraryFile.value = file;
+    uploadedFile.value = null; // Clear uploaded file when selecting from library
   }
 }
 
 function clearLibrarySelection() {
-  selectedLibraryFile.value = null
+  selectedLibraryFile.value = null;
 }
 
 // Actions
 function createNewService() {
-  resetServiceForm()
-  showServiceModal.value = true
+  resetServiceForm();
+  showServiceModal.value = true;
 }
 
 function resetServiceForm() {
   serviceForm.value = {
-    type: '',
-    source: '',
-    sourceId: '',
-    sourceName: '',
-    name: '',
-    description: '',
+    type: "",
+    source: "",
+    sourceId: "",
+    sourceName: "",
+    name: "",
+    description: "",
     monthlyPrice: 0,
     monthlyCost: 0,
     minimumMonths: 1,
     setupFee: 0,
-    status: 'active',
-    notes: ''
-  }
+    status: "active",
+    notes: "",
+  };
   vendorQuoteForm.value = {
-    vendorId: '',
-    vendorName: '',
-    quoteNumber: '',
-    quoteDate: '',
-    validUntil: '',
+    vendorId: "",
+    vendorName: "",
+    quoteNumber: "",
+    quoteDate: "",
+    validUntil: "",
     monthlyRate: 0,
     minimumPeriodMonths: 1,
     setupCost: 0,
-    notes: ''
-  }
+    notes: "",
+  };
   rentalPeriodForm.value = {
-    startDate: '',
-    endDate: '',
-    monthsRemaining: 0
-  }
+    startDate: "",
+    endDate: "",
+    monthsRemaining: 0,
+  };
   vendorProductForm.value = {
-    sku: '',
-    name: '',
-    description: '',
+    sku: "",
+    name: "",
+    description: "",
     monthlyRate: 0,
-    setupCost: 0
-  }
-  sourceSearchQuery.value = ''
-  uploadedFile.value = null
-  selectedLibraryFile.value = null
-  editingService.value = null
+    setupCost: 0,
+  };
+  sourceSearchQuery.value = "";
+  uploadedFile.value = null;
+  selectedLibraryFile.value = null;
+  editingService.value = null;
 }
 
 function onTypeChange() {
-  serviceForm.value.sourceId = ''
-  serviceForm.value.sourceName = ''
+  serviceForm.value.sourceId = "";
+  serviceForm.value.sourceName = "";
 }
 
 function onSourceSelect() {
-  if (!serviceForm.value.sourceId) return
+  if (!serviceForm.value.sourceId) return;
 
-  if (serviceForm.value.type === 'product') {
-    const product = productsStore.getProductById(serviceForm.value.sourceId)
+  if (serviceForm.value.type === "product") {
+    const product = productsStore.getProductById(serviceForm.value.sourceId);
     if (product) {
-      serviceForm.value.sourceName = product.name
+      serviceForm.value.sourceName = product.name;
       // Pre-fill with suggested values
       if (!editingService.value) {
-        serviceForm.value.name = `${product.name} - Monthly Rental`
-        serviceForm.value.description = `Monthly rental service for ${product.name}`
-        serviceForm.value.monthlyCost = Math.round(product.landedCostSAR * 0.1) // 10% of product cost per month
-        serviceForm.value.monthlyPrice = Math.round(product.sellingPrice * 0.15) // 15% of selling price per month
-        serviceForm.value.minimumMonths = 12
-        serviceForm.value.setupFee = Math.round(product.sellingPrice * 0.5) // 50% as setup
+        serviceForm.value.name = `${product.name} - Monthly Rental`;
+        serviceForm.value.description = `Monthly rental service for ${product.name}`;
+        serviceForm.value.monthlyCost = Math.round(product.landedCostSAR * 0.1); // 10% of product cost per month
+        serviceForm.value.monthlyPrice = Math.round(
+          product.sellingPrice * 0.15,
+        ); // 15% of selling price per month
+        serviceForm.value.minimumMonths = 12;
+        serviceForm.value.setupFee = Math.round(product.sellingPrice * 0.5); // 50% as setup
       }
     }
-  } else if (serviceForm.value.type === 'labor') {
-    const labor = laborStore.getPositionById(serviceForm.value.sourceId)
+  } else if (serviceForm.value.type === "labor") {
+    const labor = laborStore.getPositionById(serviceForm.value.sourceId);
     if (labor) {
-      serviceForm.value.sourceName = labor.name
+      serviceForm.value.sourceName = labor.name;
       // Pre-fill with suggested values
       if (!editingService.value) {
-        serviceForm.value.name = `${labor.name} - Monthly Service`
-        serviceForm.value.description = `Monthly service for ${labor.name} (160 hours/month)`
-        serviceForm.value.monthlyCost = labor.costPerHour * 160 // 160 hours per month
-        serviceForm.value.monthlyPrice = labor.sellingRatePerHour * 160
-        serviceForm.value.minimumMonths = 3
-        serviceForm.value.setupFee = 500
+        serviceForm.value.name = `${labor.name} - Monthly Service`;
+        serviceForm.value.description = `Monthly service for ${labor.name} (160 hours/month)`;
+        serviceForm.value.monthlyCost = labor.costPerHour * 160; // 160 hours per month
+        serviceForm.value.monthlyPrice = labor.sellingRatePerHour * 160;
+        serviceForm.value.minimumMonths = 3;
+        serviceForm.value.setupFee = 500;
       }
     }
   }
@@ -1133,74 +1474,96 @@ function onSourceSelect() {
 
 function saveService() {
   // Validation: owned services need sourceId, rented services need vendor product
-  if (serviceForm.value.source === 'owned') {
+  if (serviceForm.value.source === "owned") {
     if (!serviceForm.value.type || !serviceForm.value.sourceId) {
-      info('Please select a product or labor position from your inventory')
-      return
+      info("Please select a product or labor position from your inventory");
+      return;
     }
-  } else if (serviceForm.value.source === 'rented') {
+  } else if (serviceForm.value.source === "rented") {
     if (!vendorProductForm.value.name) {
-      info('Please enter vendor product name')
-      return
+      info("Please enter vendor product name");
+      return;
     }
     // Validate vendor quote for rented services
-    if (!vendorQuoteForm.value.vendorName || !vendorQuoteForm.value.quoteNumber ||
-        !vendorQuoteForm.value.monthlyRate || !rentalPeriodForm.value.startDate ||
-        !rentalPeriodForm.value.endDate) {
-      info('Please fill in all vendor quote and rental period fields for rented services')
-      return
+    if (
+      !vendorQuoteForm.value.vendorName ||
+      !vendorQuoteForm.value.quoteNumber ||
+      !vendorQuoteForm.value.monthlyRate ||
+      !rentalPeriodForm.value.startDate ||
+      !rentalPeriodForm.value.endDate
+    ) {
+      info(
+        "Please fill in all vendor quote and rental period fields for rented services",
+      );
+      return;
     }
   } else {
-    info('Please select source type (Owned or Rented)')
-    return
+    info("Please select source type (Owned or Rented)");
+    return;
   }
 
   // Prepare vendor product data for rented services
-  const vendorProduct = serviceForm.value.source === 'rented' ? {
-    sku: vendorProductForm.value.sku,
-    name: vendorProductForm.value.name,
-    description: vendorProductForm.value.description || undefined,
-    monthlyRate: vendorProductForm.value.monthlyRate || vendorQuoteForm.value.monthlyRate,
-    setupCost: vendorProductForm.value.setupCost || undefined
-  } : undefined
+  const vendorProduct =
+    serviceForm.value.source === "rented"
+      ? {
+          sku: vendorProductForm.value.sku,
+          name: vendorProductForm.value.name,
+          description: vendorProductForm.value.description || undefined,
+          monthlyRate:
+            vendorProductForm.value.monthlyRate ||
+            vendorQuoteForm.value.monthlyRate,
+          setupCost: vendorProductForm.value.setupCost || undefined,
+        }
+      : undefined;
 
   // Prepare vendor quote data for rented services
-  const vendorQuote = serviceForm.value.source === 'rented' ? {
-    id: `VQ-${Date.now()}`,
-    vendorId: vendorQuoteForm.value.vendorId || `VEN-${Date.now()}`,
-    vendorName: vendorQuoteForm.value.vendorName,
-    quoteNumber: vendorQuoteForm.value.quoteNumber,
-    quoteDate: vendorQuoteForm.value.quoteDate,
-    validUntil: vendorQuoteForm.value.validUntil,
-    monthlyRate: vendorQuoteForm.value.monthlyRate,
-    minimumPeriodMonths: vendorQuoteForm.value.minimumPeriodMonths,
-    setupCost: vendorQuoteForm.value.setupCost || undefined,
-    notes: vendorQuoteForm.value.notes || undefined,
-    attachmentFileName: uploadedFile.value?.name || selectedLibraryFile.value?.name,
-    attachmentUrl: selectedLibraryFile.value?.url || undefined
-  } : undefined
+  const vendorQuote =
+    serviceForm.value.source === "rented"
+      ? {
+          id: `VQ-${Date.now()}`,
+          vendorId: vendorQuoteForm.value.vendorId || `VEN-${Date.now()}`,
+          vendorName: vendorQuoteForm.value.vendorName,
+          quoteNumber: vendorQuoteForm.value.quoteNumber,
+          quoteDate: vendorQuoteForm.value.quoteDate,
+          validUntil: vendorQuoteForm.value.validUntil,
+          monthlyRate: vendorQuoteForm.value.monthlyRate,
+          minimumPeriodMonths: vendorQuoteForm.value.minimumPeriodMonths,
+          setupCost: vendorQuoteForm.value.setupCost || undefined,
+          notes: vendorQuoteForm.value.notes || undefined,
+          attachmentFileName:
+            uploadedFile.value?.name || selectedLibraryFile.value?.name,
+          attachmentUrl: selectedLibraryFile.value?.url || undefined,
+        }
+      : undefined;
 
   // Add uploaded file to library if it's a new file
-  if (uploadedFile.value && !uploadedFiles.value.find(f => f.name === uploadedFile.value!.name)) {
+  if (
+    uploadedFile.value &&
+    !uploadedFiles.value.find((f) => f.name === uploadedFile.value!.name)
+  ) {
     uploadedFiles.value.push({
       id: `FILE-${Date.now()}`,
       name: uploadedFile.value.name,
       size: uploadedFile.value.size,
       uploadedAt: new Date().toLocaleDateString(),
-      url: `/uploads/vendor-quotes/${uploadedFile.value.name}` // Simulated URL
-    })
+      url: `/uploads/vendor-quotes/${uploadedFile.value.name}`, // Simulated URL
+    });
   }
 
-  const currentRentalPeriod = serviceForm.value.source === 'rented' ? {
-    startDate: rentalPeriodForm.value.startDate,
-    endDate: rentalPeriodForm.value.endDate,
-    monthsRemaining: calculateRemainingMonths()
-  } : undefined
+  const currentRentalPeriod =
+    serviceForm.value.source === "rented"
+      ? {
+          startDate: rentalPeriodForm.value.startDate,
+          endDate: rentalPeriodForm.value.endDate,
+          monthsRemaining: calculateRemainingMonths(),
+        }
+      : undefined;
 
   // Use vendor product name for sourceName if rented
-  const sourceName = serviceForm.value.source === 'rented'
-    ? vendorProductForm.value.name
-    : serviceForm.value.sourceName
+  const sourceName =
+    serviceForm.value.source === "rented"
+      ? vendorProductForm.value.name
+      : serviceForm.value.sourceName;
 
   if (editingService.value) {
     recurringStore.updateRecurringService(editingService.value.id, {
@@ -1218,9 +1581,9 @@ function saveService() {
       vendorQuote,
       currentRentalPeriod,
       status: serviceForm.value.status,
-      notes: serviceForm.value.notes || undefined
-    })
-    success('Recurring service updated successfully')
+      notes: serviceForm.value.notes || undefined,
+    });
+    success("Recurring service updated successfully");
   } else {
     recurringStore.addRecurringService({
       type: serviceForm.value.type as RecurringServiceType,
@@ -1228,7 +1591,6 @@ function saveService() {
       sourceId: serviceForm.value.sourceId,
       sourceName,
       vendorProduct,
-      sourceName: serviceForm.value.sourceName,
       name: serviceForm.value.name,
       description: serviceForm.value.description,
       monthlyPrice: serviceForm.value.monthlyPrice,
@@ -1238,16 +1600,16 @@ function saveService() {
       vendorQuote,
       currentRentalPeriod,
       status: serviceForm.value.status,
-      notes: serviceForm.value.notes || undefined
-    })
-    success('Recurring service created successfully')
+      notes: serviceForm.value.notes || undefined,
+    });
+    success("Recurring service created successfully");
   }
 
-  closeServiceModal()
+  closeServiceModal();
 }
 
 function editService(service: RecurringService) {
-  editingService.value = service
+  editingService.value = service;
   serviceForm.value = {
     type: service.type,
     source: service.source,
@@ -1260,11 +1622,11 @@ function editService(service: RecurringService) {
     minimumMonths: service.minimumMonths,
     setupFee: service.setupFee || 0,
     status: service.status,
-    notes: service.notes || ''
-  }
+    notes: service.notes || "",
+  };
 
   // Load vendor quote if it exists
-  if (service.source === 'rented' && service.vendorQuote) {
+  if (service.source === "rented" && service.vendorQuote) {
     vendorQuoteForm.value = {
       vendorId: service.vendorQuote.vendorId,
       vendorName: service.vendorQuote.vendorName,
@@ -1274,50 +1636,52 @@ function editService(service: RecurringService) {
       monthlyRate: service.vendorQuote.monthlyRate,
       minimumPeriodMonths: service.vendorQuote.minimumPeriodMonths,
       setupCost: service.vendorQuote.setupCost || 0,
-      notes: service.vendorQuote.notes || ''
-    }
+      notes: service.vendorQuote.notes || "",
+    };
 
     // Load rental period if it exists
     if (service.currentRentalPeriod) {
       rentalPeriodForm.value = {
         startDate: service.currentRentalPeriod.startDate,
         endDate: service.currentRentalPeriod.endDate,
-        monthsRemaining: service.currentRentalPeriod.monthsRemaining
-      }
+        monthsRemaining: service.currentRentalPeriod.monthsRemaining,
+      };
     }
   }
 
-  closeDetailsModal()
-  showServiceModal.value = true
+  closeDetailsModal();
+  showServiceModal.value = true;
 }
 
 function duplicateService(service: RecurringService) {
   recurringStore.addRecurringService({
     ...service,
     name: `${service.name} (Copy)`,
-    status: 'inactive'
-  })
-  success(`Service duplicated: ${service.name} (Copy)`)
+    status: "inactive",
+  });
+  success(`Service duplicated: ${service.name} (Copy)`);
 }
 
 function toggleStatus(service: RecurringService) {
-  recurringStore.toggleRecurringServiceStatus(service.id)
-  success(`Service ${service.status === 'active' ? 'deactivated' : 'activated'}`)
+  recurringStore.toggleRecurringServiceStatus(service.id);
+  success(
+    `Service ${service.status === "active" ? "deactivated" : "activated"}`,
+  );
 }
 
 function viewServiceDetails(service: RecurringService) {
-  selectedService.value = service
-  showDetailsModal.value = true
+  selectedService.value = service;
+  showDetailsModal.value = true;
 }
 
 function closeServiceModal() {
-  showServiceModal.value = false
-  resetServiceForm()
+  showServiceModal.value = false;
+  resetServiceForm();
 }
 
 function closeDetailsModal() {
-  showDetailsModal.value = false
-  selectedService.value = null
+  showDetailsModal.value = false;
+  selectedService.value = null;
 }
 </script>
 
