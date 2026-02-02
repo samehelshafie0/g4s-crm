@@ -1,0 +1,11 @@
+version: "3.8"
+
+services:
+  g4s-crm-frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: g4s-crm-frontend
+    ports:
+      - "8080:8080" # avoids 80/443/3001 already used on your server
+    restart: unless-stopped
