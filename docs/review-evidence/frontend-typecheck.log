@@ -1,0 +1,68 @@
+
+> crm-dashboard@0.0.0 type-check
+> vue-tsc --build
+
+src/composables/useTheme.ts(43,11): error TS2345: Argument of type 'ThemeMode | undefined' is not assignable to parameter of type 'ThemeMode'.
+  Type 'undefined' is not assignable to type 'ThemeMode'.
+src/views/InventoryView.vue(170,70): error TS2532: Object is possibly 'undefined'.
+src/views/InventoryView.vue(187,18): error TS2532: Object is possibly 'undefined'.
+src/views/InventoryView.vue(189,20): error TS2532: Object is possibly 'undefined'.
+src/views/InventoryView.vue(354,10): error TS2532: Object is possibly 'undefined'.
+src/views/InventoryView.vue(1558,90): error TS2345: Argument of type 'number | undefined' is not assignable to parameter of type 'number'.
+  Type 'undefined' is not assignable to type 'number'.
+src/views/PriceBooksView.vue(179,49): error TS2339: Property 'kind' does not exist on type '{ id: string; productId: string; productSku: string; productName: string; standardPrice: number; customPrice: number; discountPercent: number; }'.
+src/views/PriceBooksView.vue(187,36): error TS2339: Property 'kind' does not exist on type '{ id: string; productId: string; productSku: string; productName: string; standardPrice: number; customPrice: number; discountPercent: number; }'.
+src/views/PriceBooksView.vue(188,36): error TS2339: Property 'kind' does not exist on type '{ id: string; productId: string; productSku: string; productName: string; standardPrice: number; customPrice: number; discountPercent: number; }'.
+src/views/PriceBooksView.vue(189,38): error TS2339: Property 'kind' does not exist on type '{ id: string; productId: string; productSku: string; productName: string; standardPrice: number; customPrice: number; discountPercent: number; }'.
+src/views/PriceBooksView.vue(212,3): error TS2322: Type '{ id: string; productId: string; productSku: string; productName: string; standardPrice: number; customPrice: number; discountPercent: number; }[]' is not assignable to type '{ id: string; productId: string; productSku: string; productName: string; standardPrice: number; customPrice: number; discountPercent: number; }[] & { kind: CatalogItemKind; ... 6 more ...; discountPercent: number; }[]'.
+  Type '{ id: string; productId: string; productSku: string; productName: string; standardPrice: number; customPrice: number; discountPercent: number; }[]' is not assignable to type '{ kind: CatalogItemKind; id: string; productId: string; productSku: string; productName: string; standardPrice: number; customPrice: number; discountPercent: number; }[]'.
+    Property 'kind' is missing in type '{ id: string; productId: string; productSku: string; productName: string; standardPrice: number; customPrice: number; discountPercent: number; }' but required in type '{ kind: CatalogItemKind; id: string; productId: string; productSku: string; productName: string; standardPrice: number; customPrice: number; discountPercent: number; }'.
+src/views/PriceBooksView.vue(568,39): error TS7053: Element implicitly has an 'any' type because expression of type 'any' can't be used to index type '{ readonly product: FunctionalComponent<LucideProps, {}, any, {}>; readonly service: FunctionalComponent<LucideProps, {}, any, {}>; readonly recurring: FunctionalComponent<...>; }'.
+src/views/PriceBooksView.vue(568,55): error TS2339: Property 'kind' does not exist on type '{ id: string; productId: string; productSku: string; productName: string; standardPrice: number; customPrice: number; discountPercent: number; }'.
+src/views/PriceBooksView.vue(568,113): error TS2339: Property 'kind' does not exist on type '{ id: string; productId: string; productSku: string; productName: string; standardPrice: number; customPrice: number; discountPercent: number; }'.
+src/views/PriceBooksView.vue(568,127): error TS7053: Element implicitly has an 'any' type because expression of type 'any' can't be used to index type 'Record<CatalogItemKind, string>'.
+src/views/PriceBooksView.vue(568,144): error TS2339: Property 'kind' does not exist on type '{ id: string; productId: string; productSku: string; productName: string; standardPrice: number; customPrice: number; discountPercent: number; }'.
+src/views/PriceBooksView.vue(586,54): error TS2345: Argument of type '{ id: string; productId: string; productSku: string; productName: string; standardPrice: number; customPrice: number; discountPercent: number; }' is not assignable to parameter of type 'PBEntry'.
+  Property 'kind' is missing in type '{ id: string; productId: string; productSku: string; productName: string; standardPrice: number; customPrice: number; discountPercent: number; }' but required in type 'PBEntry'.
+src/views/PriceBooksView.vue(598,53): error TS2345: Argument of type '{ id: string; productId: string; productSku: string; productName: string; standardPrice: number; customPrice: number; discountPercent: number; }' is not assignable to parameter of type 'PBEntry'.
+  Property 'kind' is missing in type '{ id: string; productId: string; productSku: string; productName: string; standardPrice: number; customPrice: number; discountPercent: number; }' but required in type 'PBEntry'.
+src/views/ProcurementView.vue(185,118): error TS7006: Parameter 'i' implicitly has an 'any' type.
+src/views/ProcurementView.vue(299,32): error TS7006: Parameter 'i' implicitly has an 'any' type.
+src/views/ProcurementView.vue(436,22): error TS18048: 'file' is possibly 'undefined'.
+src/views/ProcurementView.vue(442,31): error TS2345: Argument of type 'File | undefined' is not assignable to parameter of type 'File'.
+  Type 'undefined' is not assignable to type 'File'.
+src/views/ProcurementView.vue(1015,53): error TS7053: Element implicitly has an 'any' type because expression of type 'any' can't be used to index type 'Record<PurchaseOrderStatus, { label: string; badge: string; }>'.
+src/views/ProcurementView.vue(1015,88): error TS7053: Element implicitly has an 'any' type because expression of type 'any' can't be used to index type 'Record<PurchaseOrderStatus, { label: string; badge: string; }>'.
+src/views/ProcurementView.vue(1088,53): error TS7053: Element implicitly has an 'any' type because expression of type 'any' can't be used to index type 'Record<SupplierQuoteStatus, { label: string; badge: string; }>'.
+src/views/ProcurementView.vue(1088,90): error TS7053: Element implicitly has an 'any' type because expression of type 'any' can't be used to index type 'Record<SupplierQuoteStatus, { label: string; badge: string; }>'.
+src/views/ProcurementView.vue(1649,175): error TS2339: Property 'DataTransfer' does not exist on type '{ activeTab: ProcTab; resetCreatePO: () => void; showCreatePOModal: boolean; store: Store<"procurement", Pick<{ purchaseOrders: Ref<any[], any[]>; supplierQuotes: Ref<any[], any[]>; ... 27 more ...; deleteSupplierQuote: (id: string) => Promise<...>; }, "loading" | ... 4 more ... | "supplierItems">, Pick<...>, Pick<....'.
+src/views/ProcurementView.vue(2038,183): error TS2339: Property 'DataTransfer' does not exist on type '{ activeTab: ProcTab; resetCreatePO: () => void; showCreatePOModal: boolean; store: Store<"procurement", Pick<{ purchaseOrders: Ref<any[], any[]>; supplierQuotes: Ref<any[], any[]>; ... 27 more ...; deleteSupplierQuote: (id: string) => Promise<...>; }, "loading" | ... 4 more ... | "supplierItems">, Pick<...>, Pick<....'.
+src/views/ProductsView.vue(333,27): error TS18048: 'file' is possibly 'undefined'.
+src/views/ProductsView.vue(339,31): error TS2345: Argument of type 'File | undefined' is not assignable to parameter of type 'File'.
+  Type 'undefined' is not assignable to type 'File'.
+src/views/ProductsView.vue(445,115): error TS2532: Object is possibly 'undefined'.
+src/views/ProductsView.vue(446,112): error TS2532: Object is possibly 'undefined'.
+src/views/ProductsView.vue(630,174): error TS2339: Property 'DataTransfer' does not exist on type '{ filteredProducts: { sku: string; name: string; description: string; manufacturerId: string; manufacturerName: string; categoryId: string; categoryName: string; productType: ProductType; ... 16 more ...; updatedAt: string; }[]; ... 105 more ...; _pStores?: Record<...> | undefined; }'.
+src/views/QuoteBuilderView.vue(525,5): error TS2532: Object is possibly 'undefined'.
+src/views/QuoteBuilderView.vue(526,5): error TS2532: Object is possibly 'undefined'.
+src/views/QuoteBuilderView.vue(619,19): error TS2532: Object is possibly 'undefined'.
+src/views/QuoteBuilderView.vue(620,43): error TS2345: Argument of type 'string | undefined' is not assignable to parameter of type 'string'.
+  Type 'undefined' is not assignable to type 'string'.
+src/views/QuoteBuilderView.vue(678,9): error TS18048: 'r' is possibly 'undefined'.
+src/views/QuoteBuilderView.vue(678,35): error TS18048: 'r' is possibly 'undefined'.
+src/views/QuoteBuilderView.vue(678,51): error TS18048: 'r' is possibly 'undefined'.
+src/views/QuoteBuilderView.vue(678,73): error TS18048: 'r' is possibly 'undefined'.
+src/views/QuoteBuilderView.vue(966,42): error TS2339: Property 'stockLabel' does not exist on type '{ id: string; sku: string; name: string; meta: string; price: string; }'.
+src/views/QuoteBuilderView.vue(966,80): error TS2339: Property 'inStock' does not exist on type '{ id: string; sku: string; name: string; meta: string; price: string; }'.
+src/views/QuoteBuilderView.vue(967,65): error TS2339: Property 'stockLabel' does not exist on type '{ id: string; sku: string; name: string; meta: string; price: string; }'.
+src/views/QuoteBuilderView.vue(1157,47): error TS2532: Object is possibly 'undefined'.
+src/views/QuoteBuilderView.vue(1159,58): error TS2532: Object is possibly 'undefined'.
+src/views/RecurringServicesView.vue(204,18): error TS2532: Object is possibly 'undefined'.
+src/views/RecurringServicesView.vue(209,23): error TS2345: Argument of type 'string | undefined' is not assignable to parameter of type 'string'.
+  Type 'undefined' is not assignable to type 'string'.
+src/views/RecurringServicesView.vue(210,30): error TS2345: Argument of type 'string | undefined' is not assignable to parameter of type 'string'.
+  Type 'undefined' is not assignable to type 'string'.
+src/views/RecurringServicesView.vue(211,31): error TS2345: Argument of type 'string | undefined' is not assignable to parameter of type 'string'.
+  Type 'undefined' is not assignable to type 'string'.
+src/views/RecurringServicesView.vue(211,54): error TS2345: Argument of type 'string | undefined' is not assignable to parameter of type 'string'.
+  Type 'undefined' is not assignable to type 'string'.

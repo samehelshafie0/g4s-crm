@@ -1,0 +1,27 @@
+# Binary
+g4s-crm-api
+*.exe
+
+# Environment
+.env
+.env.local
+
+# JWT keys (never commit)
+keys/
+
+# Storage (uploaded files)
+storage/*
+!storage/.gitkeep
+
+# Go cache
+vendor/
+*.test
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp

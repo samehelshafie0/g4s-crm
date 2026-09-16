@@ -1,0 +1,16 @@
+.DS_Store
+.env
+.env.*
+!.env.example
+**/node_modules/
+**/dist/
+**/coverage/
+**/*.tsbuildinfo
+**/keys/
+**/*.pem
+**/storage/
+**/.review-runtime/
+**/tmp/
+crm-api/g4s-crm-api
+.cursor/
+.idea/

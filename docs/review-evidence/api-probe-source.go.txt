@@ -1,0 +1,55 @@
+package main
+import (
+ "bytes"
+ "encoding/json"
+ "fmt"
+ "net/http"
+ "net/http/httptest"
+ "os"
+ "time"
+ "g4s-crm/api/internal/config"
+ "g4s-crm/api/internal/handlers"
+ "g4s-crm/api/internal/middleware"
+ "g4s-crm/api/internal/models"
+ "g4s-crm/api/internal/router"
+ "g4s-crm/api/pkg/seqgen"
+ v "g4s-crm/api/pkg/validator"
+ "github.com/gin-gonic/gin"
+ "golang.org/x/crypto/bcrypt"
+ "gorm.io/driver/postgres"
+ "gorm.io/gorm"
+ "gorm.io/gorm/logger"
+)
+func main(){
+ gin.SetMode(gin.TestMode)
+ db,e:=gorm.Open(postgres.Open("host=127.0.0.1 port=55432 user=review password=review-local-only dbname=crm_review sslmode=disable"),&gorm.Config{Logger:logger.Default.LogMode(logger.Silent)}); must(e)
+ cfg:= &config.Config{JWT:config.JWTConfig{PrivateKeyPath:".review-runtime/private.pem",PublicKeyPath:".review-runtime/public.pem",AccessExpiry:time.Hour,RefreshExpiry:24*time.Hour},Storage:config.StorageConfig{Root:".review-runtime/storage"}}
+ must(middleware.LoadPublicKey(cfg.JWT.PublicKeyPath)); v.Setup(); r:=router.Setup(db,cfg)
+ hash,_:=bcrypt.GenerateFromPassword([]byte("Review-only-2026!"),bcrypt.MinCost)
+ user:=models.User{Email:"review@example.test",FirstName:"Review",LastName:"User",PasswordHash:string(hash),Role:models.RoleAdmin,Department:models.DeptManagement,IsActive:true}; must(db.Create(&user).Error)
+ sales:=models.User{Email:"sales@example.test",FirstName:"Sales",LastName:"Reviewer",PasswordHash:string(hash),Role:models.RoleSalesExecutive,Department:models.DeptSales,IsActive:true}; must(db.Create(&sales).Error)
+ call:=func(method,path,body,token string)(int,map[string]interface{}){req:=httptest.NewRequest(method,path,bytes.NewBufferString(body));req.Header.Set("Content-Type","application/json"); if token!=""{req.Header.Set("Authorization","Bearer "+token)}; w:=httptest.NewRecorder();r.ServeHTTP(w,req); var result map[string]interface{};json.Unmarshal(w.Body.Bytes(),&result);return w.Code,result}
+ _,login:=call("POST","/api/v1/auth/login",`{"email":"review@example.test","password":"Review-only-2026!"}`,""); token:=login["data"].(map[string]interface{})["accessToken"].(string)
+ _,sl:=call("POST","/api/v1/auth/login",`{"email":"sales@example.test","password":"Review-only-2026!"}`,""); st:=sl["data"].(map[string]interface{})["accessToken"].(string)
+ report:=func(label string,code int,result map[string]interface{}){b,_:=json.Marshal(result);fmt.Printf("PROBE %s HTTP %d %s\n",label,code,b)}
+ code,res:=call("POST","/api/v1/customers",`{"companyName":"Review Customer","sector":"government","region":"Riyadh","status":"prospect","type":"get"}`,token);report("create customer without CR",code,res);cid:=res["data"].(map[string]interface{})["id"].(string)
+ code,res=call("POST","/api/v1/customers",`{"companyName":"Second Customer","sector":"government","region":"Riyadh","status":"prospect","type":"get"}`,token);report("second customer without CR",code,res)
+ code,res=call("PATCH","/api/v1/customers/"+cid,`{"companyName":"Renamed"}`,token);report("camelCase customer update",code,res)
+ code,res=call("POST","/api/v1/opportunities",fmt.Sprintf(`{"title":"Review Opportunity","customerId":%q,"stage":"qualification","expectedCloseDate":"2026-12-01"}`,cid),token);report("opportunity with valid customer",code,res)
+ code,res=call("POST","/api/v1/quotes",fmt.Sprintf(`{"customerId":%q,"currency":"SAR","lineItems":[{"category":"materials","description":"Review Item","quantity":1,"unitCost":75,"unitPrice":100}]}`,cid),token);report("quote with valid customer",code,res)
+ code,res=call("POST","/api/v1/contracts",fmt.Sprintf(`{"title":"Review Contract","customerId":%q,"type":"sales","startDate":"2026-09-16","endDate":"2027-09-16"}`,cid),token);report("contract with valid customer",code,res)
+ code,res=call("GET","/api/v1/auth/me","",token);report("session rehydration",code,res)
+ vr:=gin.New();vr.POST("/validate",func(c *gin.Context){var req struct{Email string `json:"email" validate:"required,email"`};if v.BindAndValidate(c,&req){c.JSON(200,gin.H{"accepted":true})}});w:=httptest.NewRecorder();req:=httptest.NewRequest("POST","/validate",bytes.NewBufferString(`{}`));req.Header.Set("Content-Type","application/json");vr.ServeHTTP(w,req);fmt.Printf("PROBE missing required email HTTP %d %s\n",w.Code,w.Body.String())
+ var cust models.Customer; must(db.First(&cust,"id = ?",cid).Error)
+ q:=models.Quote{QuoteNumber:"REVIEW-001",CustomerID:cust.ID,Status:models.QuoteStatusDraft,Currency:models.CurrencySAR};must(db.Create(&q).Error)
+ code,res=call("PATCH","/api/v1/quotes/"+q.ID.String(),`{"status":"approved","total":999}`,st);report("sales executive directly approves draft",code,res)
+ code,res=call("GET","/api/v1/quotes/"+q.ID.String(),"",token);report("persisted quote after bypass",code,res)
+ code,res=call("GET","/api/v1/contracts/expiring","",token);report("expiring contracts",code,res)
+ _=db.Exec("UPDATE sequences SET year=2025 WHERE name='project'").Error
+ _,e=seqgen.NextNumber(db,"project");fmt.Printf("PROBE next year sequence error %v\n",e)
+ sql:=db.Session(&gorm.Session{DryRun:true}).Model(&models.Customer{}).Order("created_at, (SELECT 1) desc").Find(&[]models.Customer{}).Statement.SQL.String();fmt.Printf("PROBE raw sort SQL %s\n",sql)
+ // Current handlers exposed only through the real router above; keep isolated fixtures for browser review.
+ _=handlers.NewCustomerHandler
+ if os.Getenv("REVIEW_SERVE")=="1"{fmt.Println("Review API listening on 127.0.0.1:18080");must(http.ListenAndServe("127.0.0.1:18080",r))}
+}
+func must(e error){if e!=nil{panic(e)}}

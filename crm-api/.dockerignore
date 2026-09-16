@@ -1,0 +1,12 @@
+g4s-crm-api
+*.exe
+.env
+.env.local
+keys/
+storage/*
+!storage/.gitkeep
+vendor/
+*.test
+.DS_Store
+.idea/
+.vscode/
