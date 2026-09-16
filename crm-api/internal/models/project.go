@@ -24,6 +24,7 @@ const (
 
 type Project struct {
 	Base
+	Currency         Currency        `gorm:"default:'SAR'" json:"currency"`
 	ProjectNumber    string          `gorm:"uniqueIndex;not null" json:"projectNumber"`
 	Name             string          `gorm:"not null" json:"name"`
 	CustomerID       uuid.UUID       `gorm:"type:uuid;not null;index" json:"customerId"`

@@ -1,5 +1,8 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue'
+import { productsService, manufacturersService, documentsService } from '@/services'
+import { allPages } from '@/services/collections'
+import { errorMessage } from '@/services/payload'
+import { ref, computed, watch, onMounted, reactive } from 'vue'
 import {
   Plus, Search, Pencil, Trash2, X, Package, Calculator, Eye,
   Building2, History, FileText, Upload, TrendingUp, TrendingDown,
@@ -20,11 +23,7 @@ const procStore = useProcurementStore()
 const productsStore = useProductsStore()
 const mfrStore = useManufacturersStore()
 
-onMounted(() => {
-  productsStore.fetchProducts()
-  mfrStore.fetchManufacturers()
-  procStore.fetchPurchaseOrders()
-})
+onMounted(async () => { try { const [items, manufacturers] = await Promise.all([allPages(productsService.list), allPages(manufacturersService.list)]); products.value = items; mfrList.push(...manufacturers) } catch (e) { window.alert(errorMessage(e)) } })
 
 function uid(): string { return Math.random().toString(36).slice(2, 11) }
 
@@ -42,14 +41,7 @@ function formatDate(d: string): string {
 // ── Manufacturer reference data ──────────────────────────────
 interface MfrRef { id: string; name: string; code: string; categories: ManufacturerCategory[] }
 
-const mfrList: MfrRef[] = [
-  { id: 'mfr-hik', name: 'Hikvision', code: 'HIK', categories: [{ id: 'hik-cam', name: 'IP Cameras', description: '' }, { id: 'hik-nvr', name: 'NVRs', description: '' }, { id: 'hik-therm', name: 'Thermal Cameras', description: '' }] },
-  { id: 'mfr-dh', name: 'Dahua Technology', code: 'DH', categories: [{ id: 'dh-cam', name: 'IP Cameras', description: '' }, { id: 'dh-nvr', name: 'NVRs', description: '' }, { id: 'dh-ac', name: 'Access Control', description: '' }] },
-  { id: 'mfr-axis', name: 'Axis Communications', code: 'AXIS', categories: [{ id: 'axis-cam', name: 'IP Cameras', description: '' }, { id: 'axis-enc', name: 'Encoders', description: '' }, { id: 'axis-int', name: 'Intercoms', description: '' }] },
-  { id: 'mfr-hon', name: 'Honeywell', code: 'HON', categories: [{ id: 'hon-fire', name: 'Fire Alarm Panels', description: '' }, { id: 'hon-intru', name: 'Intrusion Detection', description: '' }, { id: 'hon-ac', name: 'Access Control', description: '' }] },
-  { id: 'mfr-bosch', name: 'Bosch Security', code: 'BOSCH', categories: [{ id: 'bosch-cam', name: 'IP Cameras', description: '' }, { id: 'bosch-fire', name: 'Fire Alarm Panels', description: '' }, { id: 'bosch-pa', name: 'Public Address', description: '' }] },
-  { id: 'mfr-zkt', name: 'ZKTeco', code: 'ZKT', categories: [{ id: 'zkt-reader', name: 'Access Control Readers', description: '' }, { id: 'zkt-att', name: 'Time Attendance', description: '' }, { id: 'zkt-turn', name: 'Turnstiles', description: '' }] },
-]
+const mfrList = reactive<MfrRef[]>([])
 function mfr(id: string): MfrRef | undefined { return mfrList.find((m) => m.id === id) }
 
 function calcLanded(cost: number, fx: number, freight: number, customs: number, clearance: number): number {
@@ -66,95 +58,13 @@ function buildProduct(sku: string, name: string, desc: string, mfrId: string, ca
   return { id: uid(), sku, name, description: desc, manufacturerId: mfrId, manufacturerName: m.name, categoryId: catId, categoryName: cat.name, productType: type, originCurrency: currency, unitCostOrigin: unitCost, fxRate, costInSAR: costSAR, freightPercent: freight, customsPercent: customs, clearancePercent: clearance, landedCostSAR: landed, targetMarginPercent: margin, sellingPrice: selling, marginAmount: selling - landed, leadTimeDays: leadDays, supplierName: supplier, isActive: active, createdAt: '2024-03-01T08:00:00Z', updatedAt: '2024-07-01T08:00:00Z' }
 }
 
-const products = ref<Product[]>([
-  buildProduct('HIK-DS2CD2143', 'DS-2CD2143G2-IU 4MP Dome', 'AcuSense 4MP dome with mic', 'mfr-hik', 'hik-cam', 'import', 'USD', 85, 3.75, 5, 7, 3, 30, 21, 'Al Futtaim Trading', true),
-  buildProduct('HIK-DS2CD2T87', 'DS-2CD2T87G2-L 8MP Bullet', 'ColorVu 8MP bullet with strobe', 'mfr-hik', 'hik-cam', 'import', 'USD', 195, 3.75, 5, 7, 3, 28, 21, 'Al Futtaim Trading', true),
-  buildProduct('HIK-DS7732NI', 'DS-7732NI-K4 32CH NVR', '32-channel 4K NVR with 4 SATA', 'mfr-hik', 'hik-nvr', 'import', 'USD', 420, 3.75, 6, 7, 3, 25, 28, 'Al Futtaim Trading', true),
-  buildProduct('DH-IPC-HFW5442', 'IPC-HFW5442T-ASE 4MP AI Bullet', 'WizMind AI bullet with SMD', 'mfr-dh', 'dh-cam', 'import', 'USD', 110, 3.75, 5, 7, 3, 30, 25, 'Gulf Security Dist.', true),
-  buildProduct('DH-NVR5432-EI', 'NVR5432-EI 32CH AI NVR', '32-channel AI NVR with analytics', 'mfr-dh', 'dh-nvr', 'import', 'USD', 680, 3.75, 6, 7, 3, 25, 30, 'Gulf Security Dist.', true),
-  buildProduct('DH-ASI7214Y', 'ASI7214Y Face Recognition', 'Face recognition access terminal', 'mfr-dh', 'dh-ac', 'import', 'USD', 340, 3.75, 4, 7, 3, 32, 30, 'Gulf Security Dist.', false),
-  buildProduct('AXIS-P3265LVE', 'P3265-LVE 2MP Dome', 'Outdoor dome with DLPU & Forensic WDR', 'mfr-axis', 'axis-cam', 'import', 'EUR', 380, 4.10, 4, 5, 2, 35, 35, 'Norden Communication ME', true),
-  buildProduct('AXIS-Q6135LE', 'Q6135-LE PTZ Camera', '32x optical zoom PTZ with IR', 'mfr-axis', 'axis-cam', 'import', 'EUR', 4200, 4.10, 4, 5, 2, 30, 42, 'Norden Communication ME', true),
-  buildProduct('HON-MNPDS2', 'Morley-IAS Fire Panel 2L', '2-loop addressable fire alarm panel', 'mfr-hon', 'hon-fire', 'import', 'USD', 1250, 3.75, 5, 8, 3, 28, 45, 'Honeywell Saudi LLC', true),
-  buildProduct('HON-MAXPRO', 'MAXPRO Access 4-Door', '4-door access controller board', 'mfr-hon', 'hon-ac', 'local', 'SAR', 2100, 1, 0, 0, 0, 25, 14, 'Honeywell Saudi LLC', true),
-  buildProduct('BOSCH-NDV3503', 'FLEXIDOME IP 3000i 5MP', 'Micro dome with EVA forensic', 'mfr-bosch', 'bosch-cam', 'import', 'EUR', 275, 4.10, 4, 5, 2, 32, 28, 'Bosch ME FZE', true),
-  buildProduct('BOSCH-FPA5000', 'FPA-5000 Fire Panel', 'Modular fire alarm panel', 'mfr-bosch', 'bosch-fire', 'import', 'EUR', 1800, 4.10, 5, 6, 3, 27, 56, 'Bosch ME FZE', true),
-  buildProduct('ZKT-INBIO460', 'InBio460 4-Door Controller', '4-door controller with web management', 'mfr-zkt', 'zkt-reader', 'import', 'CNY', 1650, 0.52, 6, 10, 4, 35, 35, 'ZKTeco ME DMCC', true),
-  buildProduct('ZKT-SPEEDFACE', 'SpeedFace-V5L Facial Terminal', 'Visible light face recognition terminal', 'mfr-zkt', 'zkt-att', 'import', 'CNY', 2900, 0.52, 6, 10, 4, 38, 30, 'ZKTeco ME DMCC', true),
-  buildProduct('ZKT-TS2122', 'TS2122 Tripod Turnstile', 'Full-height tripod turnstile', 'mfr-zkt', 'zkt-turn', 'import', 'CNY', 8500, 0.52, 8, 10, 4, 30, 60, 'ZKTeco ME DMCC', false),
-])
-
+const products = ref<Product[]>([])
 // ── Vendor Catalog per product ───────────────────────────────
-const vendorCatalogs = ref<Record<string, ProductVendorEntry[]>>({
-  'HIK-DS2CD2143': [
-    { id: uid(), vendorName: 'Al Futtaim Trading', vendorSku: 'AFT-HIK-2143', unitCost: 85, currency: 'USD', moq: 50, leadTimeDays: 21, lastQuoteDate: '2026-02-18', catalogSource: 'Annual Price List 2026' },
-    { id: uid(), vendorName: 'Hikvision Saudi', vendorSku: 'HIK-SA-2143G2', unitCost: 92, currency: 'USD', moq: 20, leadTimeDays: 14, lastQuoteDate: '2026-01-10', catalogSource: 'SQ-2026-0015' },
-    { id: uid(), vendorName: 'Gulf Security Dist.', vendorSku: 'GSD-2143-IU', unitCost: 88, currency: 'USD', moq: 25, leadTimeDays: 18, lastQuoteDate: '2025-11-05', catalogSource: 'Vendor Catalog PDF' },
-  ],
-  'HIK-DS2CD2T87': [
-    { id: uid(), vendorName: 'Al Futtaim Trading', vendorSku: 'AFT-HIK-2T87', unitCost: 195, currency: 'USD', moq: 20, leadTimeDays: 21, lastQuoteDate: '2026-02-18', catalogSource: 'Annual Price List 2026' },
-    { id: uid(), vendorName: 'Hikvision Saudi', vendorSku: 'HIK-SA-2T87', unitCost: 210, currency: 'USD', moq: 10, leadTimeDays: 18, lastQuoteDate: '2026-02-18', catalogSource: 'SQ-2026-0015' },
-  ],
-  'AXIS-Q6135LE': [
-    { id: uid(), vendorName: 'Norden Communication ME', vendorSku: 'NOR-Q6135LE', unitCost: 4200, currency: 'EUR', moq: 4, leadTimeDays: 42, lastQuoteDate: '2026-01-15', catalogSource: 'Axis Partner Portal' },
-    { id: uid(), vendorName: 'Axis Partner KSA', vendorSku: 'AX-KSA-Q6135', unitCost: 4050, currency: 'EUR', moq: 2, leadTimeDays: 38, lastQuoteDate: '2025-12-01', catalogSource: 'SQ-2026-0011' },
-  ],
-  'HON-MNPDS2': [
-    { id: uid(), vendorName: 'Honeywell Saudi LLC', vendorSku: 'HW-MNPDS2-KSA', unitCost: 1250, currency: 'USD', moq: 2, leadTimeDays: 45, lastQuoteDate: '2026-01-20', catalogSource: 'SQ-2026-0013' },
-  ],
-  'ZKT-SPEEDFACE': [
-    { id: uid(), vendorName: 'ZKTeco ME DMCC', vendorSku: 'ZK-SFV5L-ME', unitCost: 2900, currency: 'CNY', moq: 6, leadTimeDays: 30, lastQuoteDate: '2026-01-15', catalogSource: 'SQ-2026-0012' },
-  ],
-  'BOSCH-FPA5000': [
-    { id: uid(), vendorName: 'Bosch ME FZE', vendorSku: 'B-FPA5000-ME', unitCost: 1800, currency: 'EUR', moq: 2, leadTimeDays: 56, lastQuoteDate: '2025-11-20', catalogSource: 'Framework Agreement 2025' },
-  ],
-})
-
+const vendorCatalogs = ref<Record<string, ProductVendorEntry[]>>({})
 // ── Price History per product ────────────────────────────────
-const priceHistory = ref<Record<string, ProductPriceRecord[]>>({
-  'HIK-DS2CD2143': [
-    { id: uid(), date: '2026-02-18', source: 'supplier-quote', sourceRef: 'SQ-2026-0015', vendorName: 'Hikvision Saudi', unitCost: 355, currency: 'SAR', qty: 100 },
-    { id: uid(), date: '2026-02-10', source: 'purchase-order', sourceRef: 'PO-2026-0012', vendorName: 'Al Futtaim Trading', unitCost: 85, currency: 'USD', qty: 50, notes: 'Aramco project order' },
-    { id: uid(), date: '2025-10-05', source: 'goods-receipt', sourceRef: 'GR-2026-0003', vendorName: 'Hikvision Saudi', unitCost: 385, currency: 'SAR', landingCost: 422, qty: 50 },
-    { id: uid(), date: '2025-07-15', source: 'vendor-catalog', vendorName: 'Al Futtaim Trading', unitCost: 90, currency: 'USD', qty: 0, notes: 'Catalog refresh H2 2025' },
-    { id: uid(), date: '2025-03-01', source: 'purchase-order', sourceRef: 'PO-2025-0044', vendorName: 'Al Futtaim Trading', unitCost: 92, currency: 'USD', qty: 100 },
-    { id: uid(), date: '2024-09-10', source: 'manual', vendorName: 'Gulf Security Dist.', unitCost: 95, currency: 'USD', qty: 0, notes: 'Price check by phone' },
-  ],
-  'HIK-DS2CD2T87': [
-    { id: uid(), date: '2026-02-18', source: 'supplier-quote', sourceRef: 'SQ-2026-0015', vendorName: 'Hikvision Saudi', unitCost: 840, currency: 'SAR', qty: 80 },
-    { id: uid(), date: '2026-02-10', source: 'purchase-order', sourceRef: 'PO-2026-0012', vendorName: 'Al Futtaim Trading', unitCost: 195, currency: 'USD', qty: 50 },
-    { id: uid(), date: '2025-10-05', source: 'goods-receipt', sourceRef: 'GR-2026-0003', vendorName: 'Hikvision Saudi', unitCost: 890, currency: 'SAR', landingCost: 977, qty: 30 },
-  ],
-  'AXIS-Q6135LE': [
-    { id: uid(), date: '2026-02-15', source: 'purchase-order', sourceRef: 'PO-2026-0008', vendorName: 'Axis Communications', unitCost: 19044, currency: 'SAR', qty: 8 },
-    { id: uid(), date: '2025-12-01', source: 'supplier-quote', sourceRef: 'SQ-2026-0011', vendorName: 'Axis Partner KSA', unitCost: 18500, currency: 'SAR', qty: 16 },
-    { id: uid(), date: '2025-06-15', source: 'vendor-catalog', vendorName: 'Norden Communication ME', unitCost: 4200, currency: 'EUR', qty: 0, notes: 'H2 2025 catalog' },
-  ],
-})
-
+const priceHistory = ref<Record<string, ProductPriceRecord[]>>({})
 // ── Product Documents ────────────────────────────────────────
-const productDocs = ref<Record<string, ProductDocument[]>>({
-  'HIK-DS2CD2143': [
-    { id: uid(), name: 'DS-2CD2143G2-IU Datasheet', docType: 'datasheet', fileName: 'DS-2CD2143G2-IU_Datasheet.pdf', fileSize: '1.2 MB', uploadedBy: 'Ahmed bin Saleh', uploadedAt: '2025-06-15T10:00:00Z', url: '#' },
-    { id: uid(), name: 'Installation Guide', docType: 'manual', fileName: 'HIK-Dome-Install-Guide.pdf', fileSize: '3.8 MB', uploadedBy: 'Mohammed Al-Zahrani', uploadedAt: '2025-04-10T08:00:00Z', url: '#' },
-    { id: uid(), name: 'SASO Compliance Certificate', docType: 'certificate', fileName: 'HIK-SASO-Cert-2025.pdf', fileSize: '450 KB', uploadedBy: 'Khalid Al-Rashid', uploadedAt: '2025-01-20T14:00:00Z', url: '#' },
-    { id: uid(), name: 'Al Futtaim 2026 Price List', docType: 'catalog', fileName: 'AFT-HIK-PriceList-2026.xlsx', fileSize: '2.1 MB', uploadedBy: 'Ahmed bin Saleh', uploadedAt: '2026-01-05T09:00:00Z', url: '#' },
-  ],
-  'HIK-DS2CD2T87': [
-    { id: uid(), name: 'DS-2CD2T87G2-L Datasheet', docType: 'datasheet', fileName: 'DS-2CD2T87G2-L_Datasheet.pdf', fileSize: '1.5 MB', uploadedBy: 'Ahmed bin Saleh', uploadedAt: '2025-06-15T10:00:00Z', url: '#' },
-    { id: uid(), name: 'ColorVu Technology Whitepaper', docType: 'other', fileName: 'HIK-ColorVu-Whitepaper.pdf', fileSize: '890 KB', uploadedBy: 'Mohammed Al-Zahrani', uploadedAt: '2025-03-20T11:00:00Z', url: '#' },
-  ],
-  'AXIS-Q6135LE': [
-    { id: uid(), name: 'Q6135-LE Product Sheet', docType: 'datasheet', fileName: 'Q6135-LE-ProductSheet.pdf', fileSize: '980 KB', uploadedBy: 'Ahmed bin Saleh', uploadedAt: '2025-08-10T09:00:00Z', url: '#' },
-    { id: uid(), name: 'AXIS Camera Station Manual', docType: 'manual', fileName: 'AXIS-CamStation-Manual.pdf', fileSize: '12.4 MB', uploadedBy: 'Mohammed Al-Zahrani', uploadedAt: '2025-05-01T08:00:00Z', url: '#' },
-    { id: uid(), name: 'Norden 2025 Partner Catalog', docType: 'catalog', fileName: 'Norden-Axis-Catalog-2025.pdf', fileSize: '5.6 MB', uploadedBy: 'Khalid Al-Rashid', uploadedAt: '2025-01-15T14:00:00Z', url: '#' },
-  ],
-  'BOSCH-FPA5000': [
-    { id: uid(), name: 'FPA-5000 System Manual', docType: 'manual', fileName: 'Bosch-FPA5000-SysManual.pdf', fileSize: '18.2 MB', uploadedBy: 'Mohammed Al-Zahrani', uploadedAt: '2025-04-01T08:00:00Z', url: '#' },
-    { id: uid(), name: 'Fire Panel Compliance Certificate', docType: 'certificate', fileName: 'Bosch-FPA5000-UL-FM.pdf', fileSize: '320 KB', uploadedBy: 'Khalid Al-Rashid', uploadedAt: '2025-02-10T10:00:00Z', url: '#' },
-  ],
-})
-
+const productDocs = ref<Record<string, ProductDocument[]>>({})
 const docTypeConfig: Record<ProductDocType, { label: string; badge: string; icon: string }> = {
   datasheet: { label: 'Datasheet', badge: 'badge-primary', icon: '📄' },
   manual: { label: 'Manual', badge: 'badge-info', icon: '📘' },
@@ -227,15 +137,14 @@ function openEditModal(p: Product) {
   showModal.value = true
 }
 
-function saveProduct() {
-  const now = new Date().toISOString()
-  const m = mfr(form.value.manufacturerId); const cat = m?.categories.find(c => c.id === form.value.categoryId)
-  const base = { sku: form.value.sku, name: form.value.name, description: form.value.description, manufacturerId: form.value.manufacturerId, manufacturerName: m?.name ?? '', categoryId: form.value.categoryId, categoryName: cat?.name ?? '', productType: form.value.productType, originCurrency: form.value.originCurrency, unitCostOrigin: form.value.unitCostOrigin, fxRate: form.value.fxRate, costInSAR: costInSAR.value, freightPercent: form.value.freightPercent, customsPercent: form.value.customsPercent, clearancePercent: form.value.clearancePercent, landedCostSAR: landedCostSAR.value, targetMarginPercent: form.value.targetMarginPercent, sellingPrice: sellingPrice.value, marginAmount: marginAmount.value, leadTimeDays: form.value.leadTimeDays, supplierName: form.value.supplierName, isActive: form.value.isActive }
-  if (editingId.value) { const idx = products.value.findIndex(p => p.id === editingId.value); if (idx !== -1) products.value[idx] = { ...products.value[idx], ...base, updatedAt: now } as Product }
-  else products.value.push({ id: uid(), ...base, createdAt: now, updatedAt: now })
-  showModal.value = false
+const saving = ref(false)
+async function saveProduct() {
+ if (saving.value) return
+ saving.value = true
+ try { const data = { ...form.value, sellingPrice:sellingPrice.value }; if (editingId.value) await productsService.update(editingId.value, data); else await productsService.create(data); products.value = await allPages(productsService.list); showModal.value = false }
+ catch (e) { window.alert(errorMessage(e)) } finally { saving.value = false }
 }
-function deleteProduct(id: string) { products.value = products.value.filter(p => p.id !== id) }
+async function deleteProduct(id: string) { try { await productsService.delete(id); products.value = products.value.filter(p => p.id !== id) } catch (e) { window.alert(errorMessage(e)) } }
 const currencies: Currency[] = ['USD', 'EUR', 'GBP', 'AED', 'CNY', 'SAR']
 
 // ── Product Detail Modal ─────────────────────────────────────
@@ -244,7 +153,12 @@ const detailProduct = ref<Product | null>(null)
 type DetailTab = 'overview' | 'vendors' | 'price-history' | 'documents'
 const detailTab = ref<DetailTab>('overview')
 
-function openDetail(p: Product) { detailProduct.value = p; detailTab.value = 'overview'; showDetailModal.value = true }
+async function openDetail(p: Product) { detailProduct.value = p; detailTab.value = 'overview'; showDetailModal.value = true; await refreshDetail() }
+async function refreshDetail() {
+ if (!detailProduct.value) return
+ try { const p = (await productsService.get(detailProduct.value.id)).data; detailProduct.value = p; vendorCatalogs.value[p.sku] = p.vendorEntries ?? []; priceHistory.value[p.sku] = p.priceHistory ?? []; productDocs.value[p.sku] = p.documents ?? [] }
+ catch (e) { window.alert(errorMessage(e)) }
+}
 
 const detailVendors = computed<ProductVendorEntry[]>(() => detailProduct.value ? (vendorCatalogs.value[detailProduct.value.sku] || []) : [])
 const detailPriceHistory = computed<ProductPriceRecord[]>(() => detailProduct.value ? (priceHistory.value[detailProduct.value.sku] || []).sort((a, b) => b.date.localeCompare(a.date)) : [])
@@ -258,17 +172,13 @@ const detailSupplierItems = computed<SupplierItemEntry[]>(() => {
 const showAddVendorModal = ref(false)
 const vendorForm = ref({ vendorName: '', vendorSku: '', unitCost: 0, currency: 'USD' as Currency, moq: 1, leadTimeDays: 21, catalogSource: '' })
 function openAddVendor() { vendorForm.value = { vendorName: '', vendorSku: '', unitCost: 0, currency: 'USD', moq: 1, leadTimeDays: 21, catalogSource: '' }; showAddVendorModal.value = true }
-function saveVendorEntry() {
-  if (!detailProduct.value || !vendorForm.value.vendorName) return
-  const sku = detailProduct.value.sku
-  if (!vendorCatalogs.value[sku]) vendorCatalogs.value[sku] = []
-  vendorCatalogs.value[sku].push({ id: uid(), vendorName: vendorForm.value.vendorName, vendorSku: vendorForm.value.vendorSku || undefined, unitCost: vendorForm.value.unitCost, currency: vendorForm.value.currency, moq: vendorForm.value.moq, leadTimeDays: vendorForm.value.leadTimeDays, lastQuoteDate: new Date().toISOString().slice(0, 10), catalogSource: vendorForm.value.catalogSource || undefined })
-  showAddVendorModal.value = false
+async function saveVendorEntry() {
+ if (!detailProduct.value) return
+ try { await productsService.saveVendor(detailProduct.value.id, vendorForm.value); await refreshDetail(); showAddVendorModal.value = false } catch (e) { window.alert(errorMessage(e)) }
 }
-function removeVendorEntry(id: string) {
-  if (!detailProduct.value) return
-  const sku = detailProduct.value.sku
-  if (vendorCatalogs.value[sku]) vendorCatalogs.value[sku] = vendorCatalogs.value[sku].filter(v => v.id !== id)
+async function removeVendorEntry(id: string) {
+ if (!detailProduct.value) return
+ try { await productsService.deleteVendor(detailProduct.value.id, id); await refreshDetail() } catch (e) { window.alert(errorMessage(e)) }
 }
 
 // ── Upload Catalog ───────────────────────────────────────────
@@ -359,59 +269,38 @@ function parsePastedText() {
 
 const catalogSelectedCount = computed(() => catalogPreviewRows.value.filter(r => r.selected).length)
 
-function importCatalogItems() {
-  if (!detailProduct.value || !catalogVendorName.value) return
-  const sku = detailProduct.value.sku
-  if (!vendorCatalogs.value[sku]) vendorCatalogs.value[sku] = []
-  const selected = catalogPreviewRows.value.filter(r => r.selected)
-  for (const row of selected) {
-    vendorCatalogs.value[sku].push({
-      id: uid(), vendorName: catalogVendorName.value, vendorSku: row.vendorSku || undefined,
-      unitCost: row.unitCost, currency: catalogCurrency.value,
-      moq: row.moq, leadTimeDays: row.leadTimeDays,
-      lastQuoteDate: new Date().toISOString().slice(0, 10),
-      catalogSource: catalogFileName.value || 'Pasted data',
-    })
-  }
-  if (!priceHistory.value[sku]) priceHistory.value[sku] = []
-  for (const row of selected) {
-    priceHistory.value[sku].push({
-      id: uid(), date: new Date().toISOString().slice(0, 10),
-      source: 'vendor-catalog', vendorName: catalogVendorName.value,
-      unitCost: row.unitCost, currency: catalogCurrency.value,
-      qty: 0, notes: `Imported from ${catalogFileName.value || 'pasted catalog'}`,
-    })
-  }
-  showUploadCatalogModal.value = false
+async function importCatalogItems() {
+ if (!detailProduct.value || !catalogVendorName.value) return
+ try { for (const row of catalogPreviewRows.value.filter(r => r.selected)) {
+   await productsService.saveVendor(detailProduct.value.id, { vendorName:catalogVendorName.value, vendorSku:row.vendorSku, unitCost:row.unitCost, currency:catalogCurrency.value, moq:row.moq, leadTimeDays:row.leadTimeDays, catalogSource:catalogFileName.value || 'Pasted data' }); row.selected = false
+ }; await refreshDetail(); showUploadCatalogModal.value = false } catch (e) { window.alert(errorMessage(e)) }
 }
 
 // Add document
 const showAddDocModal = ref(false)
 const docForm = ref({ name: '', docType: 'datasheet' as ProductDocType, fileName: '', fileSize: '', notes: '' })
 function openAddDoc() { docForm.value = { name: '', docType: 'datasheet', fileName: '', fileSize: '', notes: '' }; showAddDocModal.value = true }
-function saveDoc() {
-  if (!detailProduct.value || !docForm.value.name) return
-  const sku = detailProduct.value.sku
-  if (!productDocs.value[sku]) productDocs.value[sku] = []
-  productDocs.value[sku].push({ id: uid(), name: docForm.value.name, docType: docForm.value.docType, fileName: docForm.value.fileName || `${docForm.value.name.replace(/\s+/g, '_')}.pdf`, fileSize: docForm.value.fileSize || '—', uploadedBy: 'Current User', uploadedAt: new Date().toISOString(), notes: docForm.value.notes || undefined })
-  showAddDocModal.value = false
+const documentFile = ref<File | null>(null)
+function chooseDocument(event: Event) { documentFile.value = (event.target as HTMLInputElement).files?.[0] ?? null }
+async function saveDoc() {
+ if (!detailProduct.value || !documentFile.value) return
+ try {
+   const data = new FormData(); data.append('file', documentFile.value); data.append('name', docForm.value.name); data.append('category', 'general'); data.append('documentType', 'technical')
+   const uploaded = await documentsService.upload(data)
+   await productsService.addDocument(detailProduct.value.id, { documentId:uploaded.data.id, name:docForm.value.name, docType:docForm.value.docType, notes:docForm.value.notes })
+   await refreshDetail(); showAddDocModal.value = false; documentFile.value = null
+ } catch (e) { window.alert(errorMessage(e)) }
 }
-function removeDoc(id: string) {
-  if (!detailProduct.value) return
-  const sku = detailProduct.value.sku
-  if (productDocs.value[sku]) productDocs.value[sku] = productDocs.value[sku].filter(d => d.id !== id)
-}
+async function removeDoc(id: string) { if (!detailProduct.value) return; try { await productsService.deleteDocument(detailProduct.value.id, id); await refreshDetail() } catch (e) { window.alert(errorMessage(e)) } }
+async function downloadDoc(doc: ProductDocument) { if (!doc.documentId) { window.alert('This legacy document has no uploaded file.'); return }; try { await documentsService.download(doc.documentId, doc.fileName) } catch (e) { window.alert(errorMessage(e)) } }
 
 // Add price record
 const showAddPriceModal = ref(false)
 const priceForm = ref({ date: '', source: 'manual' as PriceSource, sourceRef: '', vendorName: '', unitCost: 0, currency: 'SAR' as Currency, qty: 0, notes: '' })
 function openAddPrice() { priceForm.value = { date: new Date().toISOString().slice(0, 10), source: 'manual', sourceRef: '', vendorName: '', unitCost: 0, currency: 'SAR', qty: 0, notes: '' }; showAddPriceModal.value = true }
-function savePrice() {
-  if (!detailProduct.value || !priceForm.value.vendorName) return
-  const sku = detailProduct.value.sku
-  if (!priceHistory.value[sku]) priceHistory.value[sku] = []
-  priceHistory.value[sku].push({ id: uid(), date: priceForm.value.date, source: priceForm.value.source, sourceRef: priceForm.value.sourceRef || undefined, vendorName: priceForm.value.vendorName, unitCost: priceForm.value.unitCost, currency: priceForm.value.currency, qty: priceForm.value.qty, notes: priceForm.value.notes || undefined })
-  showAddPriceModal.value = false
+async function savePrice() {
+ if (!detailProduct.value) return
+ try { await productsService.addPrice(detailProduct.value.id, priceForm.value); await refreshDetail(); showAddPriceModal.value = false } catch (e) { window.alert(errorMessage(e)) }
 }
 </script>
 
@@ -588,7 +477,7 @@ function savePrice() {
                 </div>
                 <div class="prod-doc-footer">
                   <span>{{ doc.uploadedBy }} &middot; {{ formatDate(doc.uploadedAt) }}</span>
-                  <button class="btn btn-ghost btn-sm" style="font-size:0.68rem; gap:3px"><Download :size="12" /> Download</button>
+                  <button class="btn btn-ghost btn-sm" style="font-size:0.68rem; gap:3px" @click="downloadDoc(doc)"><Download :size="12" /> Download</button>
                 </div>
               </div>
             </div>
@@ -723,10 +612,10 @@ function savePrice() {
       <div class="modal modal-lg"><div class="modal-header"><h2 class="modal-title"><Upload :size="18" /> Add Document</h2><button class="modal-close" @click="showAddDocModal = false"><X :size="20" /></button></div>
       <div class="modal-body">
         <div class="form-row"><div class="form-group" style="flex:2"><label class="form-label">Document Name <span class="required">*</span></label><input v-model="docForm.name" type="text" class="form-input" placeholder="e.g. Product Datasheet" /></div><div class="form-group" style="flex:1"><label class="form-label">Type</label><select v-model="docForm.docType" class="form-select"><option value="datasheet">Datasheet</option><option value="manual">Manual</option><option value="certificate">Certificate</option><option value="vendor-quote">Vendor Quote</option><option value="catalog">Catalog</option><option value="image">Image</option><option value="other">Other</option></select></div></div>
-        <div class="form-row"><div class="form-group"><label class="form-label">File Name</label><input v-model="docForm.fileName" type="text" class="form-input" placeholder="e.g. Product-Datasheet.pdf" /></div><div class="form-group" style="width:120px"><label class="form-label">File Size</label><input v-model="docForm.fileSize" type="text" class="form-input" placeholder="e.g. 2.5 MB" /></div></div>
+        <label>File (up to 50 MB)<input type="file" class="file-input" @change="chooseDocument" /></label>
         <div class="form-group"><label class="form-label">Notes</label><input v-model="docForm.notes" type="text" class="form-input" placeholder="Optional notes" /></div>
       </div>
-      <div class="modal-footer"><button class="btn btn-secondary" @click="showAddDocModal = false">Cancel</button><button class="btn btn-primary" :disabled="!docForm.name" @click="saveDoc">Add Document</button></div></div>
+      <div class="modal-footer"><button class="btn btn-secondary" @click="showAddDocModal = false">Cancel</button><button class="btn btn-primary" :disabled="!docForm.name || !documentFile" @click="saveDoc">Add Document</button></div></div>
     </div>
 
     <!-- ═══ Add Price Record Modal ════════════════════════════ -->

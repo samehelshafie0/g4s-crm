@@ -5,7 +5,7 @@ import (
 	"g4s-crm/api/internal/config"
 	"g4s-crm/api/internal/handlers"
 	"g4s-crm/api/internal/middleware"
-	"g4s-crm/api/internal/models"
+
 	"g4s-crm/api/internal/services"
 	"g4s-crm/api/migrations"
 	"github.com/gin-gonic/gin"
@@ -62,6 +62,7 @@ func Setup(db *gorm.DB, cfg *config.Config) *gin.Engine {
 	priceBookH := handlers.NewPriceBookHandler(db)
 	fxH := handlers.NewExchangeRateHandler(db)
 	contractH := handlers.NewContractHandler(db)
+	catalogH := handlers.NewCatalogServiceHandler(db)
 	recurringH := handlers.NewRecurringServiceHandler(db)
 	procurementH := handlers.NewProcurementHandler(db)
 	docH := handlers.NewDocumentHandler(db, cfg.Storage.Root)
@@ -74,8 +75,12 @@ func Setup(db *gorm.DB, cfg *config.Config) *gin.Engine {
 	{
 		auth.POST("/login", authH.Login)
 		auth.POST("/refresh", authH.Refresh)
-		auth.POST("/forgot-password", func(c *gin.Context) { c.JSON(200, gin.H{"message": "not implemented"}) })
-		auth.POST("/reset-password", func(c *gin.Context) { c.JSON(200, gin.H{"message": "not implemented"}) })
+		auth.POST("/forgot-password", func(c *gin.Context) {
+			c.JSON(501, gin.H{"success": false, "error": gin.H{"message": "Email password recovery is not configured; contact your administrator"}})
+		})
+		auth.POST("/reset-password", func(c *gin.Context) {
+			c.JSON(501, gin.H{"success": false, "error": gin.H{"message": "Email password recovery is not configured; contact your administrator"}})
+		})
 
 		authProtected := auth.Group("")
 		authProtected.Use(middleware.Auth(db))
@@ -84,6 +89,7 @@ func Setup(db *gorm.DB, cfg *config.Config) *gin.Engine {
 			authProtected.POST("/logout", authH.Logout)
 			authProtected.PATCH("/change-password", authH.ChangePassword)
 			authProtected.GET("/me", authH.Me)
+			authProtected.PATCH("/me", userH.Profile)
 		}
 	}
 
@@ -99,6 +105,7 @@ func Setup(db *gorm.DB, cfg *config.Config) *gin.Engine {
 		users.GET("/:id", middleware.Authorize("users:read"), userH.Get)
 		users.POST("", middleware.Authorize("users:create"), userH.Create)
 		users.PATCH("/:id", middleware.Authorize("users:update"), userH.Update)
+		users.PATCH("/:id/password", middleware.Authorize("users:update"), userH.ResetPassword)
 		users.DELETE("/:id", middleware.Authorize("users:delete"), userH.Delete)
 	}
 
@@ -109,6 +116,8 @@ func Setup(db *gorm.DB, cfg *config.Config) *gin.Engine {
 		teams.GET("/:id", middleware.Authorize("teams:read"), teamH.Get)
 		teams.POST("", middleware.Authorize("teams:create"), teamH.Create)
 		teams.PATCH("/:id", middleware.Authorize("teams:update"), teamH.Update)
+		teams.POST("/:id/members", middleware.Authorize("teams:update"), teamH.AddMember)
+		teams.DELETE("/:id/members/:userId", middleware.Authorize("teams:update"), teamH.RemoveMember)
 		teams.DELETE("/:id", middleware.Authorize("teams:delete"), teamH.Delete)
 	}
 
@@ -116,17 +125,18 @@ func Setup(db *gorm.DB, cfg *config.Config) *gin.Engine {
 	customers := protected.Group("/customers")
 	{
 		customers.GET("", middleware.Authorize("customers:read"), customerH.List)
+		customers.GET("/lookup", middleware.Authorize("customers:read"), customerH.Lookup)
 		customers.GET("/:id", middleware.Authorize("customers:read"), customerH.Get)
 		customers.POST("", middleware.Authorize("customers:create"), customerH.Create)
 		customers.PATCH("/:id", middleware.Authorize("customers:update"), customerH.Update)
 		customers.DELETE("/:id", middleware.Authorize("customers:delete"), customerH.Delete)
 
-		customers.GET("/:id/sites", middleware.Authorize("customers:read"), customerH.Get)
+		customers.GET("/:id/sites", middleware.Authorize("customers:read"), customerH.ListSites)
 		customers.POST("/:id/sites", middleware.Authorize("customers:update"), customerH.AddSite)
 		customers.PATCH("/:id/sites/:siteId", middleware.Authorize("customers:update"), customerH.UpdateSite)
 		customers.DELETE("/:id/sites/:siteId", middleware.Authorize("customers:update"), customerH.DeleteSite)
 
-		customers.GET("/:id/contacts", middleware.Authorize("customers:read"), customerH.Get)
+		customers.GET("/:id/contacts", middleware.Authorize("customers:read"), customerH.ListContacts)
 		customers.POST("/:id/contacts", middleware.Authorize("customers:update"), customerH.AddContact)
 		customers.PATCH("/:id/contacts/:contactId", middleware.Authorize("customers:update"), customerH.UpdateContact)
 		customers.DELETE("/:id/contacts/:contactId", middleware.Authorize("customers:update"), customerH.DeleteContact)
@@ -152,6 +162,10 @@ func Setup(db *gorm.DB, cfg *config.Config) *gin.Engine {
 		mfrs.POST("", middleware.Authorize("manufacturers:create"), mfrH.Create)
 		mfrs.PATCH("/:id", middleware.Authorize("manufacturers:update"), mfrH.Update)
 		mfrs.DELETE("/:id", middleware.Authorize("manufacturers:delete"), mfrH.Delete)
+		mfrs.GET("/:id/categories", middleware.Authorize("manufacturers:read"), mfrH.Categories)
+		mfrs.POST("/:id/categories", middleware.Authorize("manufacturers:update"), mfrH.SaveCategory)
+		mfrs.PATCH("/:id/categories/:categoryId", middleware.Authorize("manufacturers:update"), mfrH.SaveCategory)
+		mfrs.DELETE("/:id/categories/:categoryId", middleware.Authorize("manufacturers:update"), mfrH.DeleteCategory)
 	}
 
 	// ─── Products ───────────────────────────────────────────
@@ -163,6 +177,15 @@ func Setup(db *gorm.DB, cfg *config.Config) *gin.Engine {
 		products.PATCH("/:id", middleware.Authorize("products:update"), productH.Update)
 		products.DELETE("/:id", middleware.Authorize("products:delete"), productH.Delete)
 		products.POST("/recalculate-costs", middleware.Authorize("products:update"), productH.RecalculateCosts)
+		products.GET("/:id/documents", middleware.Authorize("products:read"), productH.Documents)
+		products.POST("/:id/documents", middleware.Authorize("products:update"), middleware.Authorize("documents:read"), productH.AddDocument)
+		products.DELETE("/:id/documents/:documentId", middleware.Authorize("products:update"), productH.DeleteDocument)
+		products.GET("/:id/vendors", middleware.Authorize("products:read"), productH.Vendors)
+		products.POST("/:id/vendors", middleware.Authorize("products:update"), productH.SaveVendor)
+		products.PATCH("/:id/vendors/:vendorId", middleware.Authorize("products:update"), productH.SaveVendor)
+		products.DELETE("/:id/vendors/:vendorId", middleware.Authorize("products:update"), productH.DeleteVendor)
+		products.GET("/:id/price-history", middleware.Authorize("products:read"), productH.PriceHistory)
+		products.POST("/:id/price-history", middleware.Authorize("products:update"), productH.AddPrice)
 	}
 
 	// ─── Inventory ──────────────────────────────────────────
@@ -173,12 +196,12 @@ func Setup(db *gorm.DB, cfg *config.Config) *gin.Engine {
 		inventory.GET("/stock/by-warehouse/:location", middleware.Authorize("inventory:read"), inventoryH.ListStock)
 		inventory.GET("/stock/by-product/:productId", middleware.Authorize("inventory:read"), inventoryH.ListStock)
 
-		inventory.GET("/reservations", middleware.Authorize("inventory:read"), func(c *gin.Context) {
-			var items []models.StockReservation
-			db.Preload("Product").Find(&items)
-			c.JSON(200, gin.H{"success": true, "data": items})
-		})
+		inventory.GET("/reservations", middleware.Authorize("inventory:read"), inventoryH.ListReservations)
 		inventory.POST("/reservations", middleware.Authorize("inventory:create"), inventoryH.CreateReservation)
+		inventory.PATCH("/reservations/:id/release", middleware.Authorize("inventory:update"), inventoryH.Release)
+		inventory.PATCH("/reservations/:id/fulfill", middleware.Authorize("inventory:update"), inventoryH.Fulfill)
+		inventory.POST("/movements/adjustment", middleware.Authorize("inventory:update"), inventoryH.Adjust)
+		inventory.PATCH("/stock/:id/reorder-level", middleware.Authorize("inventory:update"), inventoryH.ReorderLevel)
 
 		inventory.GET("/movements", middleware.Authorize("inventory:read"), inventoryH.ListMovements)
 		inventory.POST("/movements/transfer", middleware.Authorize("inventory:create"), inventoryH.Transfer)
@@ -199,6 +222,12 @@ func Setup(db *gorm.DB, cfg *config.Config) *gin.Engine {
 		quotes.PATCH("/:id/accept", middleware.Authorize("quotes:update"), quoteH.Accept)
 		quotes.PATCH("/:id/decline", middleware.Authorize("quotes:update"), quoteH.Decline)
 		quotes.POST("/:id/recalculate", middleware.Authorize("quotes:update"), quoteH.Recalculate)
+		quotes.GET("/:id/activity", middleware.Authorize("quotes:read"), quoteH.Activity)
+		quotes.GET("/:id/builder", middleware.Authorize("quotes:read"), quoteH.Get)
+		quotes.PUT("/:id/builder", middleware.Authorize("quotes:update"), quoteH.SaveBuilder)
+		quotes.POST("/:id/duplicate", middleware.Authorize("quotes:create"), quoteH.Duplicate)
+		quotes.POST("/:id/revisions", middleware.Authorize("quotes:create"), quoteH.Duplicate)
+		quotes.POST("/:id/convert-to-contract", middleware.Authorize("contracts:create"), quoteH.ConvertToContract)
 	}
 
 	// ─── Projects ───────────────────────────────────────────
@@ -221,6 +250,11 @@ func Setup(db *gorm.DB, cfg *config.Config) *gin.Engine {
 		priceBooks.DELETE("/:id", middleware.Authorize("price-books:delete"), priceBookH.Delete)
 	}
 
+	priceBooks.GET("/:id/entries", middleware.Authorize("price-books:read"), priceBookH.Entries)
+	priceBooks.PUT("/:id/entries", middleware.Authorize("price-books:update"), priceBookH.ReplaceEntries)
+	priceBooks.POST("/:id/entries", middleware.Authorize("price-books:update"), priceBookH.SaveEntry)
+	priceBooks.PATCH("/:id/entries/:entryId", middleware.Authorize("price-books:update"), priceBookH.SaveEntry)
+	priceBooks.DELETE("/:id/entries/:entryId", middleware.Authorize("price-books:update"), priceBookH.DeleteEntry)
 	// ─── Exchange Rates ──────────────────────────────────────
 	fx := protected.Group("/exchange-rates")
 	{
@@ -256,11 +290,17 @@ func Setup(db *gorm.DB, cfg *config.Config) *gin.Engine {
 	// ─── Procurement ─────────────────────────────────────────
 	proc := protected.Group("/procurement")
 	{
+		proc.GET("/supplier-items", middleware.Authorize("procurement:read"), procurementH.SupplierItems)
+		proc.POST("/supplier-items", middleware.Authorize("procurement:create"), procurementH.SaveSupplierItem)
+		proc.PATCH("/supplier-items/:id", middleware.Authorize("procurement:update"), procurementH.SaveSupplierItem)
+		proc.DELETE("/supplier-items/:id", middleware.Authorize("procurement:delete"), procurementH.DeleteSupplierItem)
 		pos := proc.Group("/purchase-orders")
 		{
 			pos.GET("", middleware.Authorize("procurement:read"), procurementH.ListPOs)
 			pos.GET("/:id", middleware.Authorize("procurement:read"), procurementH.GetPO)
 			pos.POST("", middleware.Authorize("procurement:create"), procurementH.CreatePO)
+			pos.PATCH("/:id", middleware.Authorize("procurement:update"), procurementH.UpdatePO)
+			pos.DELETE("/:id", middleware.Authorize("procurement:delete"), procurementH.DeletePO)
 			pos.PATCH("/:id/approve", middleware.Authorize("procurement:approve"), procurementH.ApprovePO)
 			pos.PATCH("/:id/status", middleware.Authorize("procurement:update"), procurementH.UpdatePOStatus)
 		}
@@ -270,6 +310,9 @@ func Setup(db *gorm.DB, cfg *config.Config) *gin.Engine {
 			sqs.GET("", middleware.Authorize("procurement:read"), procurementH.ListSQs)
 			sqs.GET("/:id", middleware.Authorize("procurement:read"), procurementH.GetSQ)
 			sqs.POST("", middleware.Authorize("procurement:create"), procurementH.CreateSQ)
+			sqs.PATCH("/:id", middleware.Authorize("procurement:update"), procurementH.UpdateSQ)
+			sqs.DELETE("/:id", middleware.Authorize("procurement:delete"), procurementH.DeleteSQ)
+			sqs.PATCH("/:id/status", middleware.Authorize("procurement:update"), procurementH.UpdateSQStatus)
 			sqs.POST("/:id/convert-to-po", middleware.Authorize("procurement:create"), procurementH.ConvertToPO)
 		}
 
@@ -287,6 +330,12 @@ func Setup(db *gorm.DB, cfg *config.Config) *gin.Engine {
 		docs.GET("", middleware.Authorize("documents:read"), docH.List)
 		docs.GET("/:id", middleware.Authorize("documents:read"), docH.Get)
 		docs.POST("", middleware.Authorize("documents:create"), docH.Upload)
+		docs.PATCH("/:id", middleware.Authorize("documents:update"), docH.Update)
+		docs.GET("/:id/versions", middleware.Authorize("documents:read"), docH.Versions)
+		docs.POST("/:id/versions", middleware.Authorize("documents:update"), docH.UploadVersion)
+		docs.GET("/:id/versions/:versionId/download", middleware.Authorize("documents:read"), docH.Download)
+		docs.POST("/:id/links", middleware.Authorize("documents:update"), docH.AddLink)
+		docs.DELETE("/:id/links/:linkId", middleware.Authorize("documents:update"), docH.DeleteLink)
 		docs.DELETE("/:id", middleware.Authorize("documents:delete"), docH.Delete)
 		docs.GET("/:id/download", middleware.Authorize("documents:read"), docH.Download)
 	}
@@ -295,6 +344,9 @@ func Setup(db *gorm.DB, cfg *config.Config) *gin.Engine {
 	dash := protected.Group("/dashboard")
 	dash.Use(middleware.Authorize("dashboard:read"))
 	{
+		dash.GET("/recent-quotes", dashH.RecentQuotes)
+		dash.GET("/expiring-quotes", dashH.ExpiringQuotes)
+		dash.GET("/sales-performance", dashH.SalesPerformance)
 		dash.GET("/kpis", dashH.KPIs)
 		dash.GET("/pipeline", dashH.Pipeline)
 		dash.GET("/recent-activity", dashH.RecentActivity)
@@ -302,5 +354,13 @@ func Setup(db *gorm.DB, cfg *config.Config) *gin.Engine {
 		dash.GET("/alerts", dashH.Alerts)
 	}
 
+	protected.GET("/catalog", middleware.Authorize("products:read"), productH.Catalog)
+	catalog := protected.Group("/services")
+	catalog.GET("", middleware.Authorize("products:read"), catalogH.List)
+	catalog.GET("/:id", middleware.Authorize("products:read"), catalogH.Get)
+	catalog.POST("", middleware.Authorize("products:create"), catalogH.Create)
+	catalog.PATCH("/:id", middleware.Authorize("products:update"), catalogH.Update)
+	catalog.DELETE("/:id", middleware.Authorize("products:delete"), catalogH.Delete)
+	protected.POST("/exchange-rates", middleware.Authorize("exchange-rates:update"), fxH.Create)
 	return r
 }

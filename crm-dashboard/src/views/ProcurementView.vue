@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import {
   Plus, Search, Eye, Trash2, X, FileText, Clock, CheckCircle2,
   TrendingUp, TrendingDown, DollarSign, Package, Truck, AlertTriangle,
@@ -19,9 +19,19 @@ import type {
   Quote, Project, QuoteLineItem,
 } from '@/types'
 
+import { procurementService, productsService, manufacturersService, quotesService, inventoryService } from '@/services'
+import { allPages } from '@/services/collections'
+import { errorMessage } from '@/services/payload'
+import type { Product } from '@/types'
+const catalogProducts = ref<Product[]>([])
+const availableStock = ref<Record<string,number>>({})
+
 const store = useProcurementStore()
 const mfrStore = useManufacturersStore()
 const quotesStore = useQuotesStore()
+
+async function reloadProcurement() {await Promise.all([store.fetchPurchaseOrders({limit:100}),store.fetchSupplierQuotes({limit:100}),store.fetchGoodsReceipts({limit:100})]);store.supplierItems=(await procurementService.supplierItems()).data}
+onMounted(async()=>{try{await reloadProcurement();catalogProducts.value=await allPages(productsService.list);mfrStore.manufacturers=await allPages(manufacturersService.list);quotesStore.quotes=await allPages(quotesService.list);const stock=await allPages(inventoryService.listStock);for(const row of stock) availableStock.value[row.productId]=(availableStock.value[row.productId]??0)+row.availableQty}catch(e){window.alert(errorMessage(e))}})
 
 function uid(): string { return Math.random().toString(36).slice(2, 11) }
 
@@ -85,9 +95,7 @@ function openViewPO(po: PurchaseOrder) {
   showViewPOModal.value = true
 }
 
-function deletePO(id: string) {
-  store.deletePurchaseOrder(id)
-}
+async function deletePO(id: string) {try{await store.deletePurchaseOrder(id)}catch(e){window.alert(errorMessage(e))}}
 
 function totalReceived(po: PurchaseOrder): number {
   return po.items.reduce((s, i) => s + i.receivedQty, 0)
@@ -319,10 +327,7 @@ function selectPOItem(si: SupplierItemEntry) {
   const receipts = store.getReceiptHistoryForProduct(si.productId)
   const lastReceipt = receipts.length > 0 ? receipts[0] : null
   const best = store.getBestSupplierPrice(si.productSku)
-  const onHandMap: Record<string, number> = {
-    cp1: 60, cp2: 45, cp3: 12, cp4: 35, cp5: 0, cp6: 0, cp7: 20, cp8: 0,
-    cp9: 5, cp10: 8, cp11: 18, cp12: 3, cp13: 15, cp14: 0, cp15: 30, cp16: 6,
-  }
+  const onHandMap = availableStock.value
   newPOItems.value.push({
     sku: si.productSku, name: si.productName, manufacturer: si.manufacturerName,
     qty: si.moq, unitCost: si.latestCost, leadTimeDays: si.leadTimeDays,
@@ -345,10 +350,7 @@ function importFromSupplierQuote(sq: SupplierQuote) {
     const receipts = store.getReceiptHistoryForProduct(item.productId ?? '')
     const lastReceipt = receipts.length > 0 ? receipts[0] : null
     const best = store.getBestSupplierPrice(item.productSku)
-    const onHandMap: Record<string, number> = {
-      cp1: 60, cp2: 45, cp3: 12, cp4: 35, cp5: 0, cp6: 0, cp7: 20, cp8: 0,
-      cp9: 5, cp10: 8, cp11: 18, cp12: 3, cp13: 15, cp14: 0, cp15: 30, cp16: 6,
-    }
+    const onHandMap = availableStock.value
     newPOItems.value.push({
       sku: item.productSku, name: item.productName, manufacturer: item.manufacturerName,
       qty: item.quantity, unitCost: item.unitCost, leadTimeDays: item.leadTimeDays,
@@ -465,10 +467,7 @@ function importPOFileItems() {
   const selected = poFileRows.value.filter(r => r.selected)
   for (const row of selected) {
     const catalogMatch = newPOSupplier.value ? store.supplierItems.find(si => si.supplierName.toLowerCase() === newPOSupplier.value.toLowerCase() && (si.productSku.toLowerCase() === row.sku.toLowerCase() || si.productName.toLowerCase() === row.name.toLowerCase())) : null
-    const onHandMap: Record<string, number> = {
-      cp1: 60, cp2: 45, cp3: 12, cp4: 35, cp5: 0, cp6: 0, cp7: 20, cp8: 0,
-      cp9: 5, cp10: 8, cp11: 18, cp12: 3, cp13: 15, cp14: 0, cp15: 30, cp16: 6,
-    }
+    const onHandMap = availableStock.value
     if (catalogMatch) {
       const receipts = store.getReceiptHistoryForProduct(catalogMatch.productId)
       const lastReceipt = receipts.length > 0 ? receipts[0] : null
@@ -522,18 +521,19 @@ function resetCreatePO() {
   poPasteText.value = ''
 }
 
-function createPO() {
+async function createPO() {
+  try {
   if (!newPOSupplier.value || newPOItems.value.length === 0) return
   const items = newPOItems.value.map(i => ({
-    id: uid(), productId: uid(), productSku: i.sku, productName: i.name,
+    id: uid(), productId: resolveProduct(i.sku), productSku: i.sku, productName: i.name,
     manufacturerName: i.manufacturer, quantity: i.qty, unitCost: i.unitCost,
     total: i.qty * i.unitCost, receivedQty: 0, leadTimeDays: i.leadTimeDays,
   }))
   const subtotal = items.reduce((s, i) => s + i.total, 0)
-  const shippingCost = Math.round(subtotal * 0.04)
-  const customsDuty = Math.round(subtotal * 0.05)
+  const shippingCost = 0
+  const customsDuty = 0
   const po: PurchaseOrder = {
-    id: uid(), poNumber: store.generatePoNumber(), supplierName: newPOSupplier.value,
+    id: uid(), poNumber: '', supplierName: newPOSupplier.value,
     status: 'draft', items, subtotal, shippingCost, customsDuty,
     total: subtotal + shippingCost + customsDuty, currency: 'SAR',
     expectedDelivery: newPOExpected.value || new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10),
@@ -542,9 +542,10 @@ function createPO() {
     notes: newPONotes.value,
     createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
   }
-  store.addPurchaseOrder(po)
+  await store.addPurchaseOrder(po)
   showCreatePOModal.value = false
   resetCreatePO()
+  } catch(e){window.alert(errorMessage(e))}
 }
 
 // ────────────────────────────────────────────────────────────
@@ -704,8 +705,8 @@ function openEditSQ(sq: SupplierQuote) {
     supplierRef: sq.supplierRef || '',
     contactName: sq.contactName || '',
     contactEmail: sq.contactEmail || '',
-    validFrom: sq.validFrom,
-    validUntil: sq.validUntil,
+    validFrom: sq.validFrom?.slice(0, 10) ?? '',
+    validUntil: sq.validUntil?.slice(0, 10) ?? '',
     paymentTerms: sq.paymentTerms || '',
     deliveryTerms: sq.deliveryTerms || '',
     notes: sq.notes,
@@ -734,55 +735,26 @@ function selectSQSupplier(mfr: Manufacturer) {
   sqForm.value.contactEmail = mfr.contactEmail
 }
 
-function saveSQ() {
-  if (!sqForm.value.supplierName || sqForm.value.items.length === 0) return
-  const now = new Date().toISOString()
-  const items: SupplierQuoteLineItem[] = sqForm.value.items.map(i => ({
-    id: uid(), productSku: i.sku, productName: i.name, manufacturerName: i.manufacturer,
-    quantity: i.qty, unitCost: i.unitCost, total: i.qty * i.unitCost,
-    leadTimeDays: i.leadTimeDays, moq: i.moq,
-  }))
-  const subtotal = items.reduce((s, i) => s + i.total, 0)
-
-  if (editingSQId.value) {
-    store.updateSupplierQuote(editingSQId.value, {
-      supplierName: sqForm.value.supplierName,
-      supplierRef: sqForm.value.supplierRef || undefined,
-      contactName: sqForm.value.contactName || undefined,
-      contactEmail: sqForm.value.contactEmail || undefined,
-      validFrom: sqForm.value.validFrom,
-      validUntil: sqForm.value.validUntil,
-      paymentTerms: sqForm.value.paymentTerms || undefined,
-      deliveryTerms: sqForm.value.deliveryTerms || undefined,
-      notes: sqForm.value.notes,
-      items,
-      subtotal,
-      updatedAt: now,
-    })
-  } else {
-    const sq: SupplierQuote = {
-      id: uid(), sqNumber: store.generateSqNumber(),
-      supplierName: sqForm.value.supplierName,
-      supplierRef: sqForm.value.supplierRef || undefined,
-      status: 'received',
-      items, subtotal, currency: 'SAR',
-      validFrom: sqForm.value.validFrom,
-      validUntil: sqForm.value.validUntil,
-      contactName: sqForm.value.contactName || undefined,
-      contactEmail: sqForm.value.contactEmail || undefined,
-      paymentTerms: sqForm.value.paymentTerms || undefined,
-      deliveryTerms: sqForm.value.deliveryTerms || undefined,
-      notes: sqForm.value.notes,
-      createdAt: now, updatedAt: now,
-    }
-    store.addSupplierQuote(sq)
-  }
-  showCreateSQModal.value = false
-  resetSQForm()
+function resolveProduct(sku: string): string {const product=catalogProducts.value.find(p=>p.sku.toLowerCase()===sku.trim().toLowerCase());if(!product)throw new Error(`Add SKU ${sku || '(empty)'} to Products before creating a purchase order.`);return product.id}
+async function saveSQ() {
+ if(!sqForm.value.supplierName||sqForm.value.items.length===0)return
+ try {const items=sqForm.value.items.map(i=>({productId:catalogProducts.value.find(p=>p.sku.toLowerCase()===i.sku.toLowerCase())?.id,productSku:i.sku,productName:i.name,manufacturerName:i.manufacturer,quantity:i.qty,unitCost:i.unitCost,leadTimeDays:i.leadTimeDays,moq:i.moq}));const data={...sqForm.value,items,currency:store.supplierQuotes.find(s => s.id === editingSQId.value)?.currency ?? 'SAR'}
+ if(editingSQId.value)await store.updateSupplierQuote(editingSQId.value,data);else await store.addSupplierQuote(data)
+ showCreateSQModal.value=false;resetSQForm()
+ }catch(e){window.alert(errorMessage(e))}
 }
-
-function deleteSQ(id: string) {
-  store.deleteSupplierQuote(id)
+async function deleteSQ(id:string){try{await store.deleteSupplierQuote(id)}catch(e){window.alert(errorMessage(e))}}
+async function poAction(po:PurchaseOrder,action:'pending-approval'|'approve'|'ordered'|'cancelled'){
+ try{if(action==='approve')await procurementService.approvePO(po.id);else await procurementService.updatePOStatus(po.id,action);await reloadProcurement();viewingPO.value=store.purchaseOrders.find(p=>p.id===po.id)??null}catch(e){window.alert(errorMessage(e))}
+}
+async function acceptSQ(sq:SupplierQuote){try{await procurementService.updateSQStatus(sq.id,'accepted');await reloadProcurement();viewingSQ.value=store.supplierQuotes.find(s=>s.id===sq.id)??null}catch(e){window.alert(errorMessage(e))}}
+async function convertSQ(sq:SupplierQuote){try{await procurementService.convertToPO(sq.id);await reloadProcurement();showViewSQModal.value=false;activeTab.value='purchase-orders'}catch(e){window.alert(errorMessage(e))}}
+async function receivePO(po:PurchaseOrder){
+ const warehouse=window.prompt('Receiving warehouse: riyadh-main, jeddah-branch or dammam-branch','riyadh-main');if(!warehouse)return
+ const items=[]
+ for(const line of po.items.filter(i=>i.receivedQty<i.quantity)){const answer=window.prompt(`Receive quantity for ${line.productSku} (${line.quantity-line.receivedQty} outstanding; 0 to skip)`,String(line.quantity-line.receivedQty));if(answer===null)return;const qty=Number(answer);if(!Number.isInteger(qty)||qty<0){window.alert('Enter a non-negative whole quantity.');return};if(qty>0)items.push({poItemId:line.id,productId:line.productId,receivedQty:qty,storageLocation:warehouse,condition:'good'})}
+ if(items.length===0)return
+ try{await store.addGoodsReceipt({poId:po.id,receiveDate:new Date().toISOString().slice(0,10),items});await reloadProcurement();showViewPOModal.value=false;activeTab.value='goods-receipts'}catch(e){window.alert(errorMessage(e))}
 }
 
 // ── CSV / Excel / PDF Catalog Upload ─────────────────────────
@@ -1108,7 +1080,7 @@ function delayHideSQDropdown() { window.setTimeout(() => { showSQItemDropdown.va
                 <div class="table-actions">
                   <button class="btn btn-ghost btn-icon btn-sm" title="View Details" @click="openViewSQ(sq)"><Eye :size="14" /></button>
                   <button class="btn btn-ghost btn-icon btn-sm" title="Edit" @click="openEditSQ(sq)"><Pencil :size="14" /></button>
-                  <button v-if="sq.status === 'received' || sq.status === 'accepted'" class="btn btn-ghost btn-icon btn-sm" title="Create PO from Quote" @click="importFromSupplierQuote(sq)"><ArrowRight :size="14" /></button>
+                  <button v-if="sq.status === 'accepted'" class="btn btn-ghost btn-icon btn-sm" title="Create PO from Quote" @click="convertSQ(sq)"><ArrowRight :size="14" /></button>
                   <button class="btn btn-ghost btn-icon btn-sm" title="Delete" @click="deleteSQ(sq.id)"><Trash2 :size="14" /></button>
                 </div>
               </td>
@@ -1320,6 +1292,10 @@ function delayHideSQDropdown() { window.setTimeout(() => { showSQItemDropdown.va
             </div>
           </div>
           <div class="modal-footer">
+            <button v-if="viewingPO.status === 'draft'" class="btn btn-sm" @click="poAction(viewingPO,'pending-approval')">Submit for approval</button>
+            <button v-if="viewingPO.status === 'pending-approval'" class="btn btn-sm" @click="poAction(viewingPO,'approve')">Approve</button>
+            <button v-if="viewingPO.status === 'approved'" class="btn btn-sm" @click="poAction(viewingPO,'ordered')">Mark ordered</button>
+            <button v-if="['ordered','partial-received'].includes(viewingPO.status)" class="btn btn-sm" @click="receivePO(viewingPO)">Receive goods</button>
             <button class="btn btn-secondary" @click="showViewPOModal = false">Close</button>
           </div>
         </div>
@@ -1406,8 +1382,8 @@ function delayHideSQDropdown() { window.setTimeout(() => { showSQItemDropdown.va
             </div>
           </div>
           <div class="modal-footer">
-            <button class="btn btn-secondary" @click="showViewSQModal = false">Close</button>
-            <button v-if="viewingSQ.status === 'received' || viewingSQ.status === 'accepted'" class="btn btn-primary" @click="importFromSupplierQuote(viewingSQ); showViewSQModal = false">
+            <button v-if="['received','under-review'].includes(viewingSQ.status)" class="btn btn-sm" @click="acceptSQ(viewingSQ)">Accept supplier quote</button><button class="btn btn-secondary" @click="showViewSQModal = false">Close</button>
+            <button v-if="viewingSQ.status === 'accepted'" class="btn btn-primary" @click="convertSQ(viewingSQ)">
               <ArrowRight :size="16" /> Create PO from This Quote
             </button>
           </div>
@@ -2008,7 +1984,7 @@ function delayHideSQDropdown() { window.setTimeout(() => { showSQItemDropdown.va
                       <span class="text-muted" style="font-size:0.6875rem">{{ sq.items.length }} items · SAR {{ formatSAR(sq.subtotal) }}</span>
                       <span class="text-muted" style="font-size:0.625rem">Valid until {{ formatDate(sq.validUntil) }}</span>
                     </div>
-                    <button class="btn btn-primary btn-sm" @click="importFromSupplierQuote(sq)" style="font-size:0.6875rem">
+                    <button class="btn btn-primary btn-sm" @click="convertSQ(sq)" style="font-size:0.6875rem">
                       <ArrowRight :size="13" /> Import Items
                     </button>
                   </div>
@@ -2165,9 +2141,9 @@ function delayHideSQDropdown() { window.setTimeout(() => { showSQItemDropdown.va
               </div>
               <div class="view-totals-card mt-4">
                 <div class="view-totals-row"><span>Subtotal</span><span class="text-mono">SAR {{ formatSAR(newPOSubtotal) }}</span></div>
-                <div class="view-totals-row"><span>Est. Shipping (4%)</span><span class="text-mono">SAR {{ formatSAR(Math.round(newPOSubtotal * 0.04)) }}</span></div>
-                <div class="view-totals-row"><span>Est. Customs (5%)</span><span class="text-mono">SAR {{ formatSAR(Math.round(newPOSubtotal * 0.05)) }}</span></div>
-                <div class="view-totals-row view-totals-row--grand"><span class="font-bold">Estimated Total</span><span class="font-bold text-mono view-grand-total">SAR {{ formatSAR(newPOSubtotal + Math.round(newPOSubtotal * 0.04) + Math.round(newPOSubtotal * 0.05)) }}</span></div>
+                <div class="view-totals-row"><span>Shipping (not entered)</span><span class="text-mono">SAR {{ formatSAR(0) }}</span></div>
+                <div class="view-totals-row"><span>Customs (not entered)</span><span class="text-mono">SAR {{ formatSAR(0) }}</span></div>
+                <div class="view-totals-row view-totals-row--grand"><span class="font-bold">Estimated Total</span><span class="font-bold text-mono view-grand-total">SAR {{ formatSAR(newPOSubtotal + 0 + 0) }}</span></div>
               </div>
             </div>
           </div>

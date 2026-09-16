@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { exchangeRatesService } from '@/services'
+import { errorMessage } from '@/services/payload'
 import { onMounted, ref, computed } from 'vue'
 import {
   TrendingUp,
@@ -9,39 +11,15 @@ import {
   DollarSign,
   History,
 } from 'lucide-vue-next'
-import type { ExchangeRate, Currency, ExchangeRateHistory } from '@/types'
-import { useExchangeRatesStore } from '@/stores/exchangeRates'
+import type { ExchangeRate, Currency } from '@/types'
 
 function formatRate(v: number): string {
   return v.toFixed(4)
 }
 
-function genHistory(base: number, months: number): ExchangeRateHistory[] {
-  const hist: ExchangeRateHistory[] = []
-  const now = new Date()
-  for (let i = months; i >= 0; i--) {
-    const d = new Date(now)
-    d.setMonth(d.getMonth() - i)
-    const variance = (Math.random() - 0.5) * 0.04 * base
-    hist.push({
-      rate: Math.round((base + variance) * 10000) / 10000,
-      effectiveDate: d.toISOString().slice(0, 10),
-    })
-  }
-  return hist
-}
+onMounted(async () => { try { rates.value = (await exchangeRatesService.list()).data } catch (e) { window.alert(errorMessage(e)) } })
 
-const fxStore = useExchangeRatesStore()
-onMounted(() => fxStore.fetchRates())
-
-const rates = ref<ExchangeRate[]>([
-  { id: 'fx1', fromCurrency: 'USD', toCurrency: 'SAR', currentRate: 3.7500, effectiveDate: '2026-02-20', history: genHistory(3.75, 3), createdAt: '2024-01-01T08:00:00Z', updatedAt: '2026-02-20T08:00:00Z' },
-  { id: 'fx2', fromCurrency: 'EUR', toCurrency: 'SAR', currentRate: 4.1000, effectiveDate: '2026-02-20', history: genHistory(4.10, 3), createdAt: '2024-01-01T08:00:00Z', updatedAt: '2026-02-20T08:00:00Z' },
-  { id: 'fx3', fromCurrency: 'GBP', toCurrency: 'SAR', currentRate: 4.7200, effectiveDate: '2026-02-20', history: genHistory(4.72, 3), createdAt: '2024-01-01T08:00:00Z', updatedAt: '2026-02-20T08:00:00Z' },
-  { id: 'fx4', fromCurrency: 'AED', toCurrency: 'SAR', currentRate: 1.0210, effectiveDate: '2026-02-20', history: genHistory(1.021, 3), createdAt: '2024-01-01T08:00:00Z', updatedAt: '2026-02-20T08:00:00Z' },
-  { id: 'fx5', fromCurrency: 'CNY', toCurrency: 'SAR', currentRate: 0.5200, effectiveDate: '2026-02-20', history: genHistory(0.52, 3), createdAt: '2024-01-01T08:00:00Z', updatedAt: '2026-02-20T08:00:00Z' },
-])
-
+const rates = ref<ExchangeRate[]>([])
 const currencySymbols: Record<string, string> = {
   USD: '$', EUR: '€', GBP: '£', AED: 'د.إ', CNY: '¥',
 }
@@ -52,6 +30,13 @@ const currencyNames: Record<string, string> = {
 
 const selectedCurrency = ref<string>('USD')
 const showUpdateModal = ref(false)
+const creating = ref(false)
+const saving = ref(false)
+function openCreateModal() {
+ creating.value = true
+ updateForm.value = {currency: 'USD', newRate: 0, effectiveDate: new Date().toISOString().slice(0,10)}
+ showUpdateModal.value = true
+}
 const updateForm = ref({ currency: '' as Currency, newRate: 0, effectiveDate: '' })
 
 const selectedRate = computed(() => rates.value.find(r => r.fromCurrency === selectedCurrency.value))
@@ -72,6 +57,7 @@ function lastChange(rate: ExchangeRate): { pct: number; up: boolean } {
 }
 
 function openUpdateModal(rate: ExchangeRate) {
+  creating.value = false
   updateForm.value = {
     currency: rate.fromCurrency,
     newRate: rate.currentRate,
@@ -80,14 +66,21 @@ function openUpdateModal(rate: ExchangeRate) {
   showUpdateModal.value = true
 }
 
-function saveRate() {
-  const r = rates.value.find(r => r.fromCurrency === updateForm.value.currency)
-  if (!r) return
-  r.history.push({ rate: r.currentRate, effectiveDate: r.effectiveDate })
-  r.currentRate = updateForm.value.newRate
-  r.effectiveDate = updateForm.value.effectiveDate
-  r.updatedAt = new Date().toISOString()
-  showUpdateModal.value = false
+async function saveRate() {
+ if (saving.value) return
+ saving.value = true
+ try {
+   if (creating.value) await exchangeRatesService.create({fromCurrency:updateForm.value.currency,toCurrency:'SAR',currentRate:updateForm.value.newRate,effectiveDate:updateForm.value.effectiveDate})
+   else {
+     const rate = rates.value.find(r => r.fromCurrency === updateForm.value.currency)
+     if (!rate) throw new Error('Select an exchange rate')
+     await exchangeRatesService.update(rate.id, updateForm.value.newRate, updateForm.value.effectiveDate)
+   }
+   rates.value = (await exchangeRatesService.list()).data
+   selectedCurrency.value = updateForm.value.currency
+   showUpdateModal.value = false
+ } catch (e) { window.alert(errorMessage(e)) }
+ finally { saving.value = false }
 }
 </script>
 
@@ -99,6 +92,9 @@ function saveRate() {
         <p class="page-header-subtitle">Currency rates against SAR</p>
       </div>
     </div>
+
+    <button class="btn btn-primary btn-sm" @click="openCreateModal">Add exchange rate</button>
+    <p v-if="!rates.length">Add your approved exchange rates to start recording their history.</p>
 
     <!-- Currency Cards Grid -->
     <div class="fx-grid">
@@ -172,7 +168,8 @@ function saveRate() {
           <div class="modal-body">
             <div class="form-group">
               <label class="form-label">Currency</label>
-              <input :value="updateForm.currency + ' → SAR'" type="text" class="form-input" disabled />
+              <select v-if="creating" v-model="updateForm.currency" class="select form-input" aria-label="Currency"><option v-for="code in ['USD','EUR','GBP','AED','CNY']" :key="code" :value="code">{{ code }} → SAR</option></select>
+              <input v-else :value="updateForm.currency + ' → SAR'" type="text" class="form-input" disabled />
             </div>
             <div class="form-group">
               <label class="form-label">New Rate</label>
@@ -185,7 +182,7 @@ function saveRate() {
           </div>
           <div class="modal-footer">
             <button class="btn btn-secondary" @click="showUpdateModal = false">Cancel</button>
-            <button class="btn btn-primary" @click="saveRate">
+            <button class="btn btn-primary" @click="saveRate" :disabled="saving || updateForm.newRate <= 0">
               <Save :size="14" />
               Update Rate
             </button>

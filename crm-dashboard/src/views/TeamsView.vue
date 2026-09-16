@@ -21,8 +21,15 @@ function uid(): string {
   return Math.random().toString(36).slice(2, 11)
 }
 
+import { teamsService, usersService } from '@/services'
+import { allPages } from '@/services/collections'
+import { errorMessage } from '@/services/payload'
+import type { UserLookup } from '@/services/workflowDtos'
+const directory = ref<UserLookup[]>([])
+const selectedMemberId = ref('')
+
 const teamsStore = useTeamsStore()
-onMounted(() => teamsStore.fetchTeams())
+onMounted(async()=>{try{teams.value=await allPages(teamsService.list);directory.value=(await usersService.lookup()).data}catch(e){window.alert(errorMessage(e))}})
 
 const departmentLabels: Record<Department, string> = {
   sales: 'Sales',
@@ -44,56 +51,7 @@ const departmentBadge: Record<Department, string> = {
   operations: 'badge-primary',
 }
 
-const teams = ref<Team[]>([
-  {
-    id: uid(), name: 'Enterprise Sales', department: 'sales',
-    description: 'Handles key accounts and enterprise-level security solution sales across Saudi Arabia.',
-    leaderId: 'm1', leaderName: 'Ahmed Al-Dosari', isActive: true,
-    members: [
-      { id: 'm1', name: 'Ahmed Al-Dosari', email: 'ahmed.dosari@g4s.sa', phone: '+966 50 111 2233', role: 'Sales Director', department: 'sales', isLeader: true },
-      { id: 'm2', name: 'Fahad Al-Otaibi', email: 'fahad.otaibi@g4s.sa', phone: '+966 50 222 3344', role: 'Senior Account Executive', department: 'sales', isLeader: false },
-      { id: 'm3', name: 'Noura Al-Shammari', email: 'noura.shammari@g4s.sa', phone: '+966 50 333 4455', role: 'Account Executive', department: 'sales', isLeader: false },
-      { id: 'm4', name: 'Youssef Al-Harbi', email: 'youssef.harbi@g4s.sa', phone: '+966 50 444 5566', role: 'Sales Coordinator', department: 'sales', isLeader: false },
-    ],
-    createdAt: '2024-01-01T08:00:00Z', updatedAt: '2026-02-10T08:00:00Z',
-  },
-  {
-    id: uid(), name: 'Solutions Engineering', department: 'pre-sales',
-    description: 'Designs and architects integrated security solutions. Supports sales with technical proposals and BoMs.',
-    leaderId: 'm5', leaderName: 'Omar Al-Zahrani', isActive: true,
-    members: [
-      { id: 'm5', name: 'Omar Al-Zahrani', email: 'omar.zahrani@g4s.sa', phone: '+966 50 555 6677', role: 'Head of Pre-Sales', department: 'pre-sales', isLeader: true },
-      { id: 'm6', name: 'Salman Al-Mutairi', email: 'salman.mutairi@g4s.sa', phone: '+966 50 666 7788', role: 'Solutions Architect', department: 'pre-sales', isLeader: false },
-      { id: 'm7', name: 'Reem Al-Ghamdi', email: 'reem.ghamdi@g4s.sa', phone: '+966 50 777 8899', role: 'Pre-Sales Engineer', department: 'pre-sales', isLeader: false },
-    ],
-    createdAt: '2024-01-15T08:00:00Z', updatedAt: '2026-01-20T08:00:00Z',
-  },
-  {
-    id: uid(), name: 'Field Operations', department: 'operations',
-    description: 'Manages on-site installations, maintenance, and guarding operations across all regions.',
-    leaderId: 'm8', leaderName: 'Khalid Al-Qahtani', isActive: true,
-    members: [
-      { id: 'm8', name: 'Khalid Al-Qahtani', email: 'khalid.qahtani@g4s.sa', phone: '+966 50 888 9900', role: 'Operations Manager', department: 'operations', isLeader: true },
-      { id: 'm9', name: 'Tariq Al-Sulaiman', email: 'tariq.sulaiman@g4s.sa', phone: '+966 50 999 0011', role: 'Field Supervisor', department: 'operations', isLeader: false },
-      { id: 'm10', name: 'Hassan Al-Rashid', email: 'hassan.rashid@g4s.sa', phone: '+966 50 100 1122', role: 'Installation Technician', department: 'operations', isLeader: false },
-      { id: 'm11', name: 'Majed Al-Faisal', email: 'majed.faisal@g4s.sa', phone: '+966 50 100 2233', role: 'Installation Technician', department: 'operations', isLeader: false },
-      { id: 'm12', name: 'Ibrahim Al-Turki', email: 'ibrahim.turki@g4s.sa', phone: '+966 50 100 3344', role: 'Maintenance Engineer', department: 'operations', isLeader: false },
-    ],
-    createdAt: '2024-02-01T08:00:00Z', updatedAt: '2026-02-15T08:00:00Z',
-  },
-  {
-    id: uid(), name: 'Customer Support', department: 'support',
-    description: 'Provides 24/7 helpdesk and escalation support for all active contracts and service-level agreements.',
-    leaderId: 'm13', leaderName: 'Lina Al-Asmari', isActive: true,
-    members: [
-      { id: 'm13', name: 'Lina Al-Asmari', email: 'lina.asmari@g4s.sa', phone: '+966 50 100 4455', role: 'Support Team Lead', department: 'support', isLeader: true },
-      { id: 'm14', name: 'Maha Al-Dossary', email: 'maha.dossary@g4s.sa', phone: '+966 50 100 5566', role: 'Support Specialist', department: 'support', isLeader: false },
-      { id: 'm15', name: 'Saad Al-Jaber', email: 'saad.jaber@g4s.sa', phone: '+966 50 100 6677', role: 'Support Specialist', department: 'support', isLeader: false },
-    ],
-    createdAt: '2024-03-01T08:00:00Z', updatedAt: '2026-02-20T08:00:00Z',
-  },
-])
-
+const teams = ref<Team[]>([])
 const activeDepartment = ref<Department | 'all'>('all')
 const expandedTeams = ref<Set<string>>(new Set())
 
@@ -168,18 +126,9 @@ function openEditModal(t: Team) {
 }
 
 function addMember() {
-  if (!newMember.value.name) return
-  const member: TeamMember = {
-    id: uid(),
-    name: newMember.value.name,
-    email: newMember.value.email,
-    phone: newMember.value.phone,
-    role: newMember.value.role,
-    department: form.value.department,
-    isLeader: false,
-  }
-  form.value.members.push(member)
-  newMember.value = { name: '', email: '', phone: '', role: '' }
+ const user=directory.value.find(u=>u.id===selectedMemberId.value)
+ if(!user||form.value.members.some(m=>m.id===user.id))return
+ form.value.members.push({id:user.id,name:`${user.firstName} ${user.lastName}`,email:user.email,phone:'',role:user.role,department:form.value.department,isLeader:false});selectedMemberId.value=''
 }
 
 function removeMember(id: string) {
@@ -197,32 +146,17 @@ function setLeader(member: TeamMember) {
   form.value.leaderName = member.name
 }
 
-function saveTeam() {
-  const now = new Date().toISOString()
-  const base = {
-    name: form.value.name,
-    department: form.value.department,
-    description: form.value.description,
-    leaderId: form.value.leaderId,
-    leaderName: form.value.leaderName,
-    members: form.value.members,
-    isActive: form.value.isActive,
-  }
-
-  if (editingId.value) {
-    const idx = teams.value.findIndex(t => t.id === editingId.value)
-    if (idx !== -1) {
-      teams.value[idx] = { ...teams.value[idx], ...base, updatedAt: now } as Team
-    }
-  } else {
-    teams.value.push({ id: uid(), ...base, createdAt: now, updatedAt: now })
-  }
-  showModal.value = false
+const saving = ref(false)
+async function saveTeam() {
+ if(saving.value)return
+ saving.value=true
+ try {const old=editingId.value?(await teamsService.get(editingId.value)).data:null;const data={...form.value};const result=editingId.value?await teamsService.update(editingId.value,data):await teamsService.create(data);editingId.value=result.data.id
+ for(const member of old?.members??[])if(!form.value.members.some(m=>m.id===member.id))await teamsService.removeMember(result.data.id,member.id)
+ for(const member of form.value.members)if(!old?.members.some(m=>m.id===member.id))await teamsService.addMember(result.data.id,member.id)
+ teams.value=await allPages(teamsService.list);showModal.value=false
+ }catch(e){window.alert(errorMessage(e))}finally{saving.value=false}
 }
-
-function deleteTeam(id: string) {
-  teams.value = teams.value.filter(t => t.id !== id)
-}
+async function deleteTeam(id:string){try{await teamsService.delete(id);teams.value=teams.value.filter(t=>t.id!==id)}catch(e){window.alert(errorMessage(e))}}
 </script>
 
 <template>
@@ -388,24 +322,9 @@ function deleteTeam(id: string) {
             </div>
 
             <div class="add-member-section">
-              <h5 class="add-member-title"><UserPlus :size="14" /> Add Member</h5>
-              <div class="form-row">
-                <div class="form-group">
-                  <input v-model="newMember.name" type="text" class="form-input" placeholder="Name" />
-                </div>
-                <div class="form-group">
-                  <input v-model="newMember.role" type="text" class="form-input" placeholder="Role" />
-                </div>
-              </div>
-              <div class="form-row">
-                <div class="form-group">
-                  <input v-model="newMember.email" type="email" class="form-input" placeholder="Email" />
-                </div>
-                <div class="form-group">
-                  <input v-model="newMember.phone" type="tel" class="form-input" placeholder="Phone" />
-                </div>
-              </div>
-              <button class="btn btn-secondary btn-sm" :disabled="!newMember.name" @click="addMember">
+              <h5 class="add-member-title">Add an existing user</h5>
+              <label>User<select v-model="selectedMemberId" class="select"><option value="">Select a user</option><option v-for="user in directory" :key="user.id" :value="user.id">{{ user.firstName }} {{ user.lastName }} — {{ user.email }}</option></select></label>
+              <button class="btn btn-secondary btn-sm" :disabled="!selectedMemberId" @click="addMember">
                 <UserPlus :size="14" />
                 Add Member
               </button>

@@ -116,6 +116,9 @@ export type ProductType = 'import' | 'local'
 export type Currency = 'SAR' | 'USD' | 'EUR' | 'GBP' | 'AED' | 'CNY'
 
 export interface Product extends BaseEntity {
+  vendorEntries?: ProductVendorEntry[]
+  priceHistory?: ProductPriceRecord[]
+  documents?: ProductDocument[]
   sku: string
   name: string
   description: string
@@ -172,6 +175,7 @@ export interface ProductPriceRecord {
 // ─── Product Attachment / Document ──────────────────────────
 export type ProductDocType = 'datasheet' | 'manual' | 'certificate' | 'vendor-quote' | 'catalog' | 'image' | 'other'
 export interface ProductDocument {
+  documentId?: string
   id: string
   name: string
   docType: ProductDocType
@@ -228,6 +232,7 @@ export interface QuoteLineItem {
 }
 
 export interface Quote extends BaseEntity {
+  priceBookId?: string
   quoteNumber: string
   opportunityId: string
   customerId: string
@@ -286,6 +291,9 @@ export type PriceBookType =
   | 'customer-specific'
 
 export interface PriceBookEntry {
+  kind?: 'product' | 'service' | 'recurring'
+  serviceId?: string
+  recurringServiceId?: string
   id: string
   productId: string
   productSku: string
@@ -366,7 +374,11 @@ export type RecurringServiceType =
 
 export type BillingFrequency = 'monthly' | 'quarterly' | 'annually'
 
+export interface RecurringServiceLine {
+ id: string; source: 'product' | 'service' | 'vendor' | 'write-in'; sourceId?: string; sku: string; name: string; description: string; qty: number; unitCost: number; unitPrice: number; vendorName?: string; vendorFile?: string
+}
 export interface RecurringService extends BaseEntity {
+ lineItems?: RecurringServiceLine[]
   name: string
   serviceType: RecurringServiceType
   description: string
@@ -425,6 +437,7 @@ export type DocumentType =
   | 'sla'
 
 export interface Document extends BaseEntity {
+  fileName?: string
   name: string
   category: DocumentCategory
   documentType: DocumentType

@@ -45,7 +45,7 @@ cd .. && make test-integration
 
 `make test-integration` creates a temporary PostgreSQL container on an automatically assigned loopback port, runs Go tests with the race detector, then removes that container. Tests run real migrations, handlers, permissions and transactions. Ordinary `go test` skips the PostgreSQL suite if `CRM_TEST_DATABASE_URL` is absent; CI supplies a disposable database and runs it.
 
-The 9 frontend tests cover refresh coordination, one-retry limits, bad login handling, missing-token recovery, logout during refresh, XLS/XLSX column alignment, quoted CSV and unsupported files. The checked production build also runs TypeScript validation. CI configuration is in `.github/workflows/checks.yml`; its hosted run is not verified until this repository is pushed.
+The 13 frontend tests cover refresh coordination, one-retry limits, bad login handling, missing-token recovery, logout during refresh, XLS/XLSX column alignment, quoted CSV, unsupported files, multi-page loading, failed-page handling, editable-field filtering and procurement DTOs. The checked production build also runs TypeScript validation. CI configuration is in `.github/workflows/checks.yml`; its hosted run is not verified until this repository is pushed.
 
 ## Migrations and server preparation
 
@@ -58,3 +58,9 @@ Root Docker commands can build the API image and run `make migrate` / `make seed
 ## Dependency changes in this batch
 
 The lockfile now resolves Axios 1.20.0 and Vite 7.3.6, along with compatible patched transitive dependencies. SheetJS uses the pinned 0.20.3 tarball from its [official distribution](https://docs.sheetjs.com/docs/getting-started/installation/nodejs/), whose documentation identifies the public npm `xlsx` package as outdated. The lockfile records its integrity hash. `npm audit` reports zero vulnerabilities on 2026-09-16; this is a dependency advisory check, not a claim that the application is production-secure.
+
+## Current local account and integration work
+
+A local administrator `admin@crm.local` was created and browser-verified on 2026-09-16. Its password is provided to the owner and stored in the ignored, mode-0600 `.env.local-login` file; it is intentionally absent from tracked documentation. Do not rerun bootstrap to reset it. For an existing account use the authenticated password-change/admin-reset API.
+
+The frontend is available at `http://localhost:5174` while `make dev-web` runs. API routes are listed in [API_ENDPOINTS.md](API_ENDPOINTS.md); implemented workflows and remaining limitations are in [API_COVERAGE.md](API_COVERAGE.md). Migrations through 000004 are required. User-created records survive service restarts in the development volume. A fresh database starts with an empty business catalog; add your manufacturers/products and approved FX rates through the app/API.

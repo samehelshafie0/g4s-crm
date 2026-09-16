@@ -2,6 +2,7 @@ package response
 
 import (
 	"net/http"
+	"reflect"
 
 	"github.com/gin-gonic/gin"
 )
@@ -14,9 +15,9 @@ type Response struct {
 }
 
 type ErrorBody struct {
-	Code    string        `json:"code"`
-	Message string        `json:"message"`
-	Details []FieldError  `json:"details,omitempty"`
+	Code    string       `json:"code"`
+	Message string       `json:"message"`
+	Details []FieldError `json:"details,omitempty"`
 }
 
 type FieldError struct {
@@ -26,15 +27,15 @@ type FieldError struct {
 }
 
 func OK(c *gin.Context, data interface{}) {
-	c.JSON(http.StatusOK, Response{Success: true, Data: data})
+	c.JSON(http.StatusOK, Response{Success: true, Data: nonNilSlice(data)})
 }
 
 func OKWithMeta(c *gin.Context, data interface{}, meta interface{}) {
-	c.JSON(http.StatusOK, Response{Success: true, Data: data, Meta: meta})
+	c.JSON(http.StatusOK, Response{Success: true, Data: nonNilSlice(data), Meta: meta})
 }
 
 func Created(c *gin.Context, data interface{}) {
-	c.JSON(http.StatusCreated, Response{Success: true, Data: data})
+	c.JSON(http.StatusCreated, Response{Success: true, Data: nonNilSlice(data)})
 }
 
 func NoContent(c *gin.Context) {
@@ -106,4 +107,15 @@ func Error(code string, message string) Response {
 		Success: false,
 		Error:   &ErrorBody{Code: code, Message: message},
 	}
+}
+
+func nonNilSlice(data any) any {
+	if data == nil {
+		return nil
+	}
+	value := reflect.ValueOf(data)
+	if value.Kind() == reflect.Slice && value.IsNil() {
+		return reflect.MakeSlice(value.Type(), 0, 0).Interface()
+	}
+	return data
 }

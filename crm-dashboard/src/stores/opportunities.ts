@@ -1,3 +1,4 @@
+import { allPages } from '@/services/collections'
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { opportunitiesService } from '@/services'
@@ -29,11 +30,8 @@ export const useOpportunitiesStore = defineStore('opportunities', () => {
     loading.value = true
     error.value = null
     try {
-      const res = await opportunitiesService.list(params)
-      if (res.success) {
-        opportunities.value = res.data
-        if (res.meta) meta.value = res.meta
-      }
+      opportunities.value = await allPages(opportunitiesService.list, params)
+      meta.value = {page: 1, limit: opportunities.value.length, total: opportunities.value.length, totalPages: 1}
     } catch (e) {
       error.value = 'Failed to load opportunities'
       console.error(e)

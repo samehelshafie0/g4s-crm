@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { documentsService, customersService } from '@/services'
+import { allPages } from '@/services/collections'
+import { errorMessage } from '@/services/payload'
 import { onMounted, ref, computed } from 'vue'
 import {
   Plus,
@@ -22,7 +25,7 @@ function uid(): string {
 }
 
 const docsStore = useDocumentsStore()
-onMounted(() => docsStore.fetchDocuments())
+onMounted(async () => { try { documents.value = await allPages(documentsService.list); customerOptions.value = (await customersService.lookup()).data.map(c => ({id:c.id, name:c.companyName})) } catch (e) { window.alert(errorMessage(e)) } })
 
 const categoryLabels: Record<DocumentCategory, string> = {
   contract: 'Contract',
@@ -69,65 +72,7 @@ function getFileIcon(fileType: string) {
   return fileTypeIcons[fileType] ?? File
 }
 
-const documents = ref<Document[]>([
-  {
-    id: uid(), name: 'Aramco Master Agreement 2025', category: 'contract', documentType: 'terms',
-    tags: ['aramco', 'master-agreement', 'security'], version: '2.1', fileSize: '2.4 MB', fileType: 'pdf',
-    linkedEntities: [{ type: 'Customer', id: 'c1', name: 'Saudi Aramco' }],
-    uploadedBy: 'Ahmed Al-Dosari',
-    createdAt: '2025-03-15T08:00:00Z', updatedAt: '2025-11-20T10:00:00Z',
-  },
-  {
-    id: uid(), name: 'Q1 2026 Quotation Template', category: 'quote', documentType: 'terms',
-    tags: ['template', 'quotation', '2026'], version: '1.0', fileSize: '340 KB', fileType: 'docx',
-    linkedEntities: [],
-    uploadedBy: 'Omar Al-Zahrani',
-    createdAt: '2026-01-05T08:00:00Z', updatedAt: '2026-01-05T08:00:00Z',
-  },
-  {
-    id: uid(), name: 'Hikvision Product Specifications', category: 'general', documentType: 'technical',
-    tags: ['hikvision', 'specifications', 'cctv'], version: '3.2', fileSize: '8.7 MB', fileType: 'pdf',
-    linkedEntities: [{ type: 'Manufacturer', id: 'mfr-hik', name: 'Hikvision' }],
-    uploadedBy: 'Salman Al-Mutairi',
-    createdAt: '2025-06-10T08:00:00Z', updatedAt: '2026-01-15T08:00:00Z',
-  },
-  {
-    id: uid(), name: 'ISO 27001 Compliance Checklist', category: 'compliance', documentType: 'terms',
-    tags: ['iso-27001', 'compliance', 'audit'], version: '1.3', fileSize: '520 KB', fileType: 'xlsx',
-    linkedEntities: [],
-    uploadedBy: 'Lina Al-Asmari',
-    createdAt: '2025-09-01T08:00:00Z', updatedAt: '2026-02-01T08:00:00Z',
-  },
-  {
-    id: uid(), name: 'Standard SLA Document', category: 'legal', documentType: 'sla',
-    tags: ['sla', 'standard', 'response-time'], version: '4.0', fileSize: '180 KB', fileType: 'pdf',
-    linkedEntities: [],
-    uploadedBy: 'Ahmed Al-Dosari',
-    createdAt: '2024-06-15T08:00:00Z', updatedAt: '2025-12-20T08:00:00Z',
-  },
-  {
-    id: uid(), name: 'KFSH Delivery Note — Phase 2', category: 'contract', documentType: 'delivery',
-    tags: ['kfsh', 'delivery', 'phase-2', 'cctv'], version: '1.0', fileSize: '95 KB', fileType: 'pdf',
-    linkedEntities: [{ type: 'Customer', id: 'c2', name: 'King Faisal Specialist Hospital' }],
-    uploadedBy: 'Khalid Al-Qahtani',
-    createdAt: '2026-01-20T08:00:00Z', updatedAt: '2026-01-20T08:00:00Z',
-  },
-  {
-    id: uid(), name: 'Bosch Fire Panel Warranty Certificate', category: 'general', documentType: 'warranty',
-    tags: ['bosch', 'warranty', 'fire-panel'], version: '1.0', fileSize: '1.1 MB', fileType: 'pdf',
-    linkedEntities: [{ type: 'Manufacturer', id: 'mfr-bosch', name: 'Bosch Security' }],
-    uploadedBy: 'Salman Al-Mutairi',
-    createdAt: '2025-12-01T08:00:00Z', updatedAt: '2025-12-01T08:00:00Z',
-  },
-  {
-    id: uid(), name: 'MOI Project Site Photos', category: 'general', documentType: 'technical',
-    tags: ['moi', 'site-survey', 'photos'], version: '1.0', fileSize: '24.3 MB', fileType: 'zip',
-    linkedEntities: [{ type: 'Customer', id: 'c5', name: 'Ministry of Interior' }],
-    uploadedBy: 'Tariq Al-Sulaiman',
-    createdAt: '2026-02-10T08:00:00Z', updatedAt: '2026-02-10T08:00:00Z',
-  },
-])
-
+const documents = ref<Document[]>([])
 const searchQuery = ref('')
 const filterCategory = ref<DocumentCategory | ''>('')
 const filterType = ref<DocumentType | ''>('')
@@ -182,33 +127,24 @@ function openUploadModal() {
   showUploadModal.value = true
 }
 
-function uploadDocument() {
-  const now = new Date().toISOString()
-  const tags = form.value.tags.split(',').map(t => t.trim()).filter(Boolean)
-  const linked = form.value.linkedEntityName
-    ? [{ type: 'Custom', id: uid(), name: form.value.linkedEntityName }]
-    : []
-
-  documents.value.push({
-    id: uid(),
-    name: form.value.name,
-    category: form.value.category,
-    documentType: form.value.documentType,
-    tags,
-    version: form.value.version,
-    fileSize: form.value.fileSize || '0 KB',
-    fileType: form.value.fileType,
-    linkedEntities: linked,
-    uploadedBy: 'Current User',
-    createdAt: now,
-    updatedAt: now,
-  })
-  showUploadModal.value = false
+const selectedFile = ref<globalThis.File | null>(null)
+const uploading = ref(false)
+const customerOptions = ref<{id:string;name:string}[]>([])
+function chooseFile(event: Event) { selectedFile.value = (event.target as HTMLInputElement).files?.[0] ?? null }
+async function uploadDocument() {
+ if (!selectedFile.value || uploading.value) return
+ uploading.value = true
+ try {
+   const data = new FormData(); data.append('file', selectedFile.value); data.append('name', form.value.name); data.append('category', form.value.category); data.append('documentType', form.value.documentType); data.append('tags', form.value.tags)
+   const result = await documentsService.upload(data)
+   if (form.value.linkedEntityName) await documentsService.addLink(result.data.id, 'customer', form.value.linkedEntityName)
+   documents.value = await allPages(documentsService.list); showUploadModal.value = false; selectedFile.value = null
+ } catch (e) { window.alert(errorMessage(e)) } finally { uploading.value = false }
 }
-
-function deleteDocument(id: string) {
-  documents.value = documents.value.filter(d => d.id !== id)
+async function deleteDocument(id: string) {
+ try { await documentsService.delete(id); documents.value = documents.value.filter(d => d.id !== id) } catch (e) { window.alert(errorMessage(e)) }
 }
+async function downloadDocument(doc: Document) { try { await documentsService.download(doc.id, doc.fileName || doc.name) } catch (e) { window.alert(errorMessage(e)) } }
 </script>
 
 <template>
@@ -292,7 +228,7 @@ function deleteDocument(id: string) {
             <td class="whitespace-nowrap">{{ formatDate(doc.createdAt) }}</td>
             <td>
               <div class="table-actions">
-                <button class="btn btn-ghost btn-icon btn-sm" title="Download">
+                <button class="btn btn-ghost btn-icon btn-sm" title="Download" @click="downloadDocument(doc)">
                   <Download :size="14" />
                 </button>
                 <button class="btn btn-ghost btn-icon btn-sm" title="Delete" @click="deleteDocument(doc.id)">
@@ -345,48 +281,18 @@ function deleteDocument(id: string) {
               </div>
               <div class="form-group">
                 <label class="form-label">Version</label>
-                <input v-model="form.version" type="text" class="form-input" placeholder="1.0" />
+                <input v-model="form.version" readonly type="text" class="form-input" placeholder="1.0" />
               </div>
             </div>
 
-            <!-- File upload area -->
-            <div class="form-group">
-              <label class="form-label">File</label>
-              <div class="file-upload-area">
-                <Upload :size="32" class="upload-icon" />
-                <p class="upload-text">Click to select or drag & drop</p>
-                <p class="upload-hint">PDF, DOCX, XLSX, PNG, JPG, ZIP up to 50MB</p>
-              </div>
-            </div>
-
-            <div class="form-row">
-              <div class="form-group">
-                <label class="form-label">File Type</label>
-                <select v-model="form.fileType" class="form-select">
-                  <option value="pdf">PDF</option>
-                  <option value="docx">DOCX</option>
-                  <option value="xlsx">XLSX</option>
-                  <option value="png">PNG</option>
-                  <option value="jpg">JPG</option>
-                  <option value="zip">ZIP</option>
-                </select>
-              </div>
-              <div class="form-group">
-                <label class="form-label">File Size</label>
-                <input v-model="form.fileSize" type="text" class="form-input" placeholder="e.g. 2.4 MB" />
-              </div>
-            </div>
-
-            <div class="form-group">
-              <label class="form-label">Link to Entity</label>
-              <input v-model="form.linkedEntityName" type="text" class="form-input" placeholder="Customer or manufacturer name" />
-            </div>
+            <label>File (up to 50 MB)<input type="file" class="file-input" @change="chooseFile" /></label>
+            <label>Link to customer<select v-model="form.linkedEntityName" class="select"><option value="">No customer link</option><option v-for="customer in customerOptions" :key="customer.id" :value="customer.id">{{ customer.name }}</option></select></label>
           </div>
           <div class="modal-footer">
             <button class="btn btn-secondary" @click="showUploadModal = false">Cancel</button>
             <button
               class="btn btn-primary"
-              :disabled="!form.name"
+              :disabled="!form.name || !selectedFile || uploading"
               @click="uploadDocument"
             >
               <Upload :size="14" />

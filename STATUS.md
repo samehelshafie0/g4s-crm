@@ -1,10 +1,11 @@
 # G4S CRM — current status and work plan
 
 **Last updated:** 2026-09-16  
-**Current phase:** M1 foundation implementation underway; first verified repair batch implemented.
+**Current phase:** API/frontend integration batch implemented and verified; M1–M5 acceptance work remains.
 **Release state:** not ready for production.  
 **Primary objective:** make customers → opportunities → quotes → contracts work end to end, then finish remaining modules and deploy to the owner's server.  
 **Detailed findings:** [docs/CRM_REVIEW.md](docs/CRM_REVIEW.md).
+**Current API coverage:** [docs/API_COVERAGE.md](docs/API_COVERAGE.md); [179-route inventory](docs/API_ENDPOINTS.md).
 
 ## Start here each work session
 
@@ -56,10 +57,10 @@ Logs and reproduction details: [review evidence](docs/review-evidence/README.md)
 |---|---|---|---|
 | M0 — Review | Establish actual implementation state and organized plan | Evidence, prioritized findings and status file exist | **DONE** |
 | M1 — Reliable foundation | Checked builds, isolated setup, validation, safe updates, stable session/DTO contracts | Clean install; no approval bypass; refresh/customer smoke tests pass | IN_PROGRESS |
-| M2 — Customers and opportunities | Persist customers/sites/contacts and real opportunities/assignees | Cross-session CRUD, pagination/search and stage tests pass | TODO |
-| M3 — Quotes | API-backed catalog/list/builder with authoritative calculations, approvals and revisions | Save/reload/send/accept flow and role/concurrency tests pass | TODO |
-| M4 — Contracts and sales reporting | Convert accepted revision to contract; lifecycle, files and truthful dashboard | Full sales journey passes with database persistence and audit trail | TODO |
-| M5 — Remaining modules | Procurement, inventory, projects, teams, recurring/price-book depth | Each workflow passes its own functional and integrity gates | TODO |
+| M2 — Customers and opportunities | Persist customers/sites/contacts and real opportunities/assignees | Cross-session CRUD, pagination/search and stage tests pass | PARTIAL |
+| M3 — Quotes | API-backed catalog/list/builder with authoritative calculations, approvals and revisions | Save/reload/send/accept flow and role/concurrency tests pass | PARTIAL |
+| M4 — Contracts and sales reporting | Convert accepted revision to contract; lifecycle, files and truthful dashboard | Full sales journey passes with database persistence and audit trail | PARTIAL |
+| M5 — Remaining modules | Procurement, inventory, projects, teams, recurring/price-book depth | Each workflow passes its own functional and integrity gates | PARTIAL |
 | M6 — Server release | Harden, deploy and prove operations | TLS, migrations, backup+restore, monitoring and rollback verified | TODO |
 
 M6 can follow M4 only if the owner chooses a sales-only first release and incomplete modules are explicitly disabled. Otherwise M5 must complete first. Sales-only release scope has not yet been confirmed; priority alone does not remove modules from scope.
@@ -76,27 +77,44 @@ M6 can follow M4 only if the owner chooses a sales-only first release and incomp
 | T06 | M1 | Shared user/collection DTOs; safe `/auth/me`; bounded refresh, session policy, logout reset and role-aware UI | R04, R05, R16 | PARTIAL |
 | T07 | M1 | Add test/CI structure; preserve reproduced failures as regression cases; triage and update dependencies | R19, R24 | PARTIAL |
 | T08 | M2 | Customer CRUD plus site/contact UI/API; optional CR handling; relationship/primary-contact constraints; visible errors | R03, R05, R14, R20 | PARTIAL |
-| T09 | M2 | Opportunity request mapping, live customer/user lookups, owners/services/dates/costs, stage events and validation | R02, R03, R11 | TODO |
-| T10 | M2 | Shared server-driven list query pattern with total/page/filter/sort; lookup endpoints and 60-record tests | R08, R20 | TODO |
-| T11 | M3 | Agree quote row/revision/decimal/FX DTO and add migration; resolve price-book/service representations | R10, R14 | TODO |
-| T12 | M3 | Persist the catalog subset required for quotes: manufacturer/category/product/service costing and eligible pricing | R02, R03, R10 | TODO |
-| T13 | M3 | Replace quote list/builder mocks; load by ID; atomic header+line save; reload and second-user persistence | R02, R03, R05, R09 | TODO |
-| T14 | M3 | Server calculations and threshold policy; approval/rejection/send/accept/decline; immutable revision and stale-edit checks | R06, R10, R11 | TODO |
+| T09 | M2 | Opportunity request mapping, live customer/user lookups, owners/services/dates/costs, stage events and validation | R02, R03, R11 | PARTIAL |
+| T10 | M2 | Shared server-driven list query pattern with total/page/filter/sort; lookup endpoints and 60-record tests | R08, R20 | PARTIAL |
+| T11 | M3 | Agree quote row/revision/decimal/FX DTO and add migration; resolve price-book/service representations | R10, R14 | PARTIAL |
+| T12 | M3 | Persist the catalog subset required for quotes: manufacturer/category/product/service costing and eligible pricing | R02, R03, R10 | PARTIAL |
+| T13 | M3 | Replace quote list/builder mocks; load by ID; atomic header+line save; reload and second-user persistence | R02, R03, R05, R09 | PARTIAL |
+| T14 | M3 | Server calculations and threshold policy; approval/rejection/send/accept/decline; immutable revision and stale-edit checks | R06, R10, R11 | PARTIAL |
 | T15 | M3 | Fix yearly number generation; test rollover and concurrency; remove frontend number assignment | R15 | PARTIAL |
-| T16 | M3 | Safe, accurate customer print/export; dirty-state/pending-save feedback; permission-controlled costs | R10, R17, R23 | TODO |
+| T16 | M3 | Safe, accurate customer print/export; dirty-state/pending-save feedback; permission-controlled costs | R10, R17, R23 | PARTIAL |
 | T17 | M4 | Accepted quote → contract conversion once; dates/value snapshot; activate/terminate/renew with history and transactions | R03, R09–R11 | PARTIAL |
-| T18 | M4 | Real document upload/download/version/link behavior with limits and contained paths | R17 | TODO |
-| T19 | M4 | Real dashboard activity/quotes/expiry and defined currency/date/metric semantics | R02, R22 | TODO |
+| T18 | M4 | Real document upload/download/version/link behavior with limits and contained paths | R17 | PARTIAL |
+| T19 | M4 | Real dashboard activity/quotes/expiry and defined currency/date/metric semantics | R02, R22 | PARTIAL |
 | T20 | M4 | Fix mobile shell, common dialogs/form labels/keyboard access, table columns/actions and public login layout | R20, R21, R23 | PARTIAL |
-| T21 | M5 | PO/SQ item editing, acceptance, approvals/conversion and partial goods receipts; correct update/delete routes | R09, R13 | TODO |
-| T22 | M5 | Stock receipt/reserve/release/fulfill/transfer/adjustment with concurrency, availability and movement reconciliation | R12, R14 | TODO |
-| T23 | M5 | Complete projects, teams/user management, price books, FX history and recurring service behavior | R02, R10, R11, R14 | TODO |
+| T21 | M5 | PO/SQ item editing, acceptance, approvals/conversion and partial goods receipts; correct update/delete routes | R09, R13 | PARTIAL |
+| T22 | M5 | Stock receipt/reserve/release/fulfill/transfer/adjustment with concurrency, availability and movement reconciliation | R12, R14 | PARTIAL |
+| T23 | M5 | Complete projects, teams/user management, price books, FX history and recurring service behavior | R02, R10, R11, R14 | PARTIAL |
 | T24 | M6 | Server runbook/configuration/TLS/secrets/networking/readiness/logging; repeatable deploy and rollback | R16, R18, R24 | TODO |
 | T25 | M6 | Full regression/UAT, role tests, migration upgrade/rollback, backup+upload restore and realistic load checks | All relevant findings | TODO |
 
 Dependencies: T03/T04 protect all mutations. T05 enables repeatable environments. T06 precedes live UI integration. T11 precedes T13/T14. T17 requires an accepted persisted quote revision. T21/T22 depend on agreed catalog/stock contracts. T24/T25 require actual server details. Work on those independent foundations need not wait for optional design decisions.
 
-## Implemented foundation batch — 2026-09-16
+## Current API/frontend integration batch — 2026-09-16
+
+**Batch state: DONE for the implementation and checks below. Overall modules remain PARTIAL.** The [coverage matrix](docs/API_COVERAGE.md) is the current source for implemented behavior versus unfinished UI and release work.
+
+- **Sales:** live opportunities/customer/user lookups; actual quotation list/catalog; atomic full builder saves, saved row order/false flags, authoritative rounded totals, stale-edit protection, revisions and lifecycle actions. Browser verified save/reload → submit → approve → sent → accepted. Submitted inputs are disabled. Accepted quotes convert once to a dated contract with amount/currency snapshot; activation, termination and renewal persist.
+- **Relationships/catalog:** typed writes for manufacturers/categories, products/vendors/history/files, service catalog, price-book headers/mixed entries, recurring component costing, teams/membership/users and project managers. Site/contact APIs enforce parent ownership and primary-contact consistency; their edit UI remains open.
+- **Inventory/procurement:** corrected PO/SQ PATCH/delete routing and real line persistence; approval/ordering/SQ conversion, partial receipts, stock valuation, transfer/adjustment/reserve/release/fulfill. Concurrency tests confirm no over-reservation; foreign-currency receipt test confirms SAR landed value. Generated document numbers come from the server.
+- **Documents/reporting:** actual uploads, authenticated downloads, version snapshots and validated entity links; truthful dashboard collections/activity. Basic document UI connected; advanced versions/link controls remain open. Dashboard accepted-value sums are SAR-only and labeled accordingly.
+- **API contracts:** added/updated missing routes and presentation DTOs, safe empty arrays and editable-field adapters. Locally filtered tables load all pages; full server-driven table pagination is still required for scale. Added migrations 000003/000004 and applied locally; no production database changed.
+- **Verified checks:** 22 PostgreSQL integration scenario groups with race detector; 13 frontend tests; checked production build and Go vet pass. Parser bundle size warning remains. See coverage document for exact verification limits.
+- **Local QA records:** the clearly named `API Browser Verification` customer and its accepted `QT-2026-0001` quote (SAR 230) remain available to inspect the tested flow; these are verification data, not real business records.
+- **Local access:** development database, API and frontend remain running. URL `http://localhost:5174`; administrator `admin@crm.local`. Password supplied directly to the owner and retained only in ignored `.env.local-login` (mode 0600), not in tracked documentation. This account exists in local development only.
+
+### Next active work
+
+Complete **T08/T23** customer sites/contacts and user/profile management UI, then finish **T06/T14/T16** separate-role sales acceptance, approval policy and exports. Follow the ordered remaining work in [API_COVERAGE.md](docs/API_COVERAGE.md). Server deployment (T24/T25) is still pending; server provider/domain and business rules have not been supplied. No milestone is marked complete based solely on route availability.
+
+## Earlier foundation batch — historical evidence, 2026-09-16
 
 - **T01 DONE:** local Git baseline and ignores; `compose.dev.yml`, `scripts/dev-api.sh`, configurable loopback ports, isolated test PostgreSQL with automatic cleanup. Clean local migration/startup verified. See [local development guide](docs/LOCAL_DEVELOPMENT.md).
 - **T02 DONE:** all 51 original diagnostics repaired without weakening strict checks. Full `npm run build` passes. Docker now runs the checked build. Procurement DTO adapters and item/history helpers replace untyped collection assumptions.
@@ -119,7 +137,7 @@ Dependencies: T03/T04 protect all mutations. T05 enables repeatable environments
 - Browser: login → create customer with blank CR → reload → retained profile and customer row with zero contacts/sites → edit customer → logout verified against local PostgreSQL. Public login checked at 390 px with no horizontal overflow; the authenticated mobile shell remains open work.
 - This does **not** establish end-to-end sales completion. Opportunity creation, mock quote editor/list, contract conversion and remaining modules are still release blockers.
 
-### Next implementation order
+### Earlier implementation order — superseded by current API coverage
 
 1. Finish typed mutation/relationship/error handling (T03/T04) and role/DTO and remaining verification gaps (T06/T07).
 2. Finish real customers/sites/contacts and opportunity lookups/persistence/pagination (T08–T10).
@@ -164,6 +182,13 @@ Repeat with invalid relationships, a low-margin quote, unauthorized approval, ex
 - Added [LOCAL_DEVELOPMENT.md](docs/LOCAL_DEVELOPMENT.md) and repeatable regression checks.
 - Removed the temporary QA administrator, customer and refresh token after browser checks; stopped the local API, frontend and development PostgreSQL. The isolated development volume retains migrations but no QA records. Ignored development keys are preserved for subsequent sessions.
 - **Next:** complete typed mutation/DTO boundaries, then customers and opportunities. M1 is not marked complete and production deployment remains blocked by functional and operational work.
+
+### 2026-09-16 — frontend/backend integration
+
+- Connected main module views to persistent APIs and added missing workflow routes, DTO mapping and migrations; see current batch above.
+- Added `docs/API_COVERAGE.md`, `docs/API_ENDPOINTS.md`, module integration tests and frontend API-contract tests.
+- Created and verified the requested local administrator; kept development services running for the owner.
+- **Next:** customer/site/contact and user-management UI, role acceptance and remaining business/release gates. Historical foundation statements above describe the earlier state and are superseded by this batch.
 
 ### Template for future entries
 

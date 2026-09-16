@@ -33,6 +33,11 @@ import { usePriceBooksStore } from '@/stores/priceBooks'
 import { useQuotesStore } from '@/stores/quotes'
 import { useCustomersStore } from '@/stores/customers'
 
+import { quotesService, customersService, opportunitiesService, priceBooksService } from '@/services'
+import { allPages } from '@/services/collections'
+import { errorMessage } from '@/services/payload'
+import type { Activity } from '@/services/workflowDtos'
+
 const router = useRouter()
 const route = useRoute()
 
@@ -80,139 +85,8 @@ const categoryLabels: Record<QuoteLineCategory, string> = {
   miscellaneous: 'Miscellaneous',
 }
 
-function buildQuote(
-  quoteNumber: string,
-  customerId: string,
-  customerName: string,
-  opportunityId: string,
-  status: QuoteStatus,
-  lineItems: QuoteLineItem[],
-  discountPercent: number,
-  validUntil: string,
-  notes: string,
-  approvedBy?: string,
-  approvedAt?: string,
-): Quote {
-  const subtotal = lineItems.reduce((s, li) => s + li.lineTotal, 0)
-  const discountAmount = subtotal * (discountPercent / 100)
-  const subtotalAfterDiscount = subtotal - discountAmount
-  const vatPercent = 15
-  const vatAmount = subtotalAfterDiscount * (vatPercent / 100)
-  const total = subtotalAfterDiscount + vatAmount
-  const totalCost = lineItems.reduce((s, li) => s + li.unitCost * li.quantity, 0)
-  const marginAmount = subtotalAfterDiscount - totalCost
-  const marginPercent = subtotalAfterDiscount > 0 ? (marginAmount / subtotalAfterDiscount) * 100 : 0
+const quotes = ref<Quote[]>([])
 
-  return {
-    id: uid(),
-    quoteNumber,
-    opportunityId,
-    customerId,
-    customerName,
-    version: 1,
-    status,
-    lineItems,
-    subtotal,
-    discountPercent,
-    discountAmount,
-    subtotalAfterDiscount,
-    vatPercent,
-    vatAmount,
-    total,
-    totalCost,
-    marginAmount,
-    marginPercent,
-    validUntil,
-    currency: 'SAR',
-    notes,
-    approvedBy,
-    approvedAt,
-    createdAt: '2026-02-01T08:00:00Z',
-    updatedAt: '2026-02-20T14:00:00Z',
-  }
-}
-
-function li(
-  cat: QuoteLineCategory,
-  desc: string,
-  sku: string | undefined,
-  mfr: string | undefined,
-  stock: number | undefined,
-  lead: number | undefined,
-  qty: number,
-  unitCost: number,
-  unitPrice: number,
-): QuoteLineItem {
-  return {
-    id: uid(),
-    category: cat,
-    productId: sku ? uid() : undefined,
-    sku,
-    description: desc,
-    manufacturerName: mfr,
-    stockAvailable: stock,
-    leadTimeDays: lead,
-    quantity: qty,
-    unitCost,
-    unitPrice,
-    lineTotal: qty * unitPrice,
-    marginPercent: unitPrice > 0 ? ((unitPrice - unitCost) / unitPrice) * 100 : 0,
-  }
-}
-
-const quotes = ref<Quote[]>([
-  buildQuote('QT-2026-0147', 'c1', 'Saudi Aramco', 'opp-1', 'sent', [
-    li('materials', 'DS-2CD2T87G2-L 8MP Bullet Camera', 'HIK-DS2CD2T87', 'Hikvision', 45, undefined, 64, 862, 1199),
-    li('materials', 'DS-7732NI-K4 32CH NVR', 'HIK-DS7732NI', 'Hikvision', 12, undefined, 8, 1820, 2436),
-    li('materials', 'Cat6A UTP Cable 305m Box', 'CBL-CAT6A-305', 'Belden', 30, undefined, 16, 420, 580),
-    li('manpower', 'Senior Installation Engineer (per day)', undefined, undefined, undefined, undefined, 20, 800, 1200),
-    li('manpower', 'Technician (per day)', undefined, undefined, undefined, undefined, 40, 450, 700),
-    li('miscellaneous', 'Project Management Fee', undefined, undefined, undefined, undefined, 1, 3500, 5000),
-    li('miscellaneous', 'Transportation & Logistics', undefined, undefined, undefined, undefined, 1, 4200, 6000),
-  ], 5, '2026-03-21', 'CCTV upgrade for Eastern Province facilities. Phase 1 of 3.'),
-
-  buildQuote('QT-2026-0146', 'c2', 'SABIC', 'opp-2', 'accepted', [
-    li('materials', 'MAXPRO Access 4-Door Controller', 'HON-MAXPRO', 'Honeywell', 8, undefined, 12, 2100, 2800),
-    li('materials', 'SpeedFace-V5L Facial Terminal', 'ZKT-SPEEDFACE', 'ZKTeco', 0, 30, 24, 1508, 2917),
-    li('materials', 'InBio460 4-Door Controller', 'ZKT-INBIO460', 'ZKTeco', 15, undefined, 6, 858, 1320),
-    li('manpower', 'Access Control Specialist (per day)', undefined, undefined, undefined, undefined, 30, 900, 1350),
-    li('miscellaneous', 'System Integration & Testing', undefined, undefined, undefined, undefined, 1, 8000, 12000),
-  ], 3, '2026-03-15', 'Access control system for Jubail Industrial Complex.', 'Khalid Al-Rashid', '2026-02-18T09:00:00Z'),
-
-  buildQuote('QT-2026-0145', 'c5', 'Ministry of Interior', 'opp-3', 'pending-approval', [
-    li('materials', 'P3265-LVE 2MP Dome Camera', 'AXIS-P3265LVE', 'Axis Communications', 20, undefined, 48, 1720, 2656),
-    li('materials', 'Q6135-LE PTZ Camera', 'AXIS-Q6135LE', 'Axis Communications', 0, 42, 8, 19044, 24600),
-    li('materials', 'FPA-5000 Fire Panel', 'BOSCH-FPA5000', 'Bosch Security', 3, undefined, 4, 8424, 10694),
-    li('manpower', 'Project Manager (per month)', undefined, undefined, undefined, undefined, 3, 12000, 18000),
-    li('manpower', 'Installation Team (per day)', undefined, undefined, undefined, undefined, 60, 1800, 2800),
-    li('miscellaneous', 'Cabling & Infrastructure', undefined, undefined, undefined, undefined, 1, 35000, 48000),
-  ], 0, '2026-04-10', 'Perimeter security upgrade for main HQ compound.'),
-
-  buildQuote('QT-2026-0144', 'c2', 'King Faisal Specialist Hospital', 'opp-4', 'draft', [
-    li('materials', 'DS-2CD2143G2-IU 4MP Dome Camera', 'HIK-DS2CD2143', 'Hikvision', 60, undefined, 120, 367, 522),
-    li('materials', 'DS-7732NI-K4 32CH NVR', 'HIK-DS7732NI', 'Hikvision', 12, undefined, 4, 1820, 2436),
-    li('manpower', 'Technician (per day)', undefined, undefined, undefined, undefined, 25, 450, 700),
-  ], 0, '2026-04-30', 'CCTV Phase 2 — floors 4-8 coverage.'),
-
-  buildQuote('QT-2026-0143', 'c3', 'NEOM', 'opp-5', 'declined', [
-    li('materials', 'Q6135-LE PTZ Camera', 'AXIS-Q6135LE', 'Axis Communications', 0, 42, 32, 19044, 24600),
-    li('materials', 'FLEXIDOME IP 3000i 5MP', 'BOSCH-NDV3503', 'Bosch Security', 18, undefined, 200, 1252, 1660),
-    li('materials', 'Morley-IAS Fire Panel 2L', 'HON-MNPDS2', 'Honeywell', 5, undefined, 16, 5438, 6510),
-    li('manpower', 'Senior Engineer (per month)', undefined, undefined, undefined, undefined, 6, 15000, 22000),
-    li('manpower', 'Installation Team (per day)', undefined, undefined, undefined, undefined, 90, 1800, 2800),
-    li('miscellaneous', 'Engineering & Design', undefined, undefined, undefined, undefined, 1, 45000, 65000),
-    li('miscellaneous', 'Transportation & Logistics', undefined, undefined, undefined, undefined, 1, 28000, 40000),
-  ], 8, '2026-03-01', 'Smart city security infrastructure — initial phase.'),
-
-  buildQuote('QT-2026-0142', 'c4', 'Saudi Telecom Company (STC)', 'opp-6', 'approved', [
-    li('materials', 'IPC-HFW5442T-ASE 4MP AI Bullet', 'DH-IPC-HFW5442', 'Dahua Technology', 35, undefined, 36, 474, 676),
-    li('materials', 'NVR5432-EI 32CH AI NVR', 'DH-NVR5432-EI', 'Dahua Technology', 0, 30, 4, 3720, 4960),
-    li('manpower', 'Installation Engineer (per day)', undefined, undefined, undefined, undefined, 15, 800, 1200),
-    li('miscellaneous', 'Network Configuration & Testing', undefined, undefined, undefined, undefined, 1, 5000, 7500),
-  ], 2, '2026-03-30', 'AI-powered surveillance for 3 STC sites.', 'Khalid Al-Rashid', '2026-02-15T11:00:00Z'),
-])
-
-// ── Filters ──────────────────────────────────────────────────
 const searchQuery = ref('')
 const statusFilter = ref<QuoteStatus | ''>('')
 const dateFrom = ref('')
@@ -261,13 +135,16 @@ const avgMargin = computed(() => {
 const showViewModal = ref(false)
 const viewingQuote = ref<Quote | null>(null)
 
-function openViewModal(q: Quote) {
+async function openViewModal(q: Quote) {
+  auditTrail.value = []
+  try { const res = await quotesService.activity(q.id); auditTrail.value = res.data.map(a => ({ id: a.id, action: a.description, user: a.user ? `${a.user.firstName} ${a.user.lastName}` : 'System', timestamp: a.createdAt })) } catch (error) { window.alert(errorMessage(error)) }
   viewingQuote.value = q
   showViewModal.value = true
 }
 
-function deleteQuote(id: string) {
-  quotes.value = quotes.value.filter((q) => q.id !== id)
+async function deleteQuote(id: string) {
+  try { await quotesService.delete(id); quotes.value = quotes.value.filter(q => q.id !== id) }
+  catch (error) { window.alert(errorMessage(error)) }
 }
 
 function linesByCategory(items: QuoteLineItem[], cat: QuoteLineCategory): QuoteLineItem[] {
@@ -285,19 +162,7 @@ const showNewQuoteModal = ref(false)
 type NewQuoteStep = 'customer' | 'opportunity' | 'pricebook' | 'confirm'
 const newQuoteStep = ref<NewQuoteStep>('customer')
 
-const mockCustomers = [
-  { id: 'c1', name: 'Saudi Aramco', storeId: 'cust-001' },
-  { id: 'c2', name: 'SABIC', storeId: 'cust-002' },
-  { id: 'c3', name: 'NEOM', storeId: 'cust-005' },
-  { id: 'c4', name: 'Saudi Telecom Company (STC)', storeId: 'cust-009' },
-  { id: 'c5', name: 'Ministry of Interior', storeId: 'cust-010' },
-  { id: 'c6', name: 'King Faisal Specialist Hospital', storeId: 'cust-003' },
-  { id: 'c7', name: 'Al Rajhi Bank', storeId: 'cust-004' },
-  { id: 'c8', name: 'Red Sea Global', storeId: 'cust-011' },
-  { id: 'c9', name: 'Panda Retail Company', storeId: 'cust-006' },
-  { id: 'c10', name: 'King Abdulaziz University', storeId: 'cust-007' },
-  { id: 'c11', name: 'Hilton Riyadh Hotel & Residences', storeId: 'cust-008' },
-]
+const customers = ref<{ id: string; name: string; storeId: string }[]>([])
 
 const newQuoteForm = ref({
   customerId: '',
@@ -315,8 +180,8 @@ const customerSearch = ref('')
 
 const filteredCustomers = computed(() => {
   const q = customerSearch.value.toLowerCase().trim()
-  if (!q) return mockCustomers
-  return mockCustomers.filter(c => c.name.toLowerCase().includes(q))
+  if (!q) return customers.value
+  return customers.value.filter(c => c.name.toLowerCase().includes(q))
 })
 
 const customerOpportunities = computed(() => {
@@ -343,7 +208,7 @@ function resetNewQuoteForm() {
   customerSearch.value = ''
 }
 
-function selectCustomer(cust: typeof mockCustomers[0]) {
+function selectCustomer(cust: { id: string; name: string; storeId: string }) {
   newQuoteForm.value.customerId = cust.id
   newQuoteForm.value.customerName = cust.name
   newQuoteForm.value.customerStoreId = cust.storeId
@@ -382,57 +247,28 @@ function goBackToStep(step: NewQuoteStep) {
   newQuoteStep.value = step
 }
 
-function createAndOpenQuote() {
-  if (!newQuoteForm.value.customerId) return
-
-  const nextNum = quotes.value.length + 1
-  const quoteNumber = `QT-2026-${String(nextNum + 147).padStart(4, '0')}`
-  const newId = uid()
-
-  const newQuote: Quote = {
-    id: newId,
-    quoteNumber,
-    opportunityId: newQuoteForm.value.opportunityId,
-    customerId: newQuoteForm.value.customerId,
-    customerName: newQuoteForm.value.customerName,
-    version: 1,
-    status: 'draft',
-    lineItems: [],
-    subtotal: 0,
-    discountPercent: 0,
-    discountAmount: 0,
-    subtotalAfterDiscount: 0,
-    vatPercent: 15,
-    vatAmount: 0,
-    total: 0,
-    totalCost: 0,
-    marginAmount: 0,
-    marginPercent: 0,
-    validUntil: newQuoteForm.value.validUntil || new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10),
-    currency: 'SAR',
-    notes: newQuoteForm.value.notes,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  }
-
-  quotes.value.unshift(newQuote)
-
-  if (newQuoteForm.value.opportunityId) {
-    const opp = oppStore.opportunities.find(o => o.id === newQuoteForm.value.opportunityId)
-    if (opp) {
-      opp.quoteIds = [...(opp.quoteIds || []), newId]
-    }
-  }
-
-  showNewQuoteModal.value = false
-  resetNewQuoteForm()
-  router.push(`/quotes/${newId}/builder`)
+const creating = ref(false)
+async function createAndOpenQuote() {
+  if (!newQuoteForm.value.customerId || creating.value) return
+  creating.value = true
+  try {
+    const quote = await quotesStore.addQuote({
+      customerId: newQuoteForm.value.customerId,
+      opportunityId: newQuoteForm.value.opportunityId || undefined,
+      priceBookId: newQuoteForm.value.priceBookId || undefined,
+      currency: 'SAR', notes: newQuoteForm.value.notes,
+      validUntil: newQuoteForm.value.validUntil || new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10),
+    })
+    showNewQuoteModal.value = false
+    await router.push(`/quotes/${quote.id}/builder`)
+  } catch (error) { window.alert(errorMessage(error)) }
+  finally { creating.value = false }
 }
 
 function openNewQuoteFromOpp(oppId: string) {
   const opp = oppStore.opportunities.find(o => o.id === oppId)
   if (!opp) return
-  const cust = mockCustomers.find(c => c.storeId === opp.customerId)
+  const cust = customers.value.find(c => c.storeId === opp.customerId)
   if (!cust) return
 
   showNewQuoteModal.value = true
@@ -444,16 +280,18 @@ function openBuilder(quoteId: string) {
   router.push(`/quotes/${quoteId}/builder`)
 }
 
-onMounted(() => {
-  quotesStore.fetchQuotes()
-  customerStore.fetchCustomers()
-  oppStore.fetchOpportunities()
-  pbStore.fetchPriceBooks()
-  const oppId = route.query.newFromOpp as string | undefined
-  if (oppId) {
-    openNewQuoteFromOpp(oppId)
-    router.replace({ path: '/quotes' })
-  }
+onMounted(async () => {
+  try {
+    const [quoteRows, customerRows, opportunityRows, bookRows] = await Promise.all([
+      allPages(quotesService.list), allPages(customersService.list), allPages(opportunitiesService.list), allPages(priceBooksService.list),
+    ])
+    quotes.value = quoteRows
+    customers.value = customerRows.map(c => ({ id: c.id, name: c.companyName, storeId: c.id }))
+    oppStore.opportunities = opportunityRows
+    pbStore.priceBooks = bookRows
+    const oppId = route.query.newFromOpp as string | undefined
+    if (oppId) { openNewQuoteFromOpp(oppId); await router.replace({ path: '/quotes' }) }
+  } catch (error) { window.alert(errorMessage(error)) }
 })
 
 // ── Document Locking ─────────────────────────────────────────
@@ -462,22 +300,9 @@ function isLocked(q: Quote): boolean {
 }
 
 // ── Duplicate Quote ──────────────────────────────────────────
-function duplicateQuote(q: Quote) {
-  const nextNum = quotes.value.length + 1
-  const quoteNumber = `QT-2026-${String(nextNum + 147).padStart(4, '0')}`
-  const clone: Quote = {
-    ...q,
-    id: uid(),
-    quoteNumber,
-    status: 'draft',
-    version: 1,
-    notes: `[Cloned from ${q.quoteNumber}] ${q.notes}`,
-    approvedBy: undefined,
-    approvedAt: undefined,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  }
-  quotes.value.unshift(clone)
+async function duplicateQuote(q: Quote) {
+  try { const res = await quotesService.duplicate(q.id); quotes.value.unshift(res.data) }
+  catch (error) { window.alert(errorMessage(error)) }
 }
 
 // ── Audit Trail ──────────────────────────────────────────────
@@ -493,14 +318,7 @@ interface AuditEntry {
 
 const viewModalTab = ref<'details' | 'audit'>('details')
 
-const mockAuditTrail: AuditEntry[] = [
-  { id: 'a1', action: 'Created', user: 'Khalid Al-Rashid', timestamp: '2026-02-01T08:00:00Z' },
-  { id: 'a2', action: 'Updated', field: 'Line Items', oldValue: '5 items', newValue: '7 items', user: 'Khalid Al-Rashid', timestamp: '2026-02-05T10:30:00Z' },
-  { id: 'a3', action: 'Updated', field: 'Discount', oldValue: '0%', newValue: '5%', user: 'Noura Al-Dosari', timestamp: '2026-02-10T14:15:00Z' },
-  { id: 'a4', action: 'Status Changed', field: 'Status', oldValue: 'Draft', newValue: 'Pending Approval', user: 'Khalid Al-Rashid', timestamp: '2026-02-15T09:00:00Z' },
-  { id: 'a5', action: 'Approved', user: 'Ahmed bin Saleh', timestamp: '2026-02-16T11:00:00Z' },
-  { id: 'a6', action: 'Sent', field: 'Delivered via', newValue: 'Email', user: 'Noura Al-Dosari', timestamp: '2026-02-18T13:00:00Z' },
-]
+const auditTrail = ref<AuditEntry[]>([])
 
 function formatTimestamp(ts: string): string {
   return new Date(ts).toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
@@ -834,7 +652,7 @@ function formatTimestamp(ts: string): string {
             <!-- Audit Trail Tab -->
             <div v-show="viewModalTab === 'audit'" class="audit-trail">
               <div class="audit-timeline">
-                <div v-for="entry in mockAuditTrail" :key="entry.id" class="audit-entry">
+                <div v-for="entry in auditTrail" :key="entry.id" class="audit-entry">
                   <div class="audit-dot" />
                   <div class="audit-content">
                     <div class="audit-header">

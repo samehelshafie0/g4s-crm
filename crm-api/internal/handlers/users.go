@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"g4s-crm/api/internal/middleware"
 	"g4s-crm/api/internal/models"
 	"g4s-crm/api/pkg/pagination"
 	"g4s-crm/api/pkg/response"
@@ -8,6 +9,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
+	"strings"
 )
 
 type UserHandler struct {
@@ -57,20 +60,24 @@ func (h *UserHandler) Create(c *gin.Context) {
 		FirstName  string            `json:"firstName" validate:"required"`
 		LastName   string            `json:"lastName" validate:"required"`
 		Email      string            `json:"email" validate:"required,email"`
-		Password   string            `json:"password" validate:"required,min=8"`
-		Role       models.UserRole   `json:"role" validate:"required"`
-		Department models.Department `json:"department"`
+		Password   string            `json:"password" validate:"required,min=8,max=72"`
+		Role       models.UserRole   `json:"role" validate:"required,oneof=admin sales_manager sales_executive pre_sales procurement_manager procurement_officer warehouse_manager project_manager viewer"`
+		Department models.Department `json:"department" validate:"required,oneof=sales pre-sales technical support marketing management operations"`
 		Phone      string            `json:"phone"`
 	}
-	if !v.BindAndValidate(c, &req) {
+	if !v.BindStrict(c, &req) {
 		return
 	}
 
-	hash, _ := bcrypt.GenerateFromPassword([]byte(req.Password), 12)
+	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), 12)
+	if err != nil {
+		apiError(c, err)
+		return
+	}
 	user := &models.User{
 		FirstName:    req.FirstName,
 		LastName:     req.LastName,
-		Email:        req.Email,
+		Email:        strings.ToLower(strings.TrimSpace(req.Email)),
 		PasswordHash: string(hash),
 		Role:         req.Role,
 		Department:   req.Department,
@@ -85,25 +92,96 @@ func (h *UserHandler) Create(c *gin.Context) {
 	response.Created(c, user)
 }
 
-func (h *UserHandler) Update(c *gin.Context) {
-	var user models.User
-	if err := h.db.First(&user, "id = ?", c.Param("id")).Error; err != nil {
-		response.NotFound(c, "User not found")
-		return
-	}
-	var req map[string]interface{}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		response.BadRequest(c, err.Error())
-		return
-	}
-	delete(req, "password_hash")
-	delete(req, "password")
-	h.db.Model(&user).Updates(req)
-	response.OK(c, user)
-}
+const roleRule = "required,oneof=admin sales_manager sales_executive pre_sales procurement_manager procurement_officer warehouse_manager project_manager viewer"
 
-func (h *UserHandler) Delete(c *gin.Context) {
-	h.db.Model(&models.User{}).Where("id = ?", c.Param("id")).Update("is_active", false)
+func (h *UserHandler) Update(c *gin.Context)  { h.saveUser(c, false, false) }
+func (h *UserHandler) Profile(c *gin.Context) { h.saveUser(c, true, false) }
+func (h *UserHandler) Delete(c *gin.Context)  { h.saveUser(c, false, true) }
+func (h *UserHandler) saveUser(c *gin.Context, profile, deactivate bool) {
+	id := c.Param("id")
+	if profile {
+		id = middleware.GetCurrentUserID(c).String()
+	}
+	var user models.User
+	err := h.db.Transaction(func(tx *gorm.DB) error {
+		// Serialize administrative changes so two requests cannot remove the last admin.
+		if err := tx.Exec("SELECT pg_advisory_xact_lock(71024001)").Error; err != nil {
+			return err
+		}
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&user, "id = ?", id).Error; err != nil {
+			return err
+		}
+		wasAdmin := user.Role == models.RoleAdmin && user.IsActive
+		if deactivate {
+			user.IsActive = false
+		} else {
+			fields := map[string]string{"firstName": "required,max=100", "lastName": "required,max=100", "email": "required,email,max=255", "phone": "max=100"}
+			if !profile {
+				fields["role"] = roleRule
+				fields["department"] = departmentRule
+				fields["teamId"] = ""
+				fields["isActive"] = ""
+			}
+			if !bindFields(c, &user, fields) {
+				return invalid("Invalid user")
+			}
+		}
+		user.Email = strings.ToLower(strings.TrimSpace(user.Email))
+		if err := optionalExists(tx, &models.Team{}, user.TeamID); err != nil {
+			return err
+		}
+		if wasAdmin && (!user.IsActive || user.Role != models.RoleAdmin) {
+			var count int64
+			if err := tx.Model(&models.User{}).Where("role = ? AND is_active = true AND id <> ?", models.RoleAdmin, user.ID).Count(&count).Error; err != nil {
+				return err
+			}
+			if count == 0 {
+				return invalid("At least one active administrator is required")
+			}
+		}
+		if err := tx.Omit(clause.Associations).Save(&user).Error; err != nil {
+			return err
+		}
+		return recordActivity(tx, c, "user", user.ID, "updated")
+	})
+	if err != nil {
+		if !c.Writer.Written() {
+			apiError(c, err)
+		}
+		return
+	}
+	if deactivate {
+		response.NoContent(c)
+	} else {
+		response.OK(c, user)
+	}
+}
+func (h *UserHandler) ResetPassword(c *gin.Context) {
+	var req struct {
+		Password string `json:"password" validate:"required,min=8,max=72"`
+	}
+	if !v.BindStrict(c, &req) {
+		return
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), 12)
+	if err != nil {
+		apiError(c, err)
+		return
+	}
+	err = h.db.Transaction(func(tx *gorm.DB) error {
+		var user models.User
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&user, "id = ?", c.Param("id")).Error; err != nil {
+			return err
+		}
+		if err := tx.Model(&user).Update("password_hash", string(hash)).Error; err != nil {
+			return err
+		}
+		return tx.Where("user_id = ?", user.ID).Delete(&models.RefreshToken{}).Error
+	})
+	if err != nil {
+		apiError(c, err)
+		return
+	}
 	response.NoContent(c)
 }
 

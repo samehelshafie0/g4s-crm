@@ -20,6 +20,10 @@ import { useRouter } from 'vue-router'
 import { useOpportunitiesStore } from '@/stores/opportunities'
 import type { Opportunity, OpportunityStage, ServiceType } from '@/types'
 
+import { customersService, usersService } from '@/services'
+import { allPages } from '@/services/collections'
+import { errorMessage } from '@/services/payload'
+
 const router = useRouter()
 const oppStore = useOpportunitiesStore()
 
@@ -63,26 +67,9 @@ const serviceTypeLabels: Record<ServiceType, string> = {
 
 const allServiceTypes = Object.keys(serviceTypeLabels) as ServiceType[]
 
-const mockCustomers = [
-  { id: 'c1', name: 'Saudi Aramco' },
-  { id: 'c2', name: 'King Faisal Specialist Hospital' },
-  { id: 'c3', name: 'NEOM' },
-  { id: 'c4', name: 'Saudi Telecom Company (STC)' },
-  { id: 'c5', name: 'Ministry of Interior' },
-  { id: 'c6', name: 'Al Rajhi Bank' },
-  { id: 'c7', name: 'Red Sea Global' },
-  { id: 'c8', name: 'Tatweer Education' },
-]
-
-const mockSalesTeam = [
-  { id: 'u1', name: 'Ahmed Al-Fahad' },
-  { id: 'u2', name: 'Yasser Al-Mubarak' },
-  { id: 'u3', name: 'Sultan Al-Qahtani' },
-]
-const mockPreSales = [
-  { id: 'p1', name: 'Tariq Al-Harbi' },
-  { id: 'p2', name: 'Rami Al-Otaibi' },
-]
+const customers = ref<{id: string; name: string}[]>([])
+const salesTeam = ref<{id: string; name: string}[]>([])
+const preSales = ref<{id: string; name: string}[]>([])
 
 const defaultForm = (): Omit<Opportunity, 'id' | 'createdAt' | 'updatedAt' | 'estimatedMargin' | 'quoteIds'> => ({
   title: '',
@@ -106,8 +93,15 @@ const form = ref(defaultForm())
 const opportunities = computed(() => oppStore.opportunities)
 const loading = computed(() => oppStore.loading)
 
-onMounted(() => {
-  oppStore.fetchOpportunities()
+onMounted(async () => {
+  try {
+    const [customerRows, userRows] = await Promise.all([allPages(customersService.list), usersService.lookup()])
+    customers.value = customerRows.map(c => ({ id: c.id, name: c.companyName }))
+    const names = userRows.data.map(u => ({ id: u.id, name: `${u.firstName} ${u.lastName}`, role: u.role }))
+    salesTeam.value = names.filter(u => ['admin', 'sales_manager', 'sales_executive'].includes(u.role))
+    preSales.value = names.filter(u => ['admin', 'pre_sales'].includes(u.role))
+    await oppStore.fetchOpportunities({ limit: 100 })
+  } catch (error) { window.alert(errorMessage(error)) }
 })
 
 function formatCurrency(val: number): string {
@@ -183,22 +177,22 @@ function openEditModal(o: Opportunity) {
     salesExecutiveName: o.salesExecutiveName,
     preSalesId: o.preSalesId,
     preSalesName: o.preSalesName,
-    expectedCloseDate: o.expectedCloseDate,
+    expectedCloseDate: o.expectedCloseDate?.slice(0, 10),
     notes: o.notes,
   }
   showAddModal.value = true
 }
 
 function onCustomerChange() {
-  const found = mockCustomers.find((c) => c.id === form.value.customerId)
+  const found = customers.value.find((c) => c.id === form.value.customerId)
   form.value.customerName = found?.name ?? ''
 }
 function onSalesChange() {
-  const found = mockSalesTeam.find((u) => u.id === form.value.salesExecutiveId)
+  const found = salesTeam.value.find((u) => u.id === form.value.salesExecutiveId)
   form.value.salesExecutiveName = found?.name ?? ''
 }
 function onPreSalesChange() {
-  const found = mockPreSales.find((u) => u.id === form.value.preSalesId)
+  const found = preSales.value.find((u) => u.id === form.value.preSalesId)
   form.value.preSalesName = found?.name ?? ''
 }
 
@@ -224,7 +218,7 @@ async function saveOpportunity() {
     }
     showAddModal.value = false
   } catch (e) {
-    console.error('Failed to save opportunity', e)
+    window.alert(errorMessage(e))
   }
 }
 
@@ -232,7 +226,7 @@ async function deleteOpportunity(id: string) {
   try {
     await oppStore.deleteOpportunity(id)
   } catch (e) {
-    console.error('Failed to delete opportunity', e)
+    window.alert(errorMessage(e))
   }
 }
 
@@ -433,7 +427,7 @@ function probClass(prob: number): string {
                 <label class="form-label">Customer</label>
                 <select v-model="form.customerId" class="form-select" @change="onCustomerChange">
                   <option value="">Select customer…</option>
-                  <option v-for="c in mockCustomers" :key="c.id" :value="c.id">{{ c.name }}</option>
+                  <option v-for="c in customers" :key="c.id" :value="c.id">{{ c.name }}</option>
                 </select>
               </div>
               <div class="form-group">
@@ -474,14 +468,14 @@ function probClass(prob: number): string {
                 <label class="form-label">Sales Executive</label>
                 <select v-model="form.salesExecutiveId" class="form-select" @change="onSalesChange">
                   <option value="">Select…</option>
-                  <option v-for="u in mockSalesTeam" :key="u.id" :value="u.id">{{ u.name }}</option>
+                  <option v-for="u in salesTeam" :key="u.id" :value="u.id">{{ u.name }}</option>
                 </select>
               </div>
               <div class="form-group">
                 <label class="form-label">Pre-Sales</label>
                 <select v-model="form.preSalesId" class="form-select" @change="onPreSalesChange">
                   <option value="">Select…</option>
-                  <option v-for="u in mockPreSales" :key="u.id" :value="u.id">{{ u.name }}</option>
+                  <option v-for="u in preSales" :key="u.id" :value="u.id">{{ u.name }}</option>
                 </select>
               </div>
             </div>

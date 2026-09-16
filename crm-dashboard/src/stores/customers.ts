@@ -1,3 +1,4 @@
+import { allPages } from '@/services/collections'
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { customersService } from '@/services'
@@ -16,11 +17,8 @@ export const useCustomersStore = defineStore('customers', () => {
     loading.value = true
     error.value = null
     try {
-      const res = await customersService.list(params)
-      if (res.success) {
-        customers.value = res.data
-        if (res.meta) meta.value = res.meta
-      }
+      customers.value = await allPages(customersService.list, params)
+      meta.value = {page: 1, limit: customers.value.length, total: customers.value.length, totalPages: 1}
     } catch (e: unknown) {
       error.value = 'Failed to load customers'
       console.error(e)

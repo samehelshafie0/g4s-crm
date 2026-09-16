@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { errorMessage } from '@/services/payload'
 import { ref, computed, onMounted } from 'vue'
 import {
   Plus,
@@ -119,7 +120,7 @@ async function saveCustomer() {
     }
     showAddModal.value = false
   } catch (e) {
-    console.error('Failed to save customer', e)
+    window.alert(errorMessage(e))
   }
 }
 
@@ -127,13 +128,14 @@ async function deleteCustomer(id: string) {
   try {
     await customerStore.deleteCustomer(id)
   } catch (e) {
-    console.error('Failed to delete customer', e)
+    window.alert(errorMessage(e))
   }
 }
 </script>
 
 <template>
   <div class="customers-view">
+    <p v-if="customerStore.error" role="alert">{{ customerStore.error }}</p>
     <!-- Page Header -->
     <div class="page-header">
       <div>

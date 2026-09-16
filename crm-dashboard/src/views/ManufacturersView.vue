@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { manufacturersService } from '@/services'
+import { allPages } from '@/services/collections'
+import { errorMessage } from '@/services/payload'
 import { onMounted, ref, computed } from 'vue'
 import {
   Plus,
@@ -15,7 +18,7 @@ import type { Manufacturer, ManufacturerCategory, VendorType } from '@/types'
 import { useManufacturersStore } from '@/stores/manufacturers'
 
 const mfrStore = useManufacturersStore()
-onMounted(() => mfrStore.fetchManufacturers())
+onMounted(async () => { try { manufacturers.value = await allPages(manufacturersService.list) } catch (e) { window.alert(errorMessage(e)) } })
 
 const countryFlags: Record<string, string> = {
   China: '🇨🇳',
@@ -36,200 +39,7 @@ const vendorTypeConfig: Record<VendorType, { label: string; badge: string }> = {
 
 const typeFilter = ref<VendorType | ''>('')
 
-const manufacturers = ref<Manufacturer[]>([
-  {
-    id: uid(),
-    name: 'Hikvision',
-    code: 'HIK',
-    country: 'China',
-    contactEmail: 'sales@hikvision.com',
-    contactPhone: '+86 571 8807 5998',
-    website: 'https://www.hikvision.com',
-    categories: [
-      { id: uid(), name: 'IP Cameras', description: 'Network surveillance cameras' },
-      { id: uid(), name: 'NVRs', description: 'Network video recorders' },
-      { id: uid(), name: 'Thermal Cameras', description: 'Thermal imaging devices' },
-    ],
-    vendorType: 'manufacturer',
-    isActive: true,
-    createdAt: '2024-01-15T08:00:00Z',
-    updatedAt: '2024-06-10T14:30:00Z',
-  },
-  {
-    id: uid(),
-    name: 'Dahua Technology',
-    code: 'DH',
-    country: 'China',
-    contactEmail: 'overseas@dahuatech.com',
-    contactPhone: '+86 571 8768 8883',
-    website: 'https://www.dahuasecurity.com',
-    categories: [
-      { id: uid(), name: 'IP Cameras', description: 'Network surveillance cameras' },
-      { id: uid(), name: 'NVRs', description: 'Network video recorders' },
-      { id: uid(), name: 'Access Control', description: 'Access control devices' },
-    ],
-    vendorType: 'manufacturer',
-    isActive: true,
-    createdAt: '2024-01-20T08:00:00Z',
-    updatedAt: '2024-05-22T10:15:00Z',
-  },
-  {
-    id: uid(),
-    name: 'Axis Communications',
-    code: 'AXIS',
-    country: 'Sweden',
-    contactEmail: 'info@axis.com',
-    contactPhone: '+46 46 272 18 00',
-    website: 'https://www.axis.com',
-    categories: [
-      { id: uid(), name: 'IP Cameras', description: 'Network surveillance cameras' },
-      { id: uid(), name: 'Encoders', description: 'Video encoders' },
-      { id: uid(), name: 'Intercoms', description: 'Network intercoms' },
-    ],
-    vendorType: 'manufacturer',
-    isActive: true,
-    createdAt: '2024-02-05T08:00:00Z',
-    updatedAt: '2024-07-01T09:00:00Z',
-  },
-  {
-    id: uid(),
-    name: 'Honeywell',
-    code: 'HON',
-    country: 'USA',
-    contactEmail: 'security@honeywell.com',
-    contactPhone: '+1 800 323 4576',
-    website: 'https://www.honeywell.com',
-    categories: [
-      { id: uid(), name: 'Fire Alarm Panels', description: 'Fire detection & alarm systems' },
-      { id: uid(), name: 'Intrusion Detection', description: 'Intrusion alarm systems' },
-      { id: uid(), name: 'Access Control', description: 'Access control systems' },
-    ],
-    vendorType: 'manufacturer',
-    isActive: true,
-    createdAt: '2024-02-10T08:00:00Z',
-    updatedAt: '2024-06-15T11:45:00Z',
-  },
-  {
-    id: uid(),
-    name: 'Bosch Security',
-    code: 'BOSCH',
-    country: 'Germany',
-    contactEmail: 'security.systems@bosch.com',
-    contactPhone: '+49 89 6290 0',
-    website: 'https://www.boschsecurity.com',
-    categories: [
-      { id: uid(), name: 'IP Cameras', description: 'Professional surveillance cameras' },
-      { id: uid(), name: 'Fire Alarm Panels', description: 'Fire detection systems' },
-      { id: uid(), name: 'Public Address', description: 'PA and voice evacuation' },
-    ],
-    vendorType: 'manufacturer',
-    isActive: true,
-    createdAt: '2024-03-01T08:00:00Z',
-    updatedAt: '2024-07-05T16:20:00Z',
-  },
-  {
-    id: uid(),
-    name: 'ZKTeco',
-    code: 'ZKT',
-    country: 'China',
-    contactEmail: 'sales@zkteco.com',
-    contactPhone: '+86 755 8901 0505',
-    website: 'https://www.zkteco.com',
-    categories: [
-      { id: uid(), name: 'Access Control Readers', description: 'Biometric & card readers' },
-      { id: uid(), name: 'Time Attendance', description: 'Attendance terminals' },
-      { id: uid(), name: 'Turnstiles', description: 'Security turnstiles & gates' },
-    ],
-    vendorType: 'manufacturer',
-    isActive: false,
-    createdAt: '2024-03-15T08:00:00Z',
-    updatedAt: '2024-04-20T13:10:00Z',
-  },
-  {
-    id: uid(),
-    name: 'Hikvision Saudi',
-    code: 'HIK-SA',
-    country: 'Saudi Arabia',
-    contactEmail: 'faisal@hikvision-sa.com',
-    contactPhone: '+966 11 456 7890',
-    website: 'https://www.hikvision-sa.com',
-    categories: [
-      { id: uid(), name: 'CCTV', description: 'Hikvision distribution in KSA' },
-      { id: uid(), name: 'Access Control', description: 'Access control distribution' },
-    ],
-    vendorType: 'supplier',
-    isActive: true,
-    createdAt: '2025-03-01T00:00:00Z',
-    updatedAt: '2026-02-18T10:00:00Z',
-  },
-  {
-    id: uid(),
-    name: 'Dahua MEA',
-    code: 'DH-MEA',
-    country: 'UAE',
-    contactEmail: 'omar.k@dahua-mea.com',
-    contactPhone: '+971 4 885 7700',
-    website: 'https://www.dahua-mea.com',
-    categories: [
-      { id: uid(), name: 'CCTV', description: 'Dahua regional distribution' },
-      { id: uid(), name: 'Access Control', description: 'AI terminals and readers' },
-    ],
-    vendorType: 'supplier',
-    isActive: true,
-    createdAt: '2025-03-15T00:00:00Z',
-    updatedAt: '2026-02-10T09:00:00Z',
-  },
-  {
-    id: uid(),
-    name: 'Honeywell MEA',
-    code: 'HON-MEA',
-    country: 'UAE',
-    contactEmail: 'salman.d@honeywell.com',
-    contactPhone: '+971 4 450 5800',
-    website: 'https://www.honeywell.com/mea',
-    categories: [
-      { id: uid(), name: 'Fire Alarm', description: 'Fire systems distribution' },
-      { id: uid(), name: 'Access Control', description: 'Access control distribution' },
-    ],
-    vendorType: 'supplier',
-    isActive: true,
-    createdAt: '2025-04-01T00:00:00Z',
-    updatedAt: '2026-01-20T08:00:00Z',
-  },
-  {
-    id: uid(),
-    name: 'Belden MEA',
-    code: 'BLD-MEA',
-    country: 'UAE',
-    contactEmail: 'a.mansour@belden-mea.com',
-    contactPhone: '+971 4 390 2200',
-    website: 'https://www.belden.com',
-    categories: [
-      { id: uid(), name: 'Cabling', description: 'Network and infrastructure cabling' },
-    ],
-    vendorType: 'both',
-    isActive: true,
-    createdAt: '2025-06-01T00:00:00Z',
-    updatedAt: '2026-02-20T11:00:00Z',
-  },
-  {
-    id: uid(),
-    name: 'Al-Salam Cables',
-    code: 'ASC',
-    country: 'Saudi Arabia',
-    contactEmail: 'sales@alsalam-cables.com',
-    contactPhone: '+966 11 478 9000',
-    website: 'https://www.alsalam-cables.com',
-    categories: [
-      { id: uid(), name: 'Cabling', description: 'Local cable supply' },
-    ],
-    vendorType: 'supplier',
-    isActive: true,
-    createdAt: '2025-07-01T00:00:00Z',
-    updatedAt: '2025-11-01T10:00:00Z',
-  },
-])
-
+const manufacturers = ref<Manufacturer[]>([])
 const searchQuery = ref('')
 const showModal = ref(false)
 const editingId = ref<string | null>(null)
@@ -296,30 +106,26 @@ function removeCategory(catId: string) {
   form.value.categories = form.value.categories.filter((c) => c.id !== catId)
 }
 
-function saveManufacturer() {
-  const now = new Date().toISOString()
-  if (editingId.value) {
-    const idx = manufacturers.value.findIndex((m) => m.id === editingId.value)
-    if (idx !== -1) {
-      manufacturers.value[idx] = {
-        ...manufacturers.value[idx],
-        ...form.value,
-        updatedAt: now,
-      } as Manufacturer
-    }
-  } else {
-    manufacturers.value.push({
-      id: uid(),
-      ...form.value,
-      createdAt: now,
-      updatedAt: now,
-    })
-  }
-  showModal.value = false
+const saving = ref(false)
+async function saveManufacturer() {
+ if (saving.value) return
+ saving.value = true
+ try {
+   const old = editingId.value ? (await manufacturersService.get(editingId.value)).data : null
+   const result = editingId.value ? await manufacturersService.update(editingId.value, form.value) : await manufacturersService.create(form.value)
+   editingId.value = result.data.id
+   for (const category of form.value.categories) {
+     if (old?.categories.some(c => c.id === category.id)) await manufacturersService.updateCategory(result.data.id, category.id, category)
+     else category.id = (await manufacturersService.addCategory(result.data.id, category)).data.id
+   }
+   for (const removed of old?.categories ?? []) if (!form.value.categories.some(c => c.id === removed.id)) await manufacturersService.deleteCategory(result.data.id, removed.id)
+   manufacturers.value = await allPages(manufacturersService.list)
+   showModal.value = false
+ } catch (e) { window.alert(errorMessage(e)) } finally { saving.value = false }
 }
-
-function deleteManufacturer(id: string) {
-  manufacturers.value = manufacturers.value.filter((m) => m.id !== id)
+async function deleteManufacturer(id: string) {
+ try { await manufacturersService.delete(id); manufacturers.value = manufacturers.value.filter(m => m.id !== id) }
+ catch (e) { window.alert(errorMessage(e)) }
 }
 </script>
 

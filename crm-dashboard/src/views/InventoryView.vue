@@ -22,19 +22,17 @@ import type {
   Quote,
 } from '@/types'
 
+import { inventoryService, manufacturersService, quotesService } from '@/services'
+import { allPages } from '@/services/collections'
+import { errorMessage } from '@/services/payload'
+
 const procStore = useProcurementStore()
 const quotesStore = useQuotesStore()
 const mfrStore = useManufacturersStore()
 const stockStore = useWarehouseStockStore()
 
-onMounted(() => {
-  stockStore.fetchStock()
-  procStore.fetchPurchaseOrders()
-  procStore.fetchSupplierQuotes()
-  procStore.fetchGoodsReceipts()
-  quotesStore.fetchQuotes()
-  mfrStore.fetchManufacturers()
-})
+async function reloadStock() { const [stock, holds, moves] = await Promise.all([allPages(inventoryService.listStock),inventoryService.listReservations(),allPages(inventoryService.listMovements)]);stockItems.value=stock;reservations.value=holds.data;movements.value=moves }
+onMounted(async () => {try {await reloadStock();await Promise.all([procStore.fetchPurchaseOrders(),procStore.fetchSupplierQuotes(),procStore.fetchGoodsReceipts()]);quotesStore.quotes=await allPages(quotesService.list);mfrStore.manufacturers=await allPages(manufacturersService.list)}catch(e){window.alert(errorMessage(e))}})
 
 function formatSAR(v: number): string {
   return v.toLocaleString('en-SA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -55,29 +53,7 @@ const warehouseBadge: Record<WarehouseLocation, string> = {
 }
 
 // ── Stock Data ───────────────────────────────────────────────
-const stockItems = ref<WarehouseStock[]>([
-  { id: 'ws1', productId: 'cp1', productSku: 'HIK-DS2CD2143', productName: 'DS-2CD2143G2-IU 4MP Dome', warehouseLocation: 'riyadh-main', onHandQty: 120, reservedQty: 35, availableQty: 85, unitCost: 365.63, totalValue: 43875.00, reorderLevel: 40, createdAt: '2024-03-01T08:00:00Z', updatedAt: '2026-02-20T08:00:00Z' },
-  { id: 'ws2', productId: 'cp1', productSku: 'HIK-DS2CD2143', productName: 'DS-2CD2143G2-IU 4MP Dome', warehouseLocation: 'jeddah-branch', onHandQty: 45, reservedQty: 10, availableQty: 35, unitCost: 365.63, totalValue: 16453.35, reorderLevel: 15, createdAt: '2024-03-01T08:00:00Z', updatedAt: '2026-02-18T08:00:00Z' },
-  { id: 'ws3', productId: 'cp2', productSku: 'HIK-DS2CD2T87', productName: 'DS-2CD2T87G2-L 8MP Bullet', warehouseLocation: 'riyadh-main', onHandQty: 60, reservedQty: 22, availableQty: 38, unitCost: 839.06, totalValue: 50343.75, reorderLevel: 20, createdAt: '2024-04-10T08:00:00Z', updatedAt: '2026-02-19T08:00:00Z' },
-  { id: 'ws4', productId: 'cp2', productSku: 'HIK-DS2CD2T87', productName: 'DS-2CD2T87G2-L 8MP Bullet', warehouseLocation: 'dammam-branch', onHandQty: 18, reservedQty: 5, availableQty: 13, unitCost: 839.06, totalValue: 15103.13, reorderLevel: 10, createdAt: '2024-04-10T08:00:00Z', updatedAt: '2026-02-15T08:00:00Z' },
-  { id: 'ws5', productId: 'cp3', productSku: 'HIK-DS7732NI', productName: 'DS-7732NI-K4 32CH NVR', warehouseLocation: 'riyadh-main', onHandQty: 15, reservedQty: 8, availableQty: 7, unitCost: 1827.00, totalValue: 27405.00, reorderLevel: 5, createdAt: '2024-05-01T08:00:00Z', updatedAt: '2026-02-21T08:00:00Z' },
-  { id: 'ws6', productId: 'cp4', productSku: 'DH-IPC-HFW5442', productName: 'IPC-HFW5442T-ASE 4MP AI Bullet', warehouseLocation: 'riyadh-main', onHandQty: 80, reservedQty: 30, availableQty: 50, unitCost: 473.44, totalValue: 37875.00, reorderLevel: 25, createdAt: '2024-06-01T08:00:00Z', updatedAt: '2026-02-20T08:00:00Z' },
-  { id: 'ws7', productId: 'cp4', productSku: 'DH-IPC-HFW5442', productName: 'IPC-HFW5442T-ASE 4MP AI Bullet', warehouseLocation: 'jeddah-branch', onHandQty: 25, reservedQty: 25, availableQty: 0, unitCost: 473.44, totalValue: 11836.00, reorderLevel: 10, createdAt: '2024-06-01T08:00:00Z', updatedAt: '2026-02-17T08:00:00Z' },
-  { id: 'ws8', productId: 'cp5', productSku: 'DH-NVR5432-EI', productName: 'NVR5432-EI 32CH AI NVR', warehouseLocation: 'dammam-branch', onHandQty: 8, reservedQty: 3, availableQty: 5, unitCost: 2958.00, totalValue: 23664.00, reorderLevel: 3, createdAt: '2024-07-01T08:00:00Z', updatedAt: '2026-02-16T08:00:00Z' },
-  { id: 'ws9', productId: 'cp7', productSku: 'AXIS-P3265LVE', productName: 'P3265-LVE 2MP Dome', warehouseLocation: 'riyadh-main', onHandQty: 40, reservedQty: 12, availableQty: 28, unitCost: 1729.40, totalValue: 69176.00, reorderLevel: 15, createdAt: '2024-08-01T08:00:00Z', updatedAt: '2026-02-19T08:00:00Z' },
-  { id: 'ws10', productId: 'cp8', productSku: 'AXIS-Q6135LE', productName: 'Q6135-LE PTZ Camera', warehouseLocation: 'riyadh-main', onHandQty: 4, reservedQty: 2, availableQty: 2, unitCost: 19118.00, totalValue: 76472.00, reorderLevel: 2, createdAt: '2024-09-01T08:00:00Z', updatedAt: '2026-02-20T08:00:00Z' },
-  { id: 'ws11', productId: 'cp9', productSku: 'HON-MNPDS2', productName: 'Morley-IAS Fire Panel 2L', warehouseLocation: 'jeddah-branch', onHandQty: 6, reservedQty: 1, availableQty: 5, unitCost: 5437.50, totalValue: 32625.00, reorderLevel: 3, createdAt: '2024-10-01T08:00:00Z', updatedAt: '2026-02-18T08:00:00Z' },
-  { id: 'ws12', productId: 'cp10', productSku: 'HON-MAXPRO', productName: 'MAXPRO Access 4-Door', warehouseLocation: 'riyadh-main', onHandQty: 22, reservedQty: 10, availableQty: 12, unitCost: 2100.00, totalValue: 46200.00, reorderLevel: 8, createdAt: '2024-10-15T08:00:00Z', updatedAt: '2026-02-21T08:00:00Z' },
-  { id: 'ws13', productId: 'cp13', productSku: 'ZKT-INBIO460', productName: 'InBio460 4-Door Controller', warehouseLocation: 'dammam-branch', onHandQty: 10, reservedQty: 10, availableQty: 0, unitCost: 1029.60, totalValue: 10296.00, reorderLevel: 5, createdAt: '2024-11-01T08:00:00Z', updatedAt: '2026-02-14T08:00:00Z' },
-  { id: 'ws14', productId: 'cp14', productSku: 'ZKT-SPEEDFACE', productName: 'SpeedFace-V5L Facial Terminal', warehouseLocation: 'riyadh-main', onHandQty: 30, reservedQty: 8, availableQty: 22, unitCost: 1808.80, totalValue: 54264.00, reorderLevel: 10, createdAt: '2024-11-15T08:00:00Z', updatedAt: '2026-02-20T08:00:00Z' },
-  { id: 'ws15', productId: 'cp12', productSku: 'BOSCH-FPA5000', productName: 'FPA-5000 Fire Panel', warehouseLocation: 'jeddah-branch', onHandQty: 3, reservedQty: 0, availableQty: 3, unitCost: 8413.20, totalValue: 25239.60, reorderLevel: 2, createdAt: '2024-12-01T08:00:00Z', updatedAt: '2026-02-15T08:00:00Z' },
-  { id: 'ws16', productId: 'cp15', productSku: 'CBL-CAT6A-305', productName: 'Cat6A UTP Cable 305m Box', warehouseLocation: 'riyadh-main', onHandQty: 65, reservedQty: 20, availableQty: 45, unitCost: 420.00, totalValue: 27300.00, reorderLevel: 30, createdAt: '2024-12-10T08:00:00Z', updatedAt: '2026-01-15T08:00:00Z' },
-  { id: 'ws17', productId: 'cp15', productSku: 'CBL-CAT6A-305', productName: 'Cat6A UTP Cable 305m Box', warehouseLocation: 'dammam-branch', onHandQty: 32, reservedQty: 10, availableQty: 22, unitCost: 420.00, totalValue: 13440.00, reorderLevel: 15, createdAt: '2024-12-10T08:00:00Z', updatedAt: '2025-12-12T08:00:00Z' },
-  { id: 'ws18', productId: 'cp6', productSku: 'DH-ASI7214Y', productName: 'ASI7214Y Face Recognition Terminal', warehouseLocation: 'riyadh-main', onHandQty: 14, reservedQty: 6, availableQty: 8, unitCost: 1440.00, totalValue: 20160.00, reorderLevel: 5, createdAt: '2025-01-10T08:00:00Z', updatedAt: '2026-01-20T08:00:00Z' },
-  { id: 'ws19', productId: 'cp11', productSku: 'BOSCH-NDV3503', productName: 'FLEXIDOME IP 3000i 5MP', warehouseLocation: 'riyadh-main', onHandQty: 18, reservedQty: 4, availableQty: 14, unitCost: 1252.00, totalValue: 22536.00, reorderLevel: 8, createdAt: '2025-02-01T08:00:00Z', updatedAt: '2026-01-18T08:00:00Z' },
-  { id: 'ws20', productId: 'cp16', productSku: 'CBL-FIBER-OM3', productName: 'OM3 Fiber Optic Cable 1000m', warehouseLocation: 'riyadh-main', onHandQty: 8, reservedQty: 2, availableQty: 6, unitCost: 1850.00, totalValue: 14800.00, reorderLevel: 4, createdAt: '2025-03-01T08:00:00Z', updatedAt: '2026-01-12T08:00:00Z' },
-])
-
+const stockItems = ref<WarehouseStock[]>([])
 // ── Manufacturer Mapping ─────────────────────────────────────
 const productManufacturer: Record<string, string> = {
   'HIK-DS2CD2143': 'Hikvision', 'HIK-DS2CD2T87': 'Hikvision', 'HIK-DS7732NI': 'Hikvision',
@@ -100,43 +76,9 @@ const productCategory: Record<string, string> = {
 }
 
 // ── Stock Reservations (Holds) ───────────────────────────────
-const reservations = ref<StockReservation[]>([
-  { id: 'res-1', productId: 'cp1', productSku: 'HIK-DS2CD2143', productName: 'DS-2CD2143G2-IU 4MP Dome', warehouseLocation: 'riyadh-main', qty: 20, source: 'quote', sourceRef: 'QT-2026-0148', sourceLabel: 'Saudi Aramco CCTV Phase 2', customerName: 'Saudi Aramco', reservedBy: 'Ahmed bin Saleh', reservedAt: '2026-02-10T09:00:00Z', status: 'active' },
-  { id: 'res-2', productId: 'cp1', productSku: 'HIK-DS2CD2143', productName: 'DS-2CD2143G2-IU 4MP Dome', warehouseLocation: 'riyadh-main', qty: 15, source: 'project', sourceRef: 'PRJ-2026-003', sourceLabel: 'KAIA Airport Terminal 5', customerName: 'GACA', reservedBy: 'Khalid Al-Rashid', reservedAt: '2026-02-15T10:00:00Z', status: 'active' },
-  { id: 'res-3', productId: 'cp1', productSku: 'HIK-DS2CD2143', productName: 'DS-2CD2143G2-IU 4MP Dome', warehouseLocation: 'jeddah-branch', qty: 10, source: 'quote', sourceRef: 'QT-2026-0152', sourceLabel: 'Madinah Hotel Security', customerName: 'Al-Madinah Hotels', reservedBy: 'Ahmed bin Saleh', reservedAt: '2026-02-18T14:00:00Z', status: 'active' },
-  { id: 'res-4', productId: 'cp2', productSku: 'HIK-DS2CD2T87', productName: 'DS-2CD2T87G2-L 8MP Bullet', warehouseLocation: 'riyadh-main', qty: 22, source: 'quote', sourceRef: 'QT-2026-0148', sourceLabel: 'Saudi Aramco CCTV Phase 2', customerName: 'Saudi Aramco', reservedBy: 'Ahmed bin Saleh', reservedAt: '2026-02-10T09:00:00Z', status: 'active' },
-  { id: 'res-5', productId: 'cp3', productSku: 'HIK-DS7732NI', productName: 'DS-7732NI-K4 32CH NVR', warehouseLocation: 'riyadh-main', qty: 4, source: 'quote', sourceRef: 'QT-2026-0148', sourceLabel: 'Saudi Aramco CCTV Phase 2', customerName: 'Saudi Aramco', reservedBy: 'Ahmed bin Saleh', reservedAt: '2026-02-10T09:00:00Z', status: 'active' },
-  { id: 'res-6', productId: 'cp3', productSku: 'HIK-DS7732NI', productName: 'DS-7732NI-K4 32CH NVR', warehouseLocation: 'riyadh-main', qty: 4, source: 'project', sourceRef: 'PRJ-2026-003', sourceLabel: 'KAIA Airport Terminal 5', customerName: 'GACA', reservedBy: 'Khalid Al-Rashid', reservedAt: '2026-02-15T10:00:00Z', status: 'active' },
-  { id: 'res-7', productId: 'cp4', productSku: 'DH-IPC-HFW5442', productName: 'IPC-HFW5442T-ASE 4MP AI Bullet', warehouseLocation: 'riyadh-main', qty: 30, source: 'project', sourceRef: 'PRJ-2026-005', sourceLabel: 'MOI Headquarters Upgrade', customerName: 'Ministry of Interior', reservedBy: 'Mohammed Al-Zahrani', reservedAt: '2026-02-12T08:00:00Z', status: 'active' },
-  { id: 'res-8', productId: 'cp4', productSku: 'DH-IPC-HFW5442', productName: 'IPC-HFW5442T-ASE 4MP AI Bullet', warehouseLocation: 'jeddah-branch', qty: 25, source: 'quote', sourceRef: 'QT-2026-0155', sourceLabel: 'KAEC Smart City Phase 1', customerName: 'KAEC', reservedBy: 'Ahmed bin Saleh', reservedAt: '2026-02-17T11:00:00Z', status: 'active' },
-  { id: 'res-9', productId: 'cp10', productSku: 'HON-MAXPRO', productName: 'MAXPRO Access 4-Door', warehouseLocation: 'riyadh-main', qty: 10, source: 'quote', sourceRef: 'QT-2026-0149', sourceLabel: 'SABIC Office Access Control', customerName: 'SABIC', reservedBy: 'Khalid Al-Rashid', reservedAt: '2026-02-14T13:00:00Z', status: 'active' },
-  { id: 'res-10', productId: 'cp13', productSku: 'ZKT-INBIO460', productName: 'InBio460 4-Door Controller', warehouseLocation: 'dammam-branch', qty: 10, source: 'project', sourceRef: 'PRJ-2026-001', sourceLabel: 'Jubail Industrial Access', customerName: 'Royal Commission Jubail', reservedBy: 'Abdullah Al-Qahtani', reservedAt: '2026-01-20T08:00:00Z', status: 'active' },
-  { id: 'res-11', productId: 'cp14', productSku: 'ZKT-SPEEDFACE', productName: 'SpeedFace-V5L Facial Terminal', warehouseLocation: 'riyadh-main', qty: 8, source: 'quote', sourceRef: 'QT-2026-0150', sourceLabel: 'NEOM Staff Access Phase 1', customerName: 'NEOM', reservedBy: 'Ahmed bin Saleh', reservedAt: '2026-02-19T09:00:00Z', status: 'active' },
-  { id: 'res-12', productId: 'cp7', productSku: 'AXIS-P3265LVE', productName: 'P3265-LVE 2MP Dome', warehouseLocation: 'riyadh-main', qty: 12, source: 'project', sourceRef: 'PRJ-2026-004', sourceLabel: 'Riyadh Metro Station CCTV', customerName: 'Riyadh Metro', reservedBy: 'Mohammed Al-Zahrani', reservedAt: '2026-02-08T10:00:00Z', status: 'active' },
-  { id: 'res-13', productId: 'cp8', productSku: 'AXIS-Q6135LE', productName: 'Q6135-LE PTZ Camera', warehouseLocation: 'riyadh-main', qty: 2, source: 'quote', sourceRef: 'QT-2026-0145', sourceLabel: 'Ministry Perimeter Security', customerName: 'Ministry of Interior', reservedBy: 'Khalid Al-Rashid', reservedAt: '2026-02-16T14:00:00Z', status: 'active' },
-  // Released reservations
-  { id: 'res-14', productId: 'cp15', productSku: 'CBL-CAT6A-305', productName: 'Cat6A UTP Cable 305m Box', warehouseLocation: 'dammam-branch', qty: 15, source: 'quote', sourceRef: 'QT-2025-0098', sourceLabel: 'SABIC Cabling Upgrade', customerName: 'SABIC', reservedBy: 'Fahad Al-Mutairi', reservedAt: '2025-11-10T08:00:00Z', releaseDate: '2025-12-15T10:00:00Z', releasedBy: 'Fahad Al-Mutairi', releaseReason: 'Quote expired — customer did not proceed', status: 'released' },
-  { id: 'res-15', productId: 'cp9', productSku: 'HON-MNPDS2', productName: 'Morley-IAS Fire Panel 2L', warehouseLocation: 'jeddah-branch', qty: 1, source: 'manual', sourceRef: 'DEMO-001', sourceLabel: 'Demo unit for Jeddah showroom', customerName: 'Internal', reservedBy: 'Khalid Al-Rashid', reservedAt: '2025-12-01T08:00:00Z', releaseDate: '2026-01-15T12:00:00Z', releasedBy: 'Khalid Al-Rashid', releaseReason: 'Demo completed, returned to stock', status: 'released' },
-  // Fulfilled
-  { id: 'res-16', productId: 'cp15', productSku: 'CBL-CAT6A-305', productName: 'Cat6A UTP Cable 305m Box', warehouseLocation: 'riyadh-main', qty: 20, source: 'project', sourceRef: 'PRJ-2025-012', sourceLabel: 'SABIC HQ Network Build', customerName: 'SABIC', reservedBy: 'Ahmed bin Saleh', reservedAt: '2025-10-01T08:00:00Z', releaseDate: '2025-11-20T10:00:00Z', releasedBy: 'Ahmed bin Saleh', releaseReason: 'Dispatched to project site', status: 'fulfilled' },
-])
-
+const reservations = ref<StockReservation[]>([])
 // ── Inventory Movements ──────────────────────────────────────
-const movements = ref<InventoryMovement[]>([
-  { id: 'mv-1', productId: 'cp1', productSku: 'HIK-DS2CD2143', productName: 'DS-2CD2143G2-IU 4MP Dome', movementType: 'receipt', qty: 50, toWarehouse: 'riyadh-main', reference: 'GR-2026-0003', reason: 'Goods receipt from PO-2025-0092', performedBy: 'Mohammed Al-Zahrani', performedAt: '2025-10-05T09:30:00Z' },
-  { id: 'mv-2', productId: 'cp1', productSku: 'HIK-DS2CD2143', productName: 'DS-2CD2143G2-IU 4MP Dome', movementType: 'transfer', qty: 20, fromWarehouse: 'riyadh-main', toWarehouse: 'jeddah-branch', reference: 'TRF-2025-015', reason: 'Replenish Jeddah stock for upcoming projects', performedBy: 'Abdullah Al-Qahtani', performedAt: '2025-11-12T10:00:00Z' },
-  { id: 'mv-3', productId: 'cp1', productSku: 'HIK-DS2CD2143', productName: 'DS-2CD2143G2-IU 4MP Dome', movementType: 'allocation', qty: 20, fromWarehouse: 'riyadh-main', reference: 'QT-2026-0148', reason: 'Reserved for Saudi Aramco CCTV Phase 2', performedBy: 'Ahmed bin Saleh', performedAt: '2026-02-10T09:00:00Z' },
-  { id: 'mv-4', productId: 'cp2', productSku: 'HIK-DS2CD2T87', productName: 'DS-2CD2T87G2-L 8MP Bullet', movementType: 'receipt', qty: 30, toWarehouse: 'riyadh-main', reference: 'GR-2026-0003', reason: 'Goods receipt from PO-2025-0092', performedBy: 'Mohammed Al-Zahrani', performedAt: '2025-10-05T09:30:00Z' },
-  { id: 'mv-5', productId: 'cp2', productSku: 'HIK-DS2CD2T87', productName: 'DS-2CD2T87G2-L 8MP Bullet', movementType: 'transfer', qty: 10, fromWarehouse: 'riyadh-main', toWarehouse: 'dammam-branch', reference: 'TRF-2026-002', reason: 'Dammam project needs', performedBy: 'Fahad Al-Mutairi', performedAt: '2026-01-05T11:00:00Z' },
-  { id: 'mv-6', productId: 'cp4', productSku: 'DH-IPC-HFW5442', productName: 'IPC-HFW5442T-ASE 4MP AI Bullet', movementType: 'allocation', qty: 30, fromWarehouse: 'riyadh-main', reference: 'PRJ-2026-005', reason: 'Reserved for MOI Headquarters Upgrade', performedBy: 'Mohammed Al-Zahrani', performedAt: '2026-02-12T08:00:00Z' },
-  { id: 'mv-7', productId: 'cp10', productSku: 'HON-MAXPRO', productName: 'MAXPRO Access 4-Door', movementType: 'receipt', qty: 20, toWarehouse: 'riyadh-main', reference: 'GR-2026-0005', reason: 'Goods receipt from PO-2026-0011', performedBy: 'Mohammed Al-Zahrani', performedAt: '2026-02-20T14:00:00Z' },
-  { id: 'mv-8', productId: 'cp13', productSku: 'ZKT-INBIO460', productName: 'InBio460 4-Door Controller', movementType: 'receipt', qty: 15, toWarehouse: 'dammam-branch', reference: 'GR-2026-0004', reason: 'Goods receipt from PO-2026-0010', performedBy: 'Abdullah Al-Qahtani', performedAt: '2026-02-14T10:00:00Z' },
-  { id: 'mv-9', productId: 'cp15', productSku: 'CBL-CAT6A-305', productName: 'Cat6A UTP Cable 305m Box', movementType: 'receipt', qty: 50, toWarehouse: 'dammam-branch', reference: 'GR-2026-0002', reason: 'Goods receipt from PO-2025-0088', performedBy: 'Fahad Al-Mutairi', performedAt: '2025-12-12T11:00:00Z' },
-  { id: 'mv-10', productId: 'cp15', productSku: 'CBL-CAT6A-305', productName: 'Cat6A UTP Cable 305m Box', movementType: 'release', qty: 15, toWarehouse: 'dammam-branch', reference: 'QT-2025-0098', reason: 'Hold released — quote expired', performedBy: 'Fahad Al-Mutairi', performedAt: '2025-12-15T10:00:00Z' },
-  { id: 'mv-11', productId: 'cp15', productSku: 'CBL-CAT6A-305', productName: 'Cat6A UTP Cable 305m Box', movementType: 'adjustment', qty: -3, fromWarehouse: 'riyadh-main', reason: 'Stock count correction — 3 boxes damaged in storage', performedBy: 'Abdullah Al-Qahtani', performedAt: '2026-01-10T08:30:00Z', notes: 'Water damage from roof leak, Zone A' },
-  { id: 'mv-12', productId: 'cp8', productSku: 'AXIS-Q6135LE', productName: 'Q6135-LE PTZ Camera', movementType: 'write-off', qty: -1, fromWarehouse: 'riyadh-main', reason: 'Unit defective on arrival — returned to supplier pending credit', performedBy: 'Mohammed Al-Zahrani', performedAt: '2025-09-15T14:00:00Z', notes: 'RMA #AX-RMA-2025-018' },
-])
-
+const movements = ref<InventoryMovement[]>([])
 function uid(): string { return Math.random().toString(36).slice(2, 11) }
 
 // ── Aggregated Product View ──────────────────────────────────
@@ -475,34 +417,9 @@ function openReleaseHold(res: StockReservation) {
   showReleaseModal.value = true
 }
 
-function confirmRelease() {
-  if (!releasingReservation.value) return
-  const res = releasingReservation.value
-  const idx = reservations.value.findIndex(r => r.id === res.id)
-  if (idx !== -1) {
-    reservations.value[idx] = {
-      ...res,
-      status: 'released',
-      releaseDate: new Date().toISOString(),
-      releasedBy: 'Current User',
-      releaseReason: releaseReason.value || 'Released manually',
-    }
-  }
-  movements.value.unshift({
-    id: uid(), productId: res.productId, productSku: res.productSku,
-    productName: res.productName, movementType: 'release', qty: res.qty,
-    toWarehouse: res.warehouseLocation, reference: res.sourceRef,
-    reason: `Hold released: ${releaseReason.value || 'Manual release'}`,
-    performedBy: 'Current User', performedAt: new Date().toISOString(),
-  })
-  // Return qty to available
-  const ws = stockItems.value.find(s => s.productId === res.productId && s.warehouseLocation === res.warehouseLocation)
-  if (ws) {
-    ws.reservedQty -= res.qty
-    ws.availableQty += res.qty
-  }
-  showReleaseModal.value = false
-  releasingReservation.value = null
+async function confirmRelease() {
+ if (!releasingReservation.value) return
+ try { await inventoryService.release(releasingReservation.value.id,releaseReason.value || 'Released manually');await reloadStock();showReleaseModal.value=false;releasingReservation.value=null }catch(e){window.alert(errorMessage(e))}
 }
 
 // ── Bulk Create Hold ─────────────────────────────────────────
@@ -648,42 +565,14 @@ const holdSelectedItems = computed(() => holdItems.value.filter(i => i.selected 
 const holdTotalUnits = computed(() => holdSelectedItems.value.reduce((s, i) => s + i.holdQty, 0))
 const holdHasErrors = computed(() => holdSelectedItems.value.some(i => i.holdQty > i.availableQty && !i.poCreated))
 
-function confirmBulkHold() {
-  if (!holdMeta.value.sourceRef || !holdMeta.value.customerName || holdSelectedItems.value.length === 0 || holdHasErrors.value) return
-  const now = new Date().toISOString()
-  for (const item of holdSelectedItems.value) {
-    const poRef = item.poCreated
-    const shortfall = getShortfall(item)
-    const fromStockQty = Math.min(item.holdQty, item.availableQty)
-
-    reservations.value.unshift({
-      id: uid(), productId: item.productId, productSku: item.productSku,
-      productName: item.productName,
-      warehouseLocation: item.warehouseLocation,
-      qty: item.holdQty,
-      source: holdMeta.value.source,
-      sourceRef: holdMeta.value.sourceRef,
-      sourceLabel: holdMeta.value.sourceLabel || holdMeta.value.sourceRef,
-      customerName: holdMeta.value.customerName,
-      reservedBy: 'Current User', reservedAt: now,
-      status: 'active',
-      notes: poRef ? `${fromStockQty} from stock, ${shortfall} on ${poRef}` : (holdMeta.value.notes || undefined),
-    })
-
-    if (fromStockQty > 0) {
-      movements.value.unshift({
-        id: uid(), productId: item.productId, productSku: item.productSku,
-        productName: item.productName, movementType: 'allocation',
-        qty: fromStockQty, fromWarehouse: item.warehouseLocation,
-        reference: holdMeta.value.sourceRef,
-        reason: `Hold created for ${holdMeta.value.customerName}: ${holdMeta.value.sourceLabel || holdMeta.value.sourceRef}`,
-        performedBy: 'Current User', performedAt: now,
-      })
-      const ws = stockItems.value.find(s => s.productId === item.productId && s.warehouseLocation === item.warehouseLocation)
-      if (ws) { ws.reservedQty += fromStockQty; ws.availableQty -= fromStockQty }
-    }
-  }
-  showCreateHoldModal.value = false
+const stockSaving = ref(false)
+async function confirmBulkHold() {
+ if (stockSaving.value || holdSelectedItems.value.length===0) return
+ stockSaving.value=true
+ try {for (const item of holdSelectedItems.value) {
+ if (item.holdQty>item.availableQty) throw new Error('Receive purchased goods before reserving their stock.')
+ await inventoryService.createReservation({productId:item.productId,warehouseLocation:item.warehouseLocation,qty:item.holdQty,source:holdMeta.value.source,sourceRef:holdMeta.value.sourceRef,sourceLabel:holdMeta.value.sourceLabel,customerName:holdMeta.value.customerName,notes:holdMeta.value.notes});item.selected=false
+ };await reloadStock();showCreateHoldModal.value=false}catch(e){window.alert(errorMessage(e));await reloadStock()}finally{stockSaving.value=false}
 }
 
 function delayHideHoldDropdown() { window.setTimeout(() => { showHoldItemDropdown.value = false }, 200) }
@@ -746,10 +635,10 @@ const quickPOSubtotal = computed(() => quickPOItems.value.reduce((s, i) => s + i
 
 function removeQuickPOItem(idx: number) { quickPOItems.value.splice(idx, 1) }
 
-function confirmQuickPO() {
+async function confirmQuickPO() {
   if (!quickPOMeta.value.supplierName || quickPOItems.value.length === 0) return
   const now = new Date().toISOString()
-  const poNumber = procStore.generatePoNumber()
+  const poNumber = ''
   const poItems: PurchaseOrderItem[] = quickPOItems.value.map(i => ({
     id: uid(), productId: i.productId, productSku: i.productSku,
     productName: i.productName, manufacturerName: i.manufacturerName,
@@ -773,16 +662,18 @@ function confirmQuickPO() {
     notes: quickPOMeta.value.notes,
     createdAt: now, updatedAt: now,
   }
-  procStore.addPurchaseOrder(po)
+  try {
+  const savedPO = await procStore.addPurchaseOrder(po)
 
   for (const item of quickPOItems.value) {
     const holdItem = holdItems.value.find(hi => hi.productSku === item.productSku && hi.holdQty > hi.availableQty && !hi.poCreated)
     if (holdItem) {
-      holdItem.poCreated = poNumber
+      holdItem.poCreated = savedPO.poNumber
     }
   }
 
   showQuickPOModal.value = false
+  }catch(e){window.alert(errorMessage(e))}
 }
 
 // ── Bulk Movement ────────────────────────────────────────────
@@ -856,48 +747,14 @@ const moveSelectedItems = computed(() => moveItems.value.filter(i => i.selected 
 const moveTotalUnits = computed(() => moveSelectedItems.value.reduce((s, i) => s + i.moveQty, 0))
 const moveHasErrors = computed(() => moveSelectedItems.value.some(i => i.moveQty > i.currentAvailable))
 
-function confirmBulkMove() {
-  if (moveSelectedItems.value.length === 0 || moveHasErrors.value) return
-  const now = new Date().toISOString()
-  const refId = `MV-${Date.now().toString(36).toUpperCase()}`
-  for (const item of moveSelectedItems.value) {
-    const mt = moveMeta.value.movementType
-    movements.value.unshift({
-      id: uid(), productId: item.productId, productSku: item.productSku,
-      productName: item.productName,
-      movementType: mt,
-      qty: mt === 'adjustment' || mt === 'write-off' ? -item.moveQty : item.moveQty,
-      fromWarehouse: moveMeta.value.fromWarehouse,
-      toWarehouse: mt === 'transfer' ? moveMeta.value.toWarehouse : undefined,
-      reference: refId,
-      reason: moveMeta.value.reason || movementTypeLabel(mt),
-      performedBy: 'Current User', performedAt: now,
-      notes: moveMeta.value.notes || undefined,
-    })
-    const fromWs = stockItems.value.find(s => s.productId === item.productId && s.warehouseLocation === moveMeta.value.fromWarehouse)
-    if (fromWs) {
-      fromWs.onHandQty -= item.moveQty
-      fromWs.availableQty -= item.moveQty
-      fromWs.totalValue = fromWs.onHandQty * fromWs.unitCost
-    }
-    if (mt === 'transfer') {
-      let toWs = stockItems.value.find(s => s.productId === item.productId && s.warehouseLocation === moveMeta.value.toWarehouse)
-      if (!toWs) {
-        const newWs: WarehouseStock = {
-          id: uid(), productId: item.productId, productSku: item.productSku, productName: item.productName,
-          warehouseLocation: moveMeta.value.toWarehouse, onHandQty: 0, reservedQty: 0, availableQty: 0,
-          unitCost: fromWs?.unitCost ?? 0, totalValue: 0,
-          createdAt: now, updatedAt: now,
-        }
-        stockItems.value.push(newWs)
-        toWs = newWs
-      }
-      toWs.onHandQty += item.moveQty
-      toWs.availableQty += item.moveQty
-      toWs.totalValue = toWs.onHandQty * toWs.unitCost
-    }
-  }
-  showBulkMoveModal.value = false
+async function confirmBulkMove() {
+ if (stockSaving.value || moveSelectedItems.value.length===0 || moveHasErrors.value) return
+ stockSaving.value=true
+ try {for(const item of moveSelectedItems.value) {
+ if(moveMeta.value.movementType==='transfer') await inventoryService.transfer({productId:item.productId,qty:item.moveQty,fromWarehouse:moveMeta.value.fromWarehouse,toWarehouse:moveMeta.value.toWarehouse,reason:moveMeta.value.reason || 'Warehouse transfer',notes:moveMeta.value.notes})
+ else await inventoryService.adjust({productId:item.productId,warehouseLocation:moveMeta.value.fromWarehouse,qty:-item.moveQty,reason:moveMeta.value.reason || movementTypeLabel(moveMeta.value.movementType)})
+ item.selected=false
+ };await reloadStock();showBulkMoveModal.value=false}catch(e){window.alert(errorMessage(e));await reloadStock()}finally{stockSaving.value=false}
 }
 
 function delayHideMoveDropdown() { window.setTimeout(() => { showMoveItemDropdown.value = false }, 200) }

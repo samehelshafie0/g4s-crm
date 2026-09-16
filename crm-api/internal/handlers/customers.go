@@ -7,8 +7,8 @@ import (
 	"g4s-crm/api/pkg/response"
 	v "g4s-crm/api/pkg/validator"
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 	"strings"
 )
 
@@ -217,120 +217,148 @@ func (h *CustomerHandler) Delete(c *gin.Context) {
 	response.NoContent(c)
 }
 
-// AddSite adds a site to a customer
-func (h *CustomerHandler) AddSite(c *gin.Context) {
-	customerID, err := uuid.Parse(c.Param("id"))
-	if err != nil {
-		response.BadRequest(c, "Invalid customer ID")
-		return
-	}
-
-	var req struct {
-		Name    string `json:"name" validate:"required"`
-		Address string `json:"address"`
-		City    string `json:"city"`
-		Region  string `json:"region"`
-	}
-	if !v.BindAndValidate(c, &req) {
-		return
-	}
-
-	site := &models.CustomerSite{
-		CustomerID: customerID,
-		Name:       req.Name,
-		Address:    req.Address,
-		City:       req.City,
-		Region:     req.Region,
-	}
-
-	if err := h.db.Create(site).Error; err != nil {
-		response.InternalError(c, "Failed to add site")
-		return
-	}
-	response.Created(c, site)
+func (h *CustomerHandler) parent(tx *gorm.DB, c *gin.Context) (models.Customer, error) {
+	var customer models.Customer
+	err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&customer, "id = ?", c.Param("id")).Error
+	return customer, err
 }
-
-// UpdateSite updates a specific site
-func (h *CustomerHandler) UpdateSite(c *gin.Context) {
-	siteID := c.Param("siteId")
+func (h *CustomerHandler) ListSites(c *gin.Context) {
+	var customer models.Customer
+	if err := h.db.Preload("Sites.Contacts").First(&customer, "id = ?", c.Param("id")).Error; err != nil {
+		apiError(c, err)
+		return
+	}
+	if customer.Sites == nil {
+		customer.Sites = []models.CustomerSite{}
+	}
+	response.OK(c, customer.Sites)
+}
+func (h *CustomerHandler) ListContacts(c *gin.Context) {
+	var customer models.Customer
+	if err := h.db.Preload("Contacts").First(&customer, "id = ?", c.Param("id")).Error; err != nil {
+		apiError(c, err)
+		return
+	}
+	if customer.Contacts == nil {
+		customer.Contacts = []models.CustomerContact{}
+	}
+	response.OK(c, customer.Contacts)
+}
+func (h *CustomerHandler) AddSite(c *gin.Context)    { h.saveSite(c, true) }
+func (h *CustomerHandler) UpdateSite(c *gin.Context) { h.saveSite(c, false) }
+func (h *CustomerHandler) saveSite(c *gin.Context, create bool) {
 	var site models.CustomerSite
-	if err := h.db.First(&site, "id = ? AND customer_id = ?", siteID, c.Param("id")).Error; err != nil {
-		response.NotFound(c, "Site not found")
+	if !create {
+		if err := h.db.First(&site, "id = ? AND customer_id = ?", c.Param("siteId"), c.Param("id")).Error; err != nil {
+			apiError(c, err)
+			return
+		}
+	}
+	if !bindFields(c, &site, map[string]string{"name": "required,max=255", "address": "max=2000", "city": "max=100", "region": "max=100"}) {
 		return
 	}
-	var req map[string]interface{}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		response.BadRequest(c, err.Error())
+	err := h.db.Transaction(func(tx *gorm.DB) error {
+		customer, err := h.parent(tx, c)
+		if err != nil {
+			return err
+		}
+		site.CustomerID = customer.ID
+		return tx.Omit(clause.Associations).Save(&site).Error
+	})
+	if err != nil {
+		apiError(c, err)
 		return
 	}
-	h.db.Model(&site).Updates(req)
-	response.OK(c, site)
+	if create {
+		response.Created(c, site)
+	} else {
+		response.OK(c, site)
+	}
 }
-
-// DeleteSite removes a site
 func (h *CustomerHandler) DeleteSite(c *gin.Context) {
-	siteID := c.Param("siteId")
-	h.db.Delete(&models.CustomerSite{}, "id = ? AND customer_id = ?", siteID, c.Param("id"))
+	err := h.db.Transaction(func(tx *gorm.DB) error {
+		customer, err := h.parent(tx, c)
+		if err != nil {
+			return err
+		}
+		var site models.CustomerSite
+		if err := tx.First(&site, "id = ? AND customer_id = ?", c.Param("siteId"), customer.ID).Error; err != nil {
+			return err
+		}
+		if err := tx.Model(&models.CustomerContact{}).Where("site_id = ?", site.ID).Update("site_id", nil).Error; err != nil {
+			return err
+		}
+		return tx.Delete(&site).Error
+	})
+	if err != nil {
+		apiError(c, err)
+		return
+	}
 	response.NoContent(c)
 }
-
-// AddContact adds a contact to a customer
-func (h *CustomerHandler) AddContact(c *gin.Context) {
-	customerID, err := uuid.Parse(c.Param("id"))
-	if err != nil {
-		response.BadRequest(c, "Invalid customer ID")
-		return
-	}
-
-	var req struct {
-		Name      string     `json:"name" validate:"required"`
-		Email     string     `json:"email"`
-		Phone     string     `json:"phone"`
-		Position  string     `json:"position"`
-		IsPrimary bool       `json:"isPrimary"`
-		SiteID    *uuid.UUID `json:"siteId"`
-	}
-	if !v.BindAndValidate(c, &req) {
-		return
-	}
-
-	contact := &models.CustomerContact{
-		CustomerID: customerID,
-		SiteID:     req.SiteID,
-		Name:       req.Name,
-		Email:      req.Email,
-		Phone:      req.Phone,
-		Position:   req.Position,
-		IsPrimary:  req.IsPrimary,
-	}
-
-	if err := h.db.Create(contact).Error; err != nil {
-		response.InternalError(c, "Failed to add contact")
-		return
-	}
-	response.Created(c, contact)
-}
-
-// UpdateContact updates a contact
-func (h *CustomerHandler) UpdateContact(c *gin.Context) {
-	contactID := c.Param("contactId")
+func (h *CustomerHandler) AddContact(c *gin.Context)    { h.saveContact(c, true) }
+func (h *CustomerHandler) UpdateContact(c *gin.Context) { h.saveContact(c, false) }
+func (h *CustomerHandler) saveContact(c *gin.Context, create bool) {
 	var contact models.CustomerContact
-	if err := h.db.First(&contact, "id = ? AND customer_id = ?", contactID, c.Param("id")).Error; err != nil {
+	if !create {
+		if err := h.db.First(&contact, "id = ? AND customer_id = ?", c.Param("contactId"), c.Param("id")).Error; err != nil {
+			apiError(c, err)
+			return
+		}
+	}
+	if !bindFields(c, &contact, map[string]string{"name": "required,max=255", "email": "omitempty,email,max=255", "phone": "max=100", "position": "max=255", "isPrimary": "", "siteId": ""}) {
+		return
+	}
+	err := h.db.Transaction(func(tx *gorm.DB) error {
+		customer, err := h.parent(tx, c)
+		if err != nil {
+			return err
+		}
+		contact.CustomerID = customer.ID
+		if contact.SiteID != nil {
+			var site models.CustomerSite
+			if err := tx.First(&site, "id = ? AND customer_id = ?", contact.SiteID, customer.ID).Error; err != nil {
+				return invalid("Site must belong to this customer")
+			}
+		}
+		if contact.IsPrimary {
+			if err := tx.Model(&models.CustomerContact{}).Where("customer_id = ? AND id <> ?", customer.ID, contact.ID).Update("is_primary", false).Error; err != nil {
+				return err
+			}
+		}
+		return tx.Omit(clause.Associations).Save(&contact).Error
+	})
+	if err != nil {
+		apiError(c, err)
+		return
+	}
+	if create {
+		response.Created(c, contact)
+	} else {
+		response.OK(c, contact)
+	}
+}
+func (h *CustomerHandler) DeleteContact(c *gin.Context) {
+	result := h.db.Where("id = ? AND customer_id = ?", c.Param("contactId"), c.Param("id")).Delete(&models.CustomerContact{})
+	if result.Error != nil {
+		apiError(c, result.Error)
+		return
+	}
+	if result.RowsAffected == 0 {
 		response.NotFound(c, "Contact not found")
 		return
 	}
-	var req map[string]interface{}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		response.BadRequest(c, err.Error())
+	response.NoContent(c)
+}
+func (h *CustomerHandler) Lookup(c *gin.Context) {
+	items := []models.Customer{}
+	query := h.db.Select("id", "company_name", "status")
+	if q := c.Query("q"); q != "" {
+		query = query.Where("company_name ILIKE ?", "%"+q+"%")
+	}
+	if err := query.Order("company_name").Limit(100).Find(&items).Error; err != nil {
+		apiError(c, err)
 		return
 	}
-	h.db.Model(&contact).Updates(req)
-	response.OK(c, contact)
-}
-
-// DeleteContact removes a contact
-func (h *CustomerHandler) DeleteContact(c *gin.Context) {
-	contactID := c.Param("contactId")
-	h.db.Delete(&models.CustomerContact{}, "id = ? AND customer_id = ?", contactID, c.Param("id"))
-	response.NoContent(c)
+	response.OK(c, items)
 }

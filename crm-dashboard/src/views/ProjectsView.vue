@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import {
   FolderKanban, Search, Plus, Eye, Pencil, Trash2, X, Package, Users,
   Calendar, DollarSign, AlertCircle, CheckCircle, Clock, Pause, XCircle,
@@ -14,43 +14,19 @@ const quotesStore = useQuotesStore()
 const procStore = useProcurementStore()
 const router = useRouter()
 
+import { projectsService, quotesService, usersService } from '@/services'
+import { allPages } from '@/services/collections'
+import { errorMessage } from '@/services/payload'
+const managers = ref<{id:string;name:string}[]>([])
+onMounted(async () => {try {const [items,quotes,users] = await Promise.all([allPages(projectsService.list), allPages(quotesService.list), usersService.lookup()]); projects.value=items;quotesStore.quotes=quotes;managers.value=users.data.map(u=>({id:u.id,name:`${u.firstName} ${u.lastName}`}))}catch(e){window.alert(errorMessage(e))}})
+
 function uid(): string { return Math.random().toString(36).slice(2, 11) }
 function formatSAR(v: number): string { return v.toLocaleString('en-SA', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }
 function formatDate(d: string): string { return new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) }
 function daysFromNow(d: string): number { return Math.ceil((new Date(d).getTime() - Date.now()) / 86400000) }
 
 // ── Project seed data from accepted quotes ───────────────────
-const projects = ref<Project[]>([
-  {
-    id: 'prj-001', projectNumber: 'PRJ-2026-001',
-    name: 'Al Rajhi Bank — Intrusion Detection Rollout',
-    customerName: 'Al Rajhi Bank', customerId: 'cust-004',
-    quoteId: 'qt-003', quoteNumber: 'QT-2025-0031',
-    status: 'in-progress', priority: 'high',
-    startDate: '2025-10-15', targetEndDate: '2026-04-30',
-    projectManager: 'Mohammed Al-Zahrani',
-    totalValue: 125637.50, totalCost: 77205.60, marginPercent: 29.33,
-    lineItems: quotesStore.quotes.find(q => q.id === 'qt-003')?.lineItems || [],
-    purchaseOrders: ['PO-2026-0012'],
-    notes: 'Phase rollout across 30 branches. Intrusion detection systems for all locations.',
-    createdAt: '2025-10-15T08:00:00Z', updatedAt: '2026-02-20T14:00:00Z',
-  },
-  {
-    id: 'prj-002', projectNumber: 'PRJ-2026-002',
-    name: 'Saudi Aramco — Guarding Services Contract',
-    customerName: 'Saudi Aramco', customerId: 'cust-001',
-    quoteId: 'qt-006', quoteNumber: 'QT-2025-0020',
-    status: 'in-progress', priority: 'critical',
-    startDate: '2025-08-01', targetEndDate: '2026-07-31',
-    projectManager: 'Khalid Al-Rashid',
-    totalValue: 1684750, totalCost: 1095000, marginPercent: 25.26,
-    lineItems: quotesStore.quotes.find(q => q.id === 'qt-006')?.lineItems || [],
-    purchaseOrders: [],
-    notes: 'Annual guarding contract for Ras Tanura refinery. 50 guards + 5 supervisors.',
-    createdAt: '2025-08-01T08:00:00Z', updatedAt: '2026-02-15T09:00:00Z',
-  },
-])
-
+const projects = ref<Project[]>([])
 // ── KPIs ─────────────────────────────────────────────────────
 const totalProjects = computed(() => projects.value.length)
 const activeProjects = computed(() => projects.value.filter(p => p.status === 'in-progress').length)
@@ -103,13 +79,14 @@ const detailMiscItems = computed(() => detailProject.value?.lineItems.filter(li 
 const detailPOs = computed<PurchaseOrder[]>(() => {
   if (!detailProject.value) return []
   return procStore.purchaseOrders.filter(po =>
-    detailProject.value!.purchaseOrders.includes(po.poNumber) ||
+    (detailProject.value!.purchaseOrders ?? []).includes(po.poNumber) ||
     po.sourceQuoteNumber === detailProject.value!.quoteNumber,
   )
 })
 
-function updateStatus(status: ProjectStatus) {
-  if (detailProject.value) detailProject.value.status = status
+async function updateStatus(status: ProjectStatus) {
+ if (!detailProject.value) return
+ try { const result=await projectsService.update(detailProject.value.id,{status});detailProject.value=result.data;projects.value=await allPages(projectsService.list) }catch(e){window.alert(errorMessage(e))}
 }
 
 // ── Convert Won Quote to Project ─────────────────────────────
@@ -138,36 +115,16 @@ function openConvertQuote(quote?: Quote) {
   showConvertModal.value = true
 }
 
-function confirmConvert() {
-  if (!convertQuote.value || !convertForm.value.name) return
-  const q = convertQuote.value
-  const now = new Date().toISOString()
-  const nextNum = projects.value.length + 1
-  projects.value.unshift({
-    id: uid(), projectNumber: `PRJ-2026-${String(nextNum).padStart(3, '0')}`,
-    name: convertForm.value.name,
-    customerName: q.customerName, customerId: q.customerId,
-    quoteId: q.id, quoteNumber: q.quoteNumber,
-    status: 'planning', priority: convertForm.value.priority,
-    startDate: convertForm.value.startDate,
-    targetEndDate: convertForm.value.targetEndDate,
-    projectManager: convertForm.value.projectManager,
-    totalValue: q.total, totalCost: q.totalCost, marginPercent: q.marginPercent,
-    lineItems: [...q.lineItems],
-    purchaseOrders: [],
-    notes: convertForm.value.notes,
-    createdAt: now, updatedAt: now,
-  })
-  showConvertModal.value = false
+async function confirmConvert() {
+ if (!convertQuote.value || !convertForm.value.name) return
+ try { await projectsService.create({ ...convertForm.value, projectManagerId:convertForm.value.projectManager || null,customerId:convertQuote.value.customerId,quoteId:convertQuote.value.id });projects.value=await allPages(projectsService.list);showConvertModal.value=false }catch(e){window.alert(errorMessage(e))}
 }
 
 function goToProcurement() {
   router.push('/procurement')
 }
 
-function deleteProject(id: string) {
-  projects.value = projects.value.filter(p => p.id !== id)
-}
+async function deleteProject(id: string) {try{await projectsService.delete(id);projects.value=projects.value.filter(p=>p.id!==id)}catch(e){window.alert(errorMessage(e))}}
 </script>
 
 <template>
@@ -407,7 +364,7 @@ function deleteProject(id: string) {
             <div class="form-group"><label class="form-label">Target End Date</label><input v-model="convertForm.targetEndDate" type="date" class="form-input" /></div>
           </div>
           <div class="form-row">
-            <div class="form-group"><label class="form-label">Project Manager</label><input v-model="convertForm.projectManager" type="text" class="form-input" placeholder="e.g. Mohammed Al-Zahrani" /></div>
+            <div class="form-group"><label class="form-label">Project Manager</label><select v-model="convertForm.projectManager" class="select"><option value="">Unassigned</option><option v-for="manager in managers" :key="manager.id" :value="manager.id">{{ manager.name }}</option></select></div>
             <div class="form-group" style="width:160px"><label class="form-label">Priority</label><select v-model="convertForm.priority" class="form-select"><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="critical">Critical</option></select></div>
           </div>
           <div class="form-group"><label class="form-label">Notes</label><textarea v-model="convertForm.notes" class="form-textarea" rows="2" placeholder="Project notes..." /></div>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, reactive, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import {
   Save, Send, CheckCircle2, Printer, FileSpreadsheet, Search, X, Trash2,
@@ -11,6 +11,14 @@ import {
 import type { QuoteLineCategory, QuoteStatus, Currency } from '@/types'
 import { useProcurementStore } from '@/stores/procurement'
 
+import { quotesService, http } from '@/services'
+import type { ApiResponse } from '@/services/http'
+import type { BuilderQuote, BuilderInput } from '@/services/workflowDtos'
+import { priceBooksService } from '@/services'
+import { errorMessage } from '@/services/payload'
+import { useAuthStore } from '@/stores/auth'
+
+const auth = useAuthStore()
 const router = useRouter()
 const route = useRoute()
 
@@ -75,99 +83,9 @@ interface CatalogRecurring {
   monthlyCost: number; monthlyPrice: number
 }
 
-function ph(source: string, supplier: string, date: string, cost: number, price: number, qty: number, batchRef?: string, modifier?: string, customer?: string, quoteRef?: string): PriceEntry {
-  return { id: uid(), source, supplier, date, cost, price, qty, batchRef, modifier, customer, quoteRef }
-}
-
-const productCatalog: CatalogProduct[] = [
-  { id: 'cp1', sku: 'HIK-DS2CD2143', name: 'DS-2CD2143G2-IU 4MP Dome', manufacturer: 'Hikvision', unitCost: 367, unitPrice: 522, stockAvailable: 60, leadTimeDays: 21, priceHistory: [
-    ph('Distributor', 'Hikvision Saudi', '2026-01-15', 367, 522, 100, 'B-2601', 'Standard'),
-    ph('Distributor', 'Hikvision Saudi', '2025-09-20', 385, 548, 50, 'B-2509', 'Standard', 'Saudi Aramco', 'QT-2025-0098'),
-    ph('Direct Import', 'Hikvision HQ', '2025-06-10', 342, 522, 200, 'IMP-2506', '-7% volume'),
-    ph('Past Quote', 'Hikvision Saudi', '2025-11-05', 367, 490, 120, undefined, 'Aramco discount', 'Saudi Aramco', 'QT-2025-0134'),
-  ]},
-  { id: 'cp2', sku: 'HIK-DS2CD2T87', name: 'DS-2CD2T87G2-L 8MP Bullet', manufacturer: 'Hikvision', unitCost: 862, unitPrice: 1199, stockAvailable: 45, leadTimeDays: 21, priceHistory: [
-    ph('Distributor', 'Hikvision Saudi', '2026-02-01', 862, 1199, 64, 'B-2602', 'Standard'),
-    ph('Distributor', 'Hikvision Saudi', '2025-10-15', 890, 1240, 32, 'B-2510', 'Standard', 'SABIC', 'QT-2025-0112'),
-    ph('Direct Import', 'Hikvision HQ', '2025-07-20', 810, 1199, 100, 'IMP-2507', '-6% volume'),
-  ]},
-  { id: 'cp3', sku: 'HIK-DS7732NI', name: 'DS-7732NI-K4 32CH NVR', manufacturer: 'Hikvision', unitCost: 1820, unitPrice: 2436, stockAvailable: 12, leadTimeDays: 28, priceHistory: [
-    ph('Distributor', 'Hikvision Saudi', '2026-01-10', 1820, 2436, 10, 'B-2601'),
-    ph('Distributor', 'Al-Jazirah Tech', '2025-12-01', 1880, 2500, 8, 'AJT-2512'),
-    ph('Past Quote', 'Hikvision Saudi', '2025-08-15', 1780, 2380, 8, undefined, '-2.5% project', 'Saudi Aramco', 'QT-2025-0090'),
-  ]},
-  { id: 'cp4', sku: 'DH-IPC-HFW5442', name: 'IPC-HFW5442T-ASE 4MP AI Bullet', manufacturer: 'Dahua', unitCost: 474, unitPrice: 676, stockAvailable: 35, leadTimeDays: 25, priceHistory: [
-    ph('Distributor', 'Dahua MEA', '2026-01-20', 474, 676, 36, 'B-2601'),
-    ph('Distributor', 'SecureTech KSA', '2025-11-10', 490, 700, 20, 'ST-2511'),
-  ]},
-  { id: 'cp5', sku: 'DH-NVR5432-EI', name: 'NVR5432-EI 32CH AI NVR', manufacturer: 'Dahua', unitCost: 3720, unitPrice: 4960, stockAvailable: 0, leadTimeDays: 30, priceHistory: [
-    ph('Distributor', 'Dahua MEA', '2025-12-05', 3720, 4960, 4, 'B-2512'),
-    ph('Direct Import', 'Dahua HQ', '2025-08-20', 3500, 4960, 10, 'IMP-2508', '-6% direct'),
-  ]},
-  { id: 'cp6', sku: 'DH-ASI7214Y', name: 'ASI7214Y Face Recognition Terminal', manufacturer: 'Dahua', unitCost: 1440, unitPrice: 2118, stockAvailable: 0, leadTimeDays: 30, priceHistory: [
-    ph('Distributor', 'Dahua MEA', '2025-11-15', 1440, 2118, 10, 'B-2511'),
-  ]},
-  { id: 'cp7', sku: 'AXIS-P3265LVE', name: 'P3265-LVE 2MP Dome', manufacturer: 'Axis', unitCost: 1720, unitPrice: 2656, stockAvailable: 20, leadTimeDays: 35, priceHistory: [
-    ph('Distributor', 'Axis Partner KSA', '2026-01-05', 1720, 2656, 20, 'AX-2601'),
-    ph('Distributor', 'Axis Partner KSA', '2025-07-10', 1680, 2600, 48, 'AX-2507', undefined, 'Ministry of Interior', 'QT-2025-0078'),
-  ]},
-  { id: 'cp8', sku: 'AXIS-Q6135LE', name: 'Q6135-LE PTZ Camera', manufacturer: 'Axis', unitCost: 19044, unitPrice: 24600, stockAvailable: 0, leadTimeDays: 42, priceHistory: [
-    ph('Distributor', 'Axis Partner KSA', '2025-12-20', 19044, 24600, 8, 'AX-2512'),
-    ph('Direct Import', 'Axis Sweden', '2025-05-15', 18200, 24600, 16, 'IMP-2505', '-4.5% direct'),
-    ph('Past Quote', 'Axis Partner KSA', '2025-09-01', 19044, 23500, 32, undefined, 'Volume deal', 'NEOM', 'QT-2025-0105'),
-  ]},
-  { id: 'cp9', sku: 'HON-MNPDS2', name: 'Morley-IAS Fire Panel 2L', manufacturer: 'Honeywell', unitCost: 5438, unitPrice: 6510, stockAvailable: 5, leadTimeDays: 45, priceHistory: [
-    ph('Distributor', 'Honeywell MEA', '2026-01-25', 5438, 6510, 8, 'HW-2601'),
-    ph('Distributor', 'Gulf Security Dist.', '2025-10-01', 5600, 6800, 4, 'GSD-2510'),
-  ]},
-  { id: 'cp10', sku: 'HON-MAXPRO', name: 'MAXPRO Access 4-Door Controller', manufacturer: 'Honeywell', unitCost: 2100, unitPrice: 2800, stockAvailable: 8, leadTimeDays: 14, priceHistory: [
-    ph('Distributor', 'Honeywell MEA', '2026-02-01', 2100, 2800, 20, 'HW-2602'),
-    ph('Past Quote', 'Honeywell MEA', '2025-12-10', 2100, 2650, 12, undefined, '-5.4% SABIC', 'SABIC', 'QT-2025-0140'),
-  ]},
-  { id: 'cp11', sku: 'BOSCH-NDV3503', name: 'FLEXIDOME IP 3000i 5MP', manufacturer: 'Bosch', unitCost: 1252, unitPrice: 1660, stockAvailable: 18, leadTimeDays: 28, priceHistory: [
-    ph('Distributor', 'Bosch KSA', '2026-01-18', 1252, 1660, 18, 'BSH-2601'),
-  ]},
-  { id: 'cp12', sku: 'BOSCH-FPA5000', name: 'FPA-5000 Fire Panel', manufacturer: 'Bosch', unitCost: 8424, unitPrice: 10694, stockAvailable: 3, leadTimeDays: 56, priceHistory: [
-    ph('Distributor', 'Bosch KSA', '2025-11-20', 8424, 10694, 4, 'BSH-2511'),
-    ph('Distributor', 'Gulf Security Dist.', '2025-08-05', 8600, 11000, 2, 'GSD-2508'),
-  ]},
-  { id: 'cp13', sku: 'ZKT-INBIO460', name: 'InBio460 4-Door Controller', manufacturer: 'ZKTeco', unitCost: 858, unitPrice: 1320, stockAvailable: 15, leadTimeDays: 35, priceHistory: [
-    ph('Distributor', 'ZKTeco Gulf', '2026-01-08', 858, 1320, 15, 'ZK-2601'),
-    ph('Distributor', 'ZKTeco Gulf', '2025-06-15', 820, 1280, 30, 'ZK-2506', '-5% promo'),
-  ]},
-  { id: 'cp14', sku: 'ZKT-SPEEDFACE', name: 'SpeedFace-V5L Facial Terminal', manufacturer: 'ZKTeco', unitCost: 1508, unitPrice: 2917, stockAvailable: 0, leadTimeDays: 30, priceHistory: [
-    ph('Distributor', 'ZKTeco Gulf', '2025-12-01', 1508, 2917, 24, 'ZK-2512'),
-    ph('Past Quote', 'ZKTeco Gulf', '2025-10-20', 1508, 2750, 24, undefined, '-5.7%', 'SABIC', 'QT-2025-0125'),
-  ]},
-  { id: 'cp15', sku: 'CBL-CAT6A-305', name: 'Cat6A UTP Cable 305m Box', manufacturer: 'Belden', unitCost: 420, unitPrice: 580, stockAvailable: 30, leadTimeDays: 14, priceHistory: [
-    ph('Distributor', 'Belden MEA', '2026-02-05', 420, 580, 30, 'BLD-2602'),
-    ph('Local Vendor', 'Al-Salam Cables', '2025-11-01', 440, 600, 50, 'ASC-2511'),
-    ph('Local Vendor', 'Al-Salam Cables', '2025-07-01', 400, 560, 100, 'ASC-2507', '-7% bulk'),
-  ]},
-  { id: 'cp16', sku: 'CBL-FIBER-OM3', name: 'OM3 Fiber Optic Cable 1000m', manufacturer: 'Corning', unitCost: 1850, unitPrice: 2450, stockAvailable: 6, leadTimeDays: 21, priceHistory: [
-    ph('Distributor', 'Corning Gulf', '2026-01-12', 1850, 2450, 6, 'CRN-2601'),
-    ph('Direct Import', 'Corning US', '2025-09-10', 1750, 2450, 12, 'IMP-2509', '-5.4% direct'),
-  ]},
-]
-
-const serviceCatalog: CatalogService[] = [
-  { id: 'cs1', sku: 'SVC-INSTALL-SR', name: 'Senior Installation Engineer', department: 'Technical', rateType: 'per day', unitCost: 800, unitPrice: 1200 },
-  { id: 'cs2', sku: 'SVC-INSTALL-JR', name: 'Technician', department: 'Technical', rateType: 'per day', unitCost: 450, unitPrice: 700 },
-  { id: 'cs3', sku: 'SVC-PM-MONTH', name: 'Project Manager', department: 'Management', rateType: 'per month', unitCost: 12000, unitPrice: 18000 },
-  { id: 'cs4', sku: 'SVC-AC-SPEC', name: 'Access Control Specialist', department: 'Technical', rateType: 'per day', unitCost: 900, unitPrice: 1350 },
-  { id: 'cs5', sku: 'SVC-DESIGN', name: 'System Design & Engineering', department: 'Pre-Sales', rateType: 'fixed', unitCost: 5500, unitPrice: 8500 },
-  { id: 'cs6', sku: 'SVC-COMMISSION', name: 'System Commissioning', department: 'Technical', rateType: 'per day', unitCost: 1000, unitPrice: 1500 },
-  { id: 'cs7', sku: 'SVC-TRAINING', name: 'End-User Training', department: 'Support', rateType: 'per session', unitCost: 600, unitPrice: 950 },
-]
-
-const recurringCatalog: CatalogRecurring[] = [
-  { id: 'cr1', sku: 'REC-GUARD-24', name: 'Security Guard Service (24/7)', billingCycle: 'Monthly', monthlyCost: 8000, monthlyPrice: 12000 },
-  { id: 'cr2', sku: 'REC-MAINT-STD', name: 'System Maintenance', billingCycle: 'Monthly', monthlyCost: 2200, monthlyPrice: 3500 },
-  { id: 'cr3', sku: 'REC-MON-247', name: '24/7 Remote Monitoring', billingCycle: 'Monthly', monthlyCost: 3200, monthlyPrice: 5000 },
-  { id: 'cr4', sku: 'REC-PATROL', name: 'Mobile Patrol Service', billingCycle: 'Monthly', monthlyCost: 5500, monthlyPrice: 8000 },
-  { id: 'cr5', sku: 'REC-FM', name: 'Facility Management', billingCycle: 'Monthly', monthlyCost: 9500, monthlyPrice: 15000 },
-  { id: 'cr6', sku: 'REC-ALARM', name: 'Alarm Response Service', billingCycle: 'Monthly', monthlyCost: 1500, monthlyPrice: 2500 },
-]
+const productCatalog = reactive<CatalogProduct[]>([])
+const serviceCatalog = reactive<CatalogService[]>([])
+const recurringCatalog = reactive<CatalogRecurring[]>([])
 
 // ── Row Interface ────────────────────────────────────────────
 interface QuoteRow {
@@ -197,11 +115,11 @@ interface QuoteRow {
 }
 
 // ── Quote State ──────────────────────────────────────────────
-const quoteNumber = ref('QT-2026-0148')
-const customerName = ref('Saudi Aramco')
-const customerId = ref('c1')
+const quoteNumber = ref('Loading quote…')
+const customerName = ref('')
+const customerId = ref('')
 const quoteStatus = ref<QuoteStatus>('draft')
-const validUntil = ref('2026-04-15')
+const validUntil = ref('')
 const currency = ref<Currency>('SAR')
 const notes = ref('')
 const discountPercent = ref(0)
@@ -213,15 +131,7 @@ type BuilderTab = 'items' | 'addresses' | 'notes'
 const builderTab = ref<BuilderTab>('items')
 
 // ── Sold To / Ship To ────────────────────────────────────────
-const soldTo = ref({
-  contactName: 'Mohammed Al-Qahtani',
-  company: 'Saudi Aramco',
-  address: 'P.O. Box 5000, Dhahran 31311',
-  city: 'Dhahran',
-  country: 'Saudi Arabia',
-  phone: '+966 13 872 0000',
-  email: 'm.qahtani@aramco.com',
-})
+const soldTo = ref({ contactName: '', company: '', address: '', city: '', country: 'Saudi Arabia', phone: '', email: '' })
 
 const shipTo = ref({
   contactName: '',
@@ -295,7 +205,7 @@ function stockLabel(row: QuoteRow): string {
 
 const showPOModal = ref(false)
 
-function generatePOFromQuote() {
+async function generatePOFromQuote() {
   if (outOfStockRows.value.length === 0) return
 
   const supplierGroups: Record<string, typeof outOfStockRows.value> = {}
@@ -305,12 +215,13 @@ function generatePOFromQuote() {
     supplierGroups[supplier].push(row)
   }
 
+  try {
   for (const [supplier, items] of Object.entries(supplierGroups)) {
     const poItems = items.map(item => {
       const needQty = item.stockAvailable != null ? Math.max(0, item.quantity - item.stockAvailable) : item.quantity
       return {
         id: uid(),
-        productId: item.productId || uid(),
+        productId: item.productId,
         productSku: item.sku,
         productName: item.description,
         manufacturerName: item.manufacturer || '',
@@ -322,11 +233,11 @@ function generatePOFromQuote() {
       }
     })
     const subtotal = poItems.reduce((s, i) => s + i.total, 0)
-    const shippingCost = Math.round(subtotal * 0.04)
-    const customsDuty = Math.round(subtotal * 0.05)
-    procurementStore.addPurchaseOrder({
+    const shippingCost = 0
+    const customsDuty = 0
+    await procurementStore.addPurchaseOrder({
       id: uid(),
-      poNumber: procurementStore.generatePoNumber(),
+      poNumber: '',
       supplierName: supplier,
       status: 'draft',
       items: poItems,
@@ -336,7 +247,7 @@ function generatePOFromQuote() {
       total: subtotal + shippingCost + customsDuty,
       currency: currency.value,
       expectedDelivery: new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10),
-      sourceQuoteId: 'current',
+      sourceQuoteId: String(route.params.id),
       sourceQuoteNumber: quoteNumber.value,
       notes: `Auto-generated from ${quoteNumber.value} for out-of-stock items.`,
       createdAt: new Date().toISOString(),
@@ -345,6 +256,7 @@ function generatePOFromQuote() {
   }
   showSaveToast(`${Object.keys(supplierGroups).length} PO(s) created for ${outOfStockRows.value.length} items`)
   showPOModal.value = false
+  } catch (error) { window.alert(errorMessage(error)) }
 }
 
 // ── Price History Modal ──────────────────────────────────────
@@ -472,16 +384,7 @@ function addWithDefaultPrice() {
 }
 
 // ── Rows ─────────────────────────────────────────────────────
-const rows = ref<QuoteRow[]>([
-  makeProductRow('cp2', 'HIK-DS2CD2T87', 'DS-2CD2T87G2-L 8MP Bullet Camera', 'Hikvision', 45, undefined, 32, 862, 1199),
-  makeProductRow('cp3', 'HIK-DS7732NI', 'DS-7732NI-K4 32CH NVR', 'Hikvision', 12, undefined, 4, 1820, 2436),
-  makeProductRow('cp10', 'HON-MAXPRO', 'MAXPRO Access 4-Door Controller', 'Honeywell', 8, undefined, 6, 2100, 2800),
-  makeProductRow('cp14', 'ZKT-SPEEDFACE', 'SpeedFace-V5L Facial Terminal', 'ZKTeco', 0, 30, 12, 1508, 2917),
-  makeProductRow('cp15', 'CBL-CAT6A-305', 'Cat6A UTP Cable 305m Box', 'Belden', 30, undefined, 8, 420, 580),
-  makeServiceRow('cs1', 'SVC-INSTALL-SR', 'Senior Installation Engineer (per day)', 'per day', 20, 800, 1200),
-  makeServiceRow('cs2', 'SVC-INSTALL-JR', 'Technician (per day)', 'per day', 30, 450, 700),
-  makeServiceRow('cs3', 'SVC-PM-MONTH', 'Project Manager (per month)', 'per month', 2, 12000, 18000),
-])
+const rows = ref<QuoteRow[]>([])
 
 function makeProductRow(pid: string, sku: string, desc: string, mfr: string, stock: number, lead: number | undefined, qty: number, cost: number, price: number): QuoteRow {
   const lt = qty * price
@@ -498,7 +401,7 @@ function recalcRow(row: QuoteRow) {
   if (row.rowType !== 'item') return
   const gross = row.quantity * row.multiplier * row.unitPrice
   const disc = gross * (row.discountPercent / 100)
-  row.lineTotal = gross - disc
+  row.lineTotal = Math.round((gross - disc) * 100) / 100
   const costTotal = row.quantity * row.multiplier * row.unitCost
   row.marginPercent = row.lineTotal > 0 ? ((row.lineTotal - costTotal) / row.lineTotal) * 100 : 0
 }
@@ -511,8 +414,8 @@ const activeItemRows = computed(() => itemRows.value.filter(r => !r.isOptional |
 const subtotal = computed(() => activeItemRows.value.reduce((s, r) => s + r.lineTotal, 0))
 const discountAmount = computed(() => subtotal.value * (discountPercent.value / 100))
 const subtotalAfterDiscount = computed(() => subtotal.value - discountAmount.value)
-const vatPercent = 15
-const vatAmount = computed(() => subtotalAfterDiscount.value * (vatPercent / 100))
+const vatPercent = ref(15)
+const vatAmount = computed(() => subtotalAfterDiscount.value * (vatPercent.value / 100))
 const total = computed(() => subtotalAfterDiscount.value + vatAmount.value)
 const totalCost = computed(() => activeItemRows.value.reduce((s, r) => s + r.quantity * r.multiplier * r.unitCost, 0))
 const marginAmount = computed(() => subtotalAfterDiscount.value - totalCost.value)
@@ -683,20 +586,111 @@ function computeRunningSubtotal(upToIndex: number): number {
 // ── Save Actions ─────────────────────────────────────────────
 const saveMessage = ref('')
 function showSaveToast(msg: string) { saveMessage.value = msg; window.setTimeout(() => { saveMessage.value = '' }, 2500) }
-function saveDraft() { quoteStatus.value = 'draft'; showSaveToast('Draft saved') }
-function submitForApproval() { quoteStatus.value = 'pending-approval'; showSaveToast('Submitted for approval') }
+const saving = ref(false)
+const loadedQuote = ref<BuilderQuote | null>(null)
+const locked = computed(() => !loadedQuote.value || quoteStatus.value !== 'draft' || saving.value)
+const canApprove = computed(() => ['admin', 'sales_manager'].includes(auth.userRole))
+function applyQuote(q: BuilderQuote) {
+  loadedQuote.value = q
+  quoteNumber.value = q.quoteNumber; customerId.value = q.customerId; customerName.value = q.customerName
+  quoteStatus.value = q.status; validUntil.value = q.validUntil?.slice(0, 10) ?? ''; currency.value = q.currency
+  notes.value = q.notes; discountPercent.value = q.discountPercent; vatPercent.value = q.vatPercent
+  paymentTerms.value = q.paymentTerms || 'Net 30'; deliveryTerms.value = q.deliveryTerms || 'Ex-Works'
+  introductionText.value = q.introductionText; closingText.value = q.closingText; internalNotes.value = q.internalNotes
+  purchasingNotes.value = q.purchasingNotes; statementOfWork.value = q.statementOfWork
+  soldTo.value = q.soldTo; shipTo.value = q.shipTo
+  if (!soldTo.value.company) soldTo.value.company = q.customerName
+  rows.value = q.lineItems.map(line => ({ ...line, sku: line.sku ?? '', productId: line.productId || line.serviceId || line.recurringServiceId, manufacturer: line.manufacturerName }))
+}
+onMounted(async () => {
+  try {
+    const [quote, catalog] = await Promise.all([
+      quotesService.builder(String(route.params.id)),
+      http.get<ApiResponse<{ products: CatalogProduct[]; services: CatalogService[]; recurring: CatalogRecurring[] }>>('/catalog'),
+    ])
+    applyQuote(quote.data)
+    productCatalog.push(...catalog.data.data.products)
+    serviceCatalog.push(...catalog.data.data.services)
+    recurringCatalog.push(...catalog.data.data.recurring)
+    if (quote.data.priceBookId) {
+      const book = (await priceBooksService.get(quote.data.priceBookId)).data
+      for (const entry of book.entries) {
+        const product = productCatalog.find(p => p.id === entry.productId)
+        if (product && (!entry.kind || entry.kind === 'product')) product.unitPrice = entry.customPrice
+        const service = serviceCatalog.find(p => p.id === entry.productId)
+        if (service && entry.kind === 'service') service.unitPrice = entry.customPrice
+        const recurring = recurringCatalog.find(p => p.id === entry.productId)
+        if (recurring && entry.kind === 'recurring') recurring.monthlyPrice = entry.customPrice
+      }
+    }
+  } catch (error) { window.alert(errorMessage(error)) }
+})
+async function saveDraft(): Promise<boolean> {
+  if (locked.value || !loadedQuote.value) return false
+  saving.value = true
+  try {
+    const payload: BuilderInput = {
+      lockVersion: loadedQuote.value.lockVersion, customerId: customerId.value, opportunityId: loadedQuote.value.opportunityId || null,
+      currency: currency.value, validUntil: validUntil.value || null, discountPercent: discountPercent.value, vatPercent: vatPercent.value,
+      notes: notes.value, paymentTerms: paymentTerms.value, deliveryTerms: deliveryTerms.value,
+      introductionText: introductionText.value, closingText: closingText.value, internalNotes: internalNotes.value,
+      purchasingNotes: purchasingNotes.value, statementOfWork: statementOfWork.value, soldTo: soldTo.value, shipTo: shipTo.value,
+      rows: rows.value.map(row => ({
+        id: row.id, rowType: row.rowType, source: row.source,
+        productId: row.source === 'product' ? row.productId : undefined,
+        serviceId: row.source === 'service' ? row.productId : undefined,
+        recurringServiceId: row.source === 'recurring' ? row.productId : undefined,
+        sku: row.sku, description: row.description, manufacturer: row.manufacturer,
+        stockAvailable: row.stockAvailable, leadTimeDays: row.leadTimeDays,
+        quantity: row.quantity, multiplier: row.multiplier, unitCost: row.unitCost, unitPrice: row.unitPrice,
+        discountPercent: row.discountPercent, isOptional: row.isOptional, isSelected: row.isSelected, isPrintable: row.isPrintable,
+        headingText: row.headingText, commentText: row.commentText, rateType: row.rateType, billingCycle: row.billingCycle,
+      })),
+    }
+    const result = await quotesService.saveBuilder(String(route.params.id), payload)
+    applyQuote(result.data); showSaveToast('Draft saved'); return true
+  } catch (error) { window.alert(errorMessage(error)); return false }
+  finally { saving.value = false }
+}
+async function submitForApproval() {
+  if (!await saveDraft()) return
+  await transition('submit')
+}
+async function transition(action: 'submit' | 'approve' | 'reject' | 'send' | 'accept' | 'decline') {
+  if (saving.value) return
+  saving.value = true
+  try {
+    await quotesService[action](String(route.params.id))
+    applyQuote((await quotesService.builder(String(route.params.id))).data)
+    showSaveToast('Quote status updated')
+  } catch (error) { window.alert(errorMessage(error)) }
+  finally { saving.value = false }
+}
+async function createRevision() {
+  try { const revised = await quotesService.revise(String(route.params.id)); await router.replace(`/quotes/${revised.data.id}/builder`); applyQuote(revised.data) }
+  catch (error) { window.alert(errorMessage(error)) }
+}
+async function convertToContract() {
+  const startDate = window.prompt('Contract start date (YYYY-MM-DD)', new Date().toISOString().slice(0, 10))
+  if (!startDate) return
+  const endDate = window.prompt('Contract end date (YYYY-MM-DD)')
+  if (!endDate) return
+  try { await quotesService.convertToContract(String(route.params.id), { title: `${customerName.value} — ${quoteNumber.value}`, type: 'sales', startDate, endDate, terms: paymentTerms.value }); showSaveToast('Contract created'); await router.push('/contracts') }
+  catch (error) { window.alert(errorMessage(error)) }
+}
 
 // ── Print ────────────────────────────────────────────────────
+function htmlText(value: unknown): string { return String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]!) }
 function printQuote() {
-  const printableRows = rows.value.filter(r => r.isPrintable)
+  const printableRows = rows.value.filter(r => r.isPrintable && (!r.isOptional || r.isSelected))
   let lineNum = 0
 
   const rowsHtml = printableRows.map(r => {
     if (r.rowType === 'heading') {
-      return `<tr class="heading"><td colspan="7" style="background:#f1f5f9;font-weight:700;text-transform:uppercase;letter-spacing:.04em;padding:10px 12px;font-size:13px;border-bottom:2px solid #cbd5e1">${r.headingText || ''}</td></tr>`
+      return `<tr class="heading"><td colspan="7" style="background:#f1f5f9;font-weight:700;text-transform:uppercase;letter-spacing:.04em;padding:10px 12px;font-size:13px;border-bottom:2px solid #cbd5e1">${htmlText(r.headingText)}</td></tr>`
     }
     if (r.rowType === 'comment') {
-      return `<tr class="comment"><td colspan="7" style="background:#fffbeb;padding:8px 12px;font-style:italic;color:#78716c;font-size:12px">${r.commentText || ''}</td></tr>`
+      return `<tr class="comment"><td colspan="7" style="background:#fffbeb;padding:8px 12px;font-style:italic;color:#78716c;font-size:12px">${htmlText(r.commentText)}</td></tr>`
     }
     if (r.rowType === 'subtotal') {
       return `<tr class="subtotal"><td colspan="5" style="border-top:2px solid #94a3b8;padding:8px 12px;font-weight:600;text-transform:uppercase;font-size:11px;color:#64748b">Subtotal</td><td colspan="2" style="border-top:2px solid #94a3b8;text-align:right;padding:8px 12px;font-weight:700;font-family:monospace">SAR ${formatSAR(computeRunningSubtotal(rows.value.indexOf(r)))}</td></tr>`
@@ -705,8 +699,8 @@ function printQuote() {
     const optLabel = r.isOptional ? ' <span style="color:#f59e0b;font-size:10px">(OPTIONAL)</span>' : ''
     return `<tr>
       <td style="text-align:center;color:#94a3b8;width:30px">${lineNum}</td>
-      <td><strong>${r.description}</strong>${optLabel}<br><span style="font-family:monospace;font-size:11px;color:#3b82f6">${r.sku || ''}</span> ${r.manufacturer ? `<span style="color:#94a3b8;font-size:11px">· ${r.manufacturer}</span>` : ''}</td>
-      <td style="text-align:center">${r.quantity}</td>
+      <td><strong>${htmlText(r.description)}</strong>${optLabel}<br><span style="font-family:monospace;font-size:11px;color:#3b82f6">${htmlText(r.sku)}</span> ${r.manufacturer ? `<span style="color:#94a3b8;font-size:11px">· ${htmlText(r.manufacturer)}</span>` : ''}</td>
+      <td style="text-align:center">${r.quantity * r.multiplier}</td>
       <td style="text-align:right;font-family:monospace">SAR ${formatSAR(r.unitPrice)}</td>
       <td style="text-align:right">${r.discountPercent > 0 ? r.discountPercent.toFixed(1) + '%' : '—'}</td>
       <td style="text-align:right;font-family:monospace;font-weight:600">SAR ${formatSAR(r.lineTotal)}</td>
@@ -715,23 +709,23 @@ function printQuote() {
 
   const soldToHtml = `<div style="flex:1">
     <h4 style="margin:0 0 8px;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:#64748b">Sold To</h4>
-    <p style="margin:0;font-weight:600">${soldTo.value.contactName}</p>
-    <p style="margin:0">${soldTo.value.company}</p>
-    <p style="margin:0;color:#64748b">${soldTo.value.address}</p>
-    <p style="margin:0;color:#64748b">${soldTo.value.city}, ${soldTo.value.country}</p>
-    <p style="margin:4px 0 0;font-size:12px;color:#64748b">${soldTo.value.phone} · ${soldTo.value.email}</p>
+    <p style="margin:0;font-weight:600">${htmlText(soldTo.value.contactName)}</p>
+    <p style="margin:0">${htmlText(soldTo.value.company)}</p>
+    <p style="margin:0;color:#64748b">${htmlText(soldTo.value.address)}</p>
+    <p style="margin:0;color:#64748b">${htmlText(soldTo.value.city)}, ${htmlText(soldTo.value.country)}</p>
+    <p style="margin:4px 0 0;font-size:12px;color:#64748b">${htmlText(soldTo.value.phone)} · ${htmlText(soldTo.value.email)}</p>
   </div>`
 
   const shipToHtml = shipTo.value.contactName ? `<div style="flex:1">
     <h4 style="margin:0 0 8px;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:#64748b">Ship To</h4>
-    <p style="margin:0;font-weight:600">${shipTo.value.contactName}</p>
-    <p style="margin:0">${shipTo.value.company}</p>
-    <p style="margin:0;color:#64748b">${shipTo.value.address}</p>
-    <p style="margin:0;color:#64748b">${shipTo.value.city}, ${shipTo.value.country}</p>
-    <p style="margin:4px 0 0;font-size:12px;color:#64748b">${shipTo.value.phone} · ${shipTo.value.email}</p>
+    <p style="margin:0;font-weight:600">${htmlText(shipTo.value.contactName)}</p>
+    <p style="margin:0">${htmlText(shipTo.value.company)}</p>
+    <p style="margin:0;color:#64748b">${htmlText(shipTo.value.address)}</p>
+    <p style="margin:0;color:#64748b">${htmlText(shipTo.value.city)}, ${htmlText(shipTo.value.country)}</p>
+    <p style="margin:4px 0 0;font-size:12px;color:#64748b">${htmlText(shipTo.value.phone)} · ${htmlText(shipTo.value.email)}</p>
   </div>` : ''
 
-  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${quoteNumber.value}</title>
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${htmlText(quoteNumber.value)}</title>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
   body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; font-size:13px; color:#1e293b; padding:40px; line-height:1.5; }
@@ -757,12 +751,12 @@ function printQuote() {
 <div class="header">
   <div><div class="logo">G4S</div><div class="logo-sub">Security Solutions</div></div>
   <div class="quote-info">
-    <div class="quote-num">${quoteNumber.value}</div>
-    <div class="quote-meta">Status: ${statusConfig[quoteStatus.value].label} · Valid Until: ${validUntil.value}<br>Payment: ${paymentTerms.value} · Delivery: ${deliveryTerms.value}</div>
+    <div class="quote-num">${htmlText(quoteNumber.value)}</div>
+    <div class="quote-meta">Status: ${statusConfig[quoteStatus.value].label} · Valid Until: ${htmlText(validUntil.value)}<br>Payment: ${htmlText(paymentTerms.value)} · Delivery: ${htmlText(deliveryTerms.value)}</div>
   </div>
 </div>
 <div class="addresses">${soldToHtml}${shipToHtml}</div>
-${introductionText.value ? `<div class="intro">${introductionText.value}</div>` : ''}
+${introductionText.value ? `<div class="intro">${htmlText(introductionText.value)}</div>` : ''}
 <table>
   <thead><tr><th style="width:30px;text-align:center">#</th><th>Description</th><th style="text-align:center;width:60px">Qty</th><th style="text-align:right;width:110px">Unit Price</th><th style="text-align:right;width:70px">Disc</th><th style="text-align:right;width:130px">Total</th></tr></thead>
   <tbody>${rowsHtml}</tbody>
@@ -771,12 +765,12 @@ ${introductionText.value ? `<div class="intro">${introductionText.value}</div>` 
   <tr><td>Subtotal</td><td style="text-align:right;font-family:monospace">SAR ${formatSAR(subtotal.value)}</td></tr>
   ${discountPercent.value > 0 ? `<tr><td>Discount (${discountPercent.value}%)</td><td style="text-align:right;font-family:monospace;color:#ef4444">- SAR ${formatSAR(discountAmount.value)}</td></tr>` : ''}
   ${discountPercent.value > 0 ? `<tr><td>After Discount</td><td style="text-align:right;font-family:monospace">SAR ${formatSAR(subtotalAfterDiscount.value)}</td></tr>` : ''}
-  <tr><td>VAT (${vatPercent}%)</td><td style="text-align:right;font-family:monospace">SAR ${formatSAR(vatAmount.value)}</td></tr>
+  <tr><td>VAT (${vatPercent.value}%)</td><td style="text-align:right;font-family:monospace">SAR ${formatSAR(vatAmount.value)}</td></tr>
   <tr class="grand"><td>Grand Total</td><td style="text-align:right;font-family:monospace">SAR ${formatSAR(total.value)}</td></tr>
 </table>
-${closingText.value ? `<div class="closing">${closingText.value}</div>` : ''}
-${statementOfWork.value ? `<div style="margin-bottom:24px"><h4 style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:#64748b;margin-bottom:8px">Statement of Work</h4><p style="font-size:13px;color:#475569;line-height:1.6;white-space:pre-wrap">${statementOfWork.value}</p></div>` : ''}
-<div class="footer"><span>Generated on ${new Date().toLocaleDateString('en-GB', { day:'numeric', month:'long', year:'numeric' })}</span><span>${quoteNumber.value} · ${customerName.value}</span></div>
+${closingText.value ? `<div class="closing">${htmlText(closingText.value)}</div>` : ''}
+${statementOfWork.value ? `<div style="margin-bottom:24px"><h4 style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:#64748b;margin-bottom:8px">Statement of Work</h4><p style="font-size:13px;color:#475569;line-height:1.6;white-space:pre-wrap">${htmlText(statementOfWork.value)}</p></div>` : ''}
+<div class="footer"><span>Generated on ${new Date().toLocaleDateString('en-GB', { day:'numeric', month:'long', year:'numeric' })}</span><span>${htmlText(quoteNumber.value)} · ${htmlText(customerName.value)}</span></div>
 </body></html>`
 
   const w = window.open('', '_blank', 'width=900,height=700')
@@ -824,7 +818,7 @@ function exportExcel() {
     '',
     ['', '', '', '', '', '', '', '', '', 'Subtotal', subtotal.value.toFixed(2), '', '', ''].join(sep),
     discountPercent.value > 0 ? ['', '', '', '', '', '', '', '', '', `Discount (${discountPercent.value}%)`, (-discountAmount.value).toFixed(2), '', '', ''].join(sep) : null,
-    ['', '', '', '', '', '', '', '', '', `VAT (${vatPercent}%)`, vatAmount.value.toFixed(2), '', '', ''].join(sep),
+    ['', '', '', '', '', '', '', '', '', `VAT (${vatPercent.value}%)`, vatAmount.value.toFixed(2), '', '', ''].join(sep),
     ['', '', '', '', '', '', '', '', '', 'Grand Total', total.value.toFixed(2), '', '', ''].join(sep),
     '',
     ['', '', '', '', '', '', '', '', '', 'Total Cost', totalCost.value.toFixed(2), '', '', ''].join(sep),
@@ -878,8 +872,15 @@ function exportExcel() {
         </div>
       </div>
       <div class="builder-header-actions">
-        <button class="btn btn-secondary btn-sm" @click="saveDraft"><Save :size="14" /> Save Draft</button>
-        <button class="btn btn-primary btn-sm" @click="submitForApproval"><Send :size="14" /> Submit</button>
+        <button v-if="quoteStatus === 'pending-approval' && canApprove" class="btn btn-sm" :disabled="saving" @click="transition('approve')">Approve</button>
+        <button v-if="quoteStatus === 'pending-approval' && canApprove" class="btn btn-sm" :disabled="saving" @click="transition('reject')">Return to draft</button>
+        <button v-if="quoteStatus === 'approved'" class="btn btn-sm" :disabled="saving" @click="transition('send')">Mark sent</button>
+        <button v-if="quoteStatus === 'sent'" class="btn btn-sm" :disabled="saving" @click="transition('accept')">Mark accepted</button>
+        <button v-if="quoteStatus === 'sent'" class="btn btn-sm" :disabled="saving" @click="transition('decline')">Mark declined</button>
+        <button v-if="quoteStatus === 'accepted' && canApprove" class="btn btn-sm" :disabled="saving" @click="convertToContract">Create contract</button>
+        <button v-if="quoteStatus !== 'draft'" class="btn btn-sm" :disabled="saving" @click="createRevision">New revision</button>
+        <button class="btn btn-secondary btn-sm" @click="saveDraft" :disabled="locked"><Save :size="14" /> Save Draft</button>
+        <button class="btn btn-primary btn-sm" @click="submitForApproval" :disabled="locked"><Send :size="14" /> Submit</button>
       </div>
     </div>
 
@@ -895,17 +896,17 @@ function exportExcel() {
       </div>
       <div class="info-field">
         <label class="info-label">Valid Until</label>
-        <input v-model="validUntil" type="date" class="info-date" />
+        <input :disabled="locked" v-model="validUntil" type="date" class="info-date" />
       </div>
       <div class="info-field">
         <label class="info-label">Payment Terms</label>
-        <select v-model="paymentTerms" class="info-select">
+        <select :disabled="locked" v-model="paymentTerms" class="info-select">
           <option>Net 30</option><option>Net 60</option><option>50% Advance, 50% on Delivery</option><option>100% Advance</option>
         </select>
       </div>
       <div class="info-field">
         <label class="info-label">Delivery</label>
-        <select v-model="deliveryTerms" class="info-select">
+        <select :disabled="locked" v-model="deliveryTerms" class="info-select">
           <option>Ex-Works</option><option>FOB</option><option>CIF</option><option>DDP</option>
         </select>
       </div>
@@ -928,7 +929,7 @@ function exportExcel() {
     <div v-show="builderTab === 'items'" class="builder-content">
       <div class="builder-main">
         <!-- Add Items Panel -->
-        <div class="card add-panel">
+        <div v-if="!locked" class="card add-panel">
           <div class="add-panel-body">
             <!-- Source Tabs + Search -->
             <div class="add-top-row">
@@ -938,10 +939,10 @@ function exportExcel() {
                 </button>
               </div>
               <div class="add-special-btns">
-                <button class="btn btn-ghost btn-sm" @click="addWriteInRow" title="Write-in (external item)"><FileText :size="14" /> Write-in</button>
-                <button class="btn btn-ghost btn-sm" @click="addHeading" title="Section heading"><Hash :size="14" /> Heading</button>
-                <button class="btn btn-ghost btn-sm" @click="addComment" title="Comment line"><MessageSquare :size="14" /> Comment</button>
-                <button class="btn btn-ghost btn-sm" @click="addSubtotalLine" title="Subtotal line"><Minus :size="14" /> Subtotal</button>
+                <button :disabled="locked" class="btn btn-ghost btn-sm" @click="addWriteInRow" title="Write-in (external item)"><FileText :size="14" /> Write-in</button>
+                <button :disabled="locked" class="btn btn-ghost btn-sm" @click="addHeading" title="Section heading"><Hash :size="14" /> Heading</button>
+                <button :disabled="locked" class="btn btn-ghost btn-sm" @click="addComment" title="Comment line"><MessageSquare :size="14" /> Comment</button>
+                <button :disabled="locked" class="btn btn-ghost btn-sm" @click="addSubtotalLine" title="Subtotal line"><Minus :size="14" /> Subtotal</button>
               </div>
             </div>
 
@@ -982,7 +983,7 @@ function exportExcel() {
               <!-- Quick Add -->
               <div class="quick-add">
                 <Zap :size="14" class="quick-icon" />
-                <input v-model="quickAddValue" type="text" class="form-input quick-input" placeholder="SKU, qty  (e.g. HIK-DS2CD2143, 10)" @keydown.enter="handleQuickAdd" />
+                <input :disabled="locked" v-model="quickAddValue" type="text" class="form-input quick-input" placeholder="SKU, qty  (e.g. HIK-DS2CD2143, 10)" @keydown.enter="handleQuickAdd" />
               </div>
             </div>
           </div>
@@ -1034,10 +1035,10 @@ function exportExcel() {
                     <td class="col-grip"><GripVertical :size="14" class="drag-handle" /></td>
                     <td></td>
                     <td colspan="9">
-                      <input v-model="row.headingText" type="text" class="heading-input" placeholder="Section Title..." />
+                      <input :disabled="locked" v-model="row.headingText" type="text" class="heading-input" placeholder="Section Title..." />
                     </td>
                     <td></td>
-                    <td><button class="btn btn-ghost btn-icon btn-sm" @click="removeRow(row.id)"><Trash2 :size="14" /></button></td>
+                    <td><button :disabled="locked" class="btn btn-ghost btn-icon btn-sm" @click="removeRow(row.id)"><Trash2 :size="14" /></button></td>
                   </tr>
 
                   <!-- COMMENT ROW -->
@@ -1045,10 +1046,10 @@ function exportExcel() {
                     <td class="col-grip"><GripVertical :size="14" class="drag-handle" /></td>
                     <td></td>
                     <td colspan="9">
-                      <input v-model="row.commentText" type="text" class="comment-input" placeholder="Add a comment or note..." />
+                      <input :disabled="locked" v-model="row.commentText" type="text" class="comment-input" placeholder="Add a comment or note..." />
                     </td>
                     <td></td>
-                    <td><button class="btn btn-ghost btn-icon btn-sm" @click="removeRow(row.id)"><Trash2 :size="14" /></button></td>
+                    <td><button :disabled="locked" class="btn btn-ghost btn-icon btn-sm" @click="removeRow(row.id)"><Trash2 :size="14" /></button></td>
                   </tr>
 
                   <!-- SUBTOTAL ROW -->
@@ -1061,7 +1062,7 @@ function exportExcel() {
                     <td class="text-right subtotal-value">SAR {{ formatSAR(computeRunningSubtotal(rows.indexOf(row))) }}</td>
                     <td></td>
                     <td></td>
-                    <td><button class="btn btn-ghost btn-icon btn-sm" @click="removeRow(row.id)"><Trash2 :size="14" /></button></td>
+                    <td><button :disabled="locked" class="btn btn-ghost btn-icon btn-sm" @click="removeRow(row.id)"><Trash2 :size="14" /></button></td>
                   </tr>
 
                   <!-- ITEM ROW -->
@@ -1073,7 +1074,7 @@ function exportExcel() {
                     </td>
                     <td>
                       <div class="desc-cell">
-                        <input v-model="row.description" type="text" class="inline-input inline-input--desc" :placeholder="row.source === 'write-in' ? 'Enter item description...' : 'Description'" />
+                        <input :disabled="locked" v-model="row.description" type="text" class="inline-input inline-input--desc" :placeholder="row.source === 'write-in' ? 'Enter item description...' : 'Description'" />
                         <div class="desc-meta">
                           <span v-if="row.sku" class="cell-sku">{{ row.sku }}</span>
                           <span v-if="row.source === 'write-in'" class="cell-writein">Write-in</span>
@@ -1093,20 +1094,20 @@ function exportExcel() {
                       </div>
                     </td>
                     <td class="text-center col-qty">
-                      <input v-model.number="row.quantity" type="number" min="1" class="inline-input inline-input--num" @change="recalcRow(row)" />
+                      <input :disabled="locked" v-model.number="row.quantity" type="number" min="1" class="inline-input inline-input--num" @change="recalcRow(row)" />
                     </td>
                     <td class="text-center col-mult">
-                      <input v-model.number="row.multiplier" type="number" min="1" class="inline-input inline-input--num" @change="recalcRow(row)" />
+                      <input :disabled="locked" v-model.number="row.multiplier" type="number" min="1" class="inline-input inline-input--num" @change="recalcRow(row)" />
                     </td>
                     <td class="text-right col-price">
-                      <input v-model.number="row.unitCost" type="number" step="0.01" min="0" class="inline-input inline-input--price" @change="recalcRow(row)" />
+                      <input :disabled="locked" v-model.number="row.unitCost" type="number" step="0.01" min="0" class="inline-input inline-input--price" @change="recalcRow(row)" />
                     </td>
                     <td class="text-right col-price">
-                      <input v-model.number="row.unitPrice" type="number" step="0.01" min="0" class="inline-input inline-input--price" @change="recalcRow(row)" />
+                      <input :disabled="locked" v-model.number="row.unitPrice" type="number" step="0.01" min="0" class="inline-input inline-input--price" @change="recalcRow(row)" />
                     </td>
                     <td class="text-right col-disc">
                       <div class="disc-wrap">
-                        <input v-model.number="row.discountPercent" type="number" step="0.5" min="0" max="100" class="inline-input inline-input--disc" @change="recalcRow(row)" />
+                        <input :disabled="locked" v-model.number="row.discountPercent" type="number" step="0.5" min="0" max="100" class="inline-input inline-input--disc" @change="recalcRow(row)" />
                         <span class="disc-sym">%</span>
                       </div>
                     </td>
@@ -1115,7 +1116,7 @@ function exportExcel() {
                       <span :class="['font-semibold', marginClass(row.marginPercent)]">{{ row.marginPercent.toFixed(1) }}%</span>
                     </td>
                     <td class="col-opt">
-                      <button class="opt-btn" :class="{ 'opt-btn--active': row.isOptional }" :title="row.isOptional ? 'Mark as required' : 'Mark as optional'" @click="toggleOptional(row)">
+                      <button :disabled="locked" class="opt-btn" :class="{ 'opt-btn--active': row.isOptional }" :title="row.isOptional ? 'Mark as required' : 'Mark as optional'" @click="toggleOptional(row)">
                         <EyeOff v-if="row.isOptional && !row.isSelected" :size="14" />
                         <Eye v-else :size="14" />
                       </button>
@@ -1125,8 +1126,8 @@ function exportExcel() {
                         <button v-if="row.source === 'product' && row.productId" class="btn btn-ghost btn-icon btn-sm price-history-btn" title="Price History / Batches" @click="openPriceHistory(row.productId!, row.id)">
                           <History :size="13" />
                         </button>
-                        <button class="btn btn-ghost btn-icon btn-sm" title="Duplicate" @click="duplicateRow(row)"><Copy :size="13" /></button>
-                        <button class="btn btn-ghost btn-icon btn-sm" title="Remove" @click="removeRow(row.id)"><Trash2 :size="14" /></button>
+                        <button :disabled="locked" class="btn btn-ghost btn-icon btn-sm" title="Duplicate" @click="duplicateRow(row)"><Copy :size="13" /></button>
+                        <button :disabled="locked" class="btn btn-ghost btn-icon btn-sm" title="Remove" @click="removeRow(row.id)"><Trash2 :size="14" /></button>
                       </div>
                     </td>
                   </tr>
@@ -1172,7 +1173,7 @@ function exportExcel() {
                 <div class="disc-label">
                   <span>Discount</span>
                   <div class="disc-input-wrap">
-                    <input v-model.number="discountPercent" type="number" step="0.5" min="0" max="100" class="disc-input" />
+                    <input :disabled="locked" v-model.number="discountPercent" type="number" step="0.5" min="0" max="100" class="disc-input" />
                     <span class="disc-input-sym">%</span>
                   </div>
                 </div>
@@ -1249,8 +1250,8 @@ function exportExcel() {
 
             <!-- Actions -->
             <div class="summary-actions">
-              <button class="btn btn-primary btn-lg summary-action-btn" @click="saveDraft"><Save :size="16" /> Save Draft</button>
-              <button class="btn btn-success summary-action-btn" @click="submitForApproval"><CheckCircle2 :size="16" /> Submit for Approval</button>
+              <button class="btn btn-primary btn-lg summary-action-btn" @click="saveDraft" :disabled="locked"><Save :size="16" /> Save Draft</button>
+              <button class="btn btn-success summary-action-btn" @click="submitForApproval" :disabled="locked"><CheckCircle2 :size="16" /> Submit for Approval</button>
               <div class="summary-secondary">
                 <button class="btn btn-secondary btn-sm" @click="printQuote"><Printer :size="14" /> Print</button>
                 <button class="btn btn-secondary btn-sm" @click="exportExcel"><FileSpreadsheet :size="14" /> Excel</button>
@@ -1272,35 +1273,35 @@ function exportExcel() {
             <div class="form-row">
               <div class="form-group">
                 <label class="form-label">Contact Name</label>
-                <input v-model="soldTo.contactName" type="text" class="form-input" />
+                <input :disabled="locked" v-model="soldTo.contactName" type="text" class="form-input" />
               </div>
               <div class="form-group">
                 <label class="form-label">Company</label>
-                <input v-model="soldTo.company" type="text" class="form-input" />
+                <input :disabled="locked" v-model="soldTo.company" type="text" class="form-input" />
               </div>
             </div>
             <div class="form-group">
               <label class="form-label">Address</label>
-              <input v-model="soldTo.address" type="text" class="form-input" />
+              <input :disabled="locked" v-model="soldTo.address" type="text" class="form-input" />
             </div>
             <div class="form-row">
               <div class="form-group">
                 <label class="form-label">City</label>
-                <input v-model="soldTo.city" type="text" class="form-input" />
+                <input :disabled="locked" v-model="soldTo.city" type="text" class="form-input" />
               </div>
               <div class="form-group">
                 <label class="form-label">Country</label>
-                <input v-model="soldTo.country" type="text" class="form-input" />
+                <input :disabled="locked" v-model="soldTo.country" type="text" class="form-input" />
               </div>
             </div>
             <div class="form-row">
               <div class="form-group">
                 <label class="form-label">Phone</label>
-                <input v-model="soldTo.phone" type="text" class="form-input" />
+                <input :disabled="locked" v-model="soldTo.phone" type="text" class="form-input" />
               </div>
               <div class="form-group">
                 <label class="form-label">Email</label>
-                <input v-model="soldTo.email" type="email" class="form-input" />
+                <input :disabled="locked" v-model="soldTo.email" type="email" class="form-input" />
               </div>
             </div>
           </div>
@@ -1309,41 +1310,41 @@ function exportExcel() {
         <div class="card address-card">
           <div class="address-card-header">
             <h3 class="address-card-title"><MapPin :size="16" /> Ship To</h3>
-            <button class="btn btn-ghost btn-sm" @click="copySoldToShipTo"><Copy :size="14" /> Copy from Sold To</button>
+            <button :disabled="locked" class="btn btn-ghost btn-sm" @click="copySoldToShipTo"><Copy :size="14" /> Copy from Sold To</button>
           </div>
           <div class="address-card-body">
             <div class="form-row">
               <div class="form-group">
                 <label class="form-label">Contact Name</label>
-                <input v-model="shipTo.contactName" type="text" class="form-input" />
+                <input :disabled="locked" v-model="shipTo.contactName" type="text" class="form-input" />
               </div>
               <div class="form-group">
                 <label class="form-label">Company</label>
-                <input v-model="shipTo.company" type="text" class="form-input" />
+                <input :disabled="locked" v-model="shipTo.company" type="text" class="form-input" />
               </div>
             </div>
             <div class="form-group">
               <label class="form-label">Address</label>
-              <input v-model="shipTo.address" type="text" class="form-input" />
+              <input :disabled="locked" v-model="shipTo.address" type="text" class="form-input" />
             </div>
             <div class="form-row">
               <div class="form-group">
                 <label class="form-label">City</label>
-                <input v-model="shipTo.city" type="text" class="form-input" />
+                <input :disabled="locked" v-model="shipTo.city" type="text" class="form-input" />
               </div>
               <div class="form-group">
                 <label class="form-label">Country</label>
-                <input v-model="shipTo.country" type="text" class="form-input" />
+                <input :disabled="locked" v-model="shipTo.country" type="text" class="form-input" />
               </div>
             </div>
             <div class="form-row">
               <div class="form-group">
                 <label class="form-label">Phone</label>
-                <input v-model="shipTo.phone" type="text" class="form-input" />
+                <input :disabled="locked" v-model="shipTo.phone" type="text" class="form-input" />
               </div>
               <div class="form-group">
                 <label class="form-label">Email</label>
-                <input v-model="shipTo.email" type="email" class="form-input" />
+                <input :disabled="locked" v-model="shipTo.email" type="email" class="form-input" />
               </div>
             </div>
           </div>
@@ -1360,7 +1361,7 @@ function exportExcel() {
             <span class="notes-hint">Printed before the quote body</span>
           </div>
           <div class="notes-card-body">
-            <textarea v-model="introductionText" class="form-input notes-textarea" rows="4" placeholder="Opening text for your quotation..." />
+            <textarea :disabled="locked" v-model="introductionText" class="form-input notes-textarea" rows="4" placeholder="Opening text for your quotation..." />
           </div>
         </div>
 
@@ -1370,7 +1371,7 @@ function exportExcel() {
             <span class="notes-hint">Detailed scope description</span>
           </div>
           <div class="notes-card-body">
-            <textarea v-model="statementOfWork" class="form-input notes-textarea notes-textarea--lg" rows="8" placeholder="Describe the scope of work, deliverables, timeline, and acceptance criteria..." />
+            <textarea :disabled="locked" v-model="statementOfWork" class="form-input notes-textarea notes-textarea--lg" rows="8" placeholder="Describe the scope of work, deliverables, timeline, and acceptance criteria..." />
           </div>
         </div>
 
@@ -1380,7 +1381,7 @@ function exportExcel() {
             <span class="notes-hint">Printed after the quote body</span>
           </div>
           <div class="notes-card-body">
-            <textarea v-model="closingText" class="form-input notes-textarea" rows="4" placeholder="Closing remarks, terms, or next steps..." />
+            <textarea :disabled="locked" v-model="closingText" class="form-input notes-textarea" rows="4" placeholder="Closing remarks, terms, or next steps..." />
           </div>
         </div>
 
@@ -1390,7 +1391,7 @@ function exportExcel() {
             <span class="notes-hint notes-hint--private">Private — not printed</span>
           </div>
           <div class="notes-card-body">
-            <textarea v-model="internalNotes" class="form-input notes-textarea" rows="4" placeholder="Internal notes for your team..." />
+            <textarea :disabled="locked" v-model="internalNotes" class="form-input notes-textarea" rows="4" placeholder="Internal notes for your team..." />
           </div>
         </div>
 
@@ -1400,7 +1401,7 @@ function exportExcel() {
             <span class="notes-hint">Used in PO workflow</span>
           </div>
           <div class="notes-card-body">
-            <textarea v-model="purchasingNotes" class="form-input notes-textarea" rows="3" placeholder="Notes for procurement team..." />
+            <textarea :disabled="locked" v-model="purchasingNotes" class="form-input notes-textarea" rows="3" placeholder="Notes for procurement team..." />
           </div>
         </div>
       </div>
@@ -1522,7 +1523,7 @@ function exportExcel() {
             <div class="ph-filters">
               <div class="ph-filter-group">
                 <label class="ph-filter-label">Source</label>
-                <select v-model="priceHistoryFilterSource" class="form-select form-select--sm">
+                <select :disabled="locked" v-model="priceHistoryFilterSource" class="form-select form-select--sm">
                   <option value="">All Sources</option>
                   <option v-for="src in priceHistorySources" :key="src" :value="src">{{ src }}</option>
                 </select>
@@ -1596,7 +1597,7 @@ function exportExcel() {
                       <span v-else class="text-muted">—</span>
                     </td>
                     <td class="text-center">
-                      <button class="btn btn-primary btn-sm ph-apply-btn" title="Apply this price" @click="applyPriceFromHistory(entry)">
+                      <button :disabled="locked" class="btn btn-primary btn-sm ph-apply-btn" title="Apply this price" @click="applyPriceFromHistory(entry)">
                         <Check :size="13" /> Use
                       </button>
                     </td>
@@ -1612,7 +1613,7 @@ function exportExcel() {
             </div>
             <div class="ph-footer-right">
               <button class="btn btn-secondary" @click="showPriceHistoryModal = false">Cancel</button>
-              <button v-if="!priceHistoryTargetRowId" class="btn btn-primary" @click="addWithDefaultPrice">
+              <button :disabled="locked" v-if="!priceHistoryTargetRowId" class="btn btn-primary" @click="addWithDefaultPrice">
                 <Plus :size="16" /> Add with Default Price
               </button>
             </div>

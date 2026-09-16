@@ -12,9 +12,9 @@ type ReservationStatus string
 type MovementType string
 
 const (
-	WarehouseRiyadh  WarehouseLocation = "riyadh-main"
-	WarehouseJeddah  WarehouseLocation = "jeddah-branch"
-	WarehouseDammam  WarehouseLocation = "dammam-branch"
+	WarehouseRiyadh WarehouseLocation = "riyadh-main"
+	WarehouseJeddah WarehouseLocation = "jeddah-branch"
+	WarehouseDammam WarehouseLocation = "dammam-branch"
 
 	ReservationSourceQuote   ReservationSource = "quote"
 	ReservationSourceProject ReservationSource = "project"
@@ -72,16 +72,16 @@ type StockReservation struct {
 
 type InventoryMovement struct {
 	Base
-	ProductID         uuid.UUID          `gorm:"type:uuid;not null;index" json:"productId"`
-	Product           *Product           `gorm:"foreignKey:ProductID" json:"product,omitempty"`
-	MovementType      MovementType       `gorm:"not null" json:"movementType"`
-	Qty               int                `gorm:"not null" json:"qty"`
-	FromWarehouse     *WarehouseLocation `json:"fromWarehouse,omitempty"`
-	ToWarehouse       *WarehouseLocation `json:"toWarehouse,omitempty"`
-	Reference         string             `json:"reference"`
-	Reason            string             `json:"reason"`
-	PerformedByID     *uuid.UUID         `gorm:"type:uuid" json:"performedById,omitempty"`
-	PerformedBy       *User              `gorm:"foreignKey:PerformedByID" json:"performedBy,omitempty"`
-	PerformedAt       time.Time          `json:"performedAt"`
-	Notes             string             `json:"notes"`
+	ProductID     uuid.UUID          `gorm:"type:uuid;not null;index" json:"productId"`
+	Product       *Product           `gorm:"foreignKey:ProductID" json:"product,omitempty"`
+	MovementType  MovementType       `gorm:"not null" json:"movementType"`
+	Qty           int                `gorm:"not null" json:"qty"`
+	FromWarehouse *WarehouseLocation `json:"fromWarehouse,omitempty"`
+	ToWarehouse   *WarehouseLocation `json:"toWarehouse,omitempty"`
+	Reference     string             `json:"reference"`
+	Reason        string             `json:"reason"`
+	PerformedByID *uuid.UUID         `gorm:"type:uuid" json:"performedById,omitempty"`
+	PerformedBy   *User              `gorm:"foreignKey:PerformedByID" json:"performedBy,omitempty"`
+	PerformedAt   time.Time          `json:"performedAt"`
+	Notes         string             `json:"notes"`
 }

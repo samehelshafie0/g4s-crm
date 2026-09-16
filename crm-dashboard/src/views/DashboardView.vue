@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import {
   DollarSign,
   Target,
@@ -23,8 +23,19 @@ import {
 } from 'lucide-vue-next'
 import { useDashboardStore } from '@/stores/dashboard'
 
+import { dashboardService } from '@/services'
+import type { Activity as ApiActivity } from '@/services/workflowDtos'
+import { useRouter } from 'vue-router'
+const router = useRouter()
 const dashStore = useDashboardStore()
-onMounted(() => dashStore.fetchAll())
+onMounted(async () => {
+ await dashStore.fetchAll()
+ try { const [recent, expiring, reps] = await Promise.all([dashboardService.recentQuotes(), dashboardService.expiringQuotes(), dashboardService.salesPerformance()])
+ recentQuotes.value = recent.data.map(q => ({number:q.quoteNumber,customer:q.customerName,status:q.status,total:q.total,margin:q.marginPercent,date:q.createdAt,currency:q.currency}))
+ expiringQuotes.value = expiring.data.map(q => ({number:q.quoteNumber,customer:q.customerName,total:q.total,expiresIn:Math.ceil((new Date(q.validUntil).getTime()-Date.now())/86400000)}))
+ salesReps.value = reps.data
+ } catch (error) { dashStore.error = 'Some dashboard data could not be loaded' }
+})
 
 interface KpiCard {
   label: string
@@ -72,9 +83,9 @@ const kpiCards = computed<KpiCard[]>(() => {
   const k = dashStore.kpis as Record<string, { value?: number; totalValue?: number; expiringIn30Days?: number }> | undefined
   return [
     {
-      label: 'Total Revenue',
+      label: 'Accepted Quote Value',
       value: k?.totalRevenue ? formatCurrency(k.totalRevenue.value ?? 0) : 'SAR —',
-      subtitle: 'From accepted quotes',
+      subtitle: 'Accepted quotes in SAR',
       change: 0,
       icon: DollarSign,
       iconBg: 'var(--color-success-light)',
@@ -141,13 +152,7 @@ function formatCurrency(value: number): string {
   return `SAR ${value.toLocaleString()}`
 }
 
-const recentQuotes: Quote[] = [
-  { number: 'QT-2026-0147', customer: 'Saudi Aramco', status: 'sent', total: 485_000, margin: 32, date: '2026-02-21' },
-  { number: 'QT-2026-0146', customer: 'SABIC', status: 'accepted', total: 1_230_000, margin: 28, date: '2026-02-20' },
-  { number: 'QT-2026-0145', customer: 'Riyadh Municipality', status: 'pending-approval', total: 320_000, margin: 35, date: '2026-02-19' },
-  { number: 'QT-2026-0144', customer: 'King Fahd Medical City', status: 'draft', total: 178_500, margin: 41, date: '2026-02-18' },
-  { number: 'QT-2026-0143', customer: 'NEOM', status: 'declined', total: 2_100_000, margin: 22, date: '2026-02-17' },
-]
+const recentQuotes = ref<Quote[]>([])
 
 const statusConfig: Record<Quote['status'], { label: string; class: string }> = {
   draft: { label: 'Draft', class: 'badge-neutral' },
@@ -171,62 +176,7 @@ function formatDate(dateStr: string): string {
   })
 }
 
-const activities: Activity[] = [
-  {
-    id: 1,
-    icon: CheckCircle2,
-    iconBg: 'var(--color-success-light)',
-    iconColor: 'var(--color-success)',
-    description: 'Closed deal with Saudi Aramco — CCTV upgrade for Eastern Province facilities',
-    timestamp: '25 min ago',
-    user: 'Khalid Al-Rashid',
-  },
-  {
-    id: 2,
-    icon: Send,
-    iconBg: 'var(--color-primary-light)',
-    iconColor: 'var(--color-primary)',
-    description: 'Sent quotation QT-2026-0147 to Saudi Aramco for access control system',
-    timestamp: '1 hour ago',
-    user: 'Noura Al-Dosari',
-  },
-  {
-    id: 3,
-    icon: FilePlus,
-    iconBg: 'var(--color-warning-light)',
-    iconColor: 'var(--color-warning)',
-    description: 'Created new opportunity: Riyadh Municipality — perimeter security',
-    timestamp: '2 hours ago',
-    user: 'Ahmed bin Saleh',
-  },
-  {
-    id: 4,
-    icon: Handshake,
-    iconBg: 'var(--color-success-light)',
-    iconColor: 'var(--color-success)',
-    description: 'Contract CON-2026-089 signed with SABIC for annual maintenance',
-    timestamp: '4 hours ago',
-    user: 'Khalid Al-Rashid',
-  },
-  {
-    id: 5,
-    icon: PhoneCall,
-    iconBg: 'var(--color-neutral-100)',
-    iconColor: 'var(--color-neutral-600)',
-    description: 'Follow-up call with NEOM project manager regarding proposal revisions',
-    timestamp: '5 hours ago',
-    user: 'Noura Al-Dosari',
-  },
-  {
-    id: 6,
-    icon: CalendarCheck,
-    iconBg: 'var(--color-primary-light)',
-    iconColor: 'var(--color-primary)',
-    description: 'Scheduled site survey at King Fahd Medical City for intrusion detection',
-    timestamp: 'Yesterday',
-    user: 'Ahmed bin Saleh',
-  },
-]
+const activities = computed(() => (dashStore.recentActivity as ApiActivity[]).map(a => ({id:a.id,icon:FilePlus,iconBg:'var(--color-primary-light)',iconColor:'var(--color-primary)',description:a.description,timestamp:new Date(a.createdAt).toLocaleString(),user:a.user ? `${a.user.firstName} ${a.user.lastName}` : 'System'})))
 
 const topCustomers = computed<TopCustomer[]>(() => {
   const raw = dashStore.topCustomers as Array<{
@@ -253,11 +203,7 @@ interface ExpiringQuote {
   expiresIn: number
 }
 
-const expiringQuotes: ExpiringQuote[] = [
-  { number: 'QT-2026-0147', customer: 'Saudi Aramco', total: 485_000, expiresIn: 2 },
-  { number: 'QT-2026-0144', customer: 'King Faisal Specialist Hospital', total: 178_500, expiresIn: 5 },
-  { number: 'QT-2026-0143', customer: 'NEOM', total: 2_100_000, expiresIn: 7 },
-]
+const expiringQuotes = ref<ExpiringQuote[]>([])
 
 function urgencyClass(days: number): string {
   if (days <= 2) return 'urgency-critical'
@@ -274,15 +220,10 @@ interface SalesRep {
   winRate: number
 }
 
-const salesReps: SalesRep[] = [
-  { name: 'Khalid Al-Rashid', quotesCreated: 12, quotesWon: 8, revenue: 1_850_000, winRate: 67 },
-  { name: 'Noura Al-Dosari', quotesCreated: 9, quotesWon: 5, revenue: 1_220_000, winRate: 56 },
-  { name: 'Ahmed bin Saleh', quotesCreated: 7, quotesWon: 4, revenue: 680_000, winRate: 57 },
-  { name: 'Fatima Al-Harbi', quotesCreated: 6, quotesWon: 2, revenue: 340_000, winRate: 33 },
-]
+const salesReps = ref<SalesRep[]>([])
 
 const maxRepRevenue = computed(() =>
-  Math.max(...salesReps.map((r) => r.revenue), 1),
+  Math.max(...salesReps.value.map((r) => r.revenue), 1),
 )
 </script>
 
@@ -313,11 +254,7 @@ const maxRepRevenue = computed(() =>
             <component :is="card.icon" :size="22" />
           </div>
         </div>
-        <div class="kpi-change" :class="card.change >= 0 ? 'positive' : 'negative'">
-          <TrendingUp v-if="card.change >= 0" :size="14" />
-          <TrendingDown v-else :size="14" />
-          <span>{{ Math.abs(card.change) }}% vs last quarter</span>
-        </div>
+
       </div>
     </div>
 
@@ -387,7 +324,7 @@ const maxRepRevenue = computed(() =>
         <div class="card">
           <div class="card-header">
             <h3 class="card-title">Recent Quotes</h3>
-            <button class="btn btn-ghost btn-sm">
+            <button class="btn btn-ghost btn-sm" @click="router.push('/quotes')">
               View All
               <ArrowUpRight :size="14" />
             </button>
@@ -472,7 +409,7 @@ const maxRepRevenue = computed(() =>
               <BarChart3 :size="16" />
               Sales Rep Performance
             </h3>
-            <span class="card-header-meta">This quarter</span>
+            <span class="card-header-meta">This quarter · SAR revenue</span>
           </div>
           <div class="card-body">
             <div class="rep-list">
@@ -503,7 +440,7 @@ const maxRepRevenue = computed(() =>
         <div class="card">
           <div class="card-header">
             <h3 class="card-title">Top Customers</h3>
-            <span class="card-header-meta">By opportunity value</span>
+            <span class="card-header-meta">By accepted quote value (SAR)</span>
           </div>
           <div class="card-body">
             <div class="top-customers">

@@ -3,6 +3,7 @@ import { toPurchaseOrder, toSupplierQuote, toGoodsReceipt } from '@/services/pro
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { procurementService } from '@/services'
+import { allPages } from '@/services/collections'
 
 export const useProcurementStore = defineStore('procurement', () => {
   const purchaseOrders = ref<PurchaseOrder[]>([])
@@ -36,24 +37,21 @@ export const useProcurementStore = defineStore('procurement', () => {
   async function fetchPurchaseOrders(params?: Record<string, unknown>) {
     loading.value = true
     try {
-      const res = await procurementService.listPOs(params)
-      if (res.success) purchaseOrders.value = res.data.map(toPurchaseOrder)
-    } catch (e) { error.value = 'Failed to load POs'; console.error(e) }
+      purchaseOrders.value = (await allPages(procurementService.listPOs, params)).map(toPurchaseOrder)
+    } catch (e) { error.value = 'Failed to load POs'; throw e }
     finally { loading.value = false }
   }
 
   async function fetchSupplierQuotes(params?: Record<string, unknown>) {
     try {
-      const res = await procurementService.listSQs(params)
-      if (res.success) supplierQuotes.value = res.data.map(toSupplierQuote)
-    } catch (e) { console.error(e) }
+      supplierQuotes.value = (await allPages(procurementService.listSQs, params)).map(toSupplierQuote)
+    } catch (e) { throw e }
   }
 
   async function fetchGoodsReceipts(params?: Record<string, unknown>) {
     try {
-      const res = await procurementService.listGRs(params)
-      if (res.success) goodsReceipts.value = res.data.map(toGoodsReceipt)
-    } catch (e) { console.error(e) }
+      goodsReceipts.value = (await allPages(procurementService.listGRs, params)).map(toGoodsReceipt)
+    } catch (e) { throw e }
   }
 
   async function addPurchaseOrder(data: any) {
@@ -91,10 +89,6 @@ export const useProcurementStore = defineStore('procurement', () => {
     return supplierItems.value.filter((si) => si.productSku === productSku)
   }
 
-  function generatePoNumber(): string {
-    const count = purchaseOrders.value.length + 1
-    return `PO-${new Date().getFullYear()}-${String(count).padStart(4, '0')}`
-  }
 
   function getBestSupplierPrice(productSku: string): { cost: number; supplierName: string } | null {
     const quotes = getSupplierQuotesForProduct(productSku)
@@ -108,13 +102,9 @@ export const useProcurementStore = defineStore('procurement', () => {
     return best
   }
 
-  function generateSqNumber(): string {
-    const count = supplierQuotes.value.length + 1
-    return `SQ-${new Date().getFullYear()}-${String(count).padStart(4, '0')}`
-  }
 
   async function updatePurchaseOrder(id: string, data: any) {
-    const res = await procurementService.createPO({ ...data, id })
+    const res = await procurementService.updatePO(id, data)
     if (res.success) {
       const idx = purchaseOrders.value.findIndex((p) => p.id === id)
       if (idx !== -1) purchaseOrders.value[idx] = toPurchaseOrder(res.data)
@@ -122,11 +112,12 @@ export const useProcurementStore = defineStore('procurement', () => {
   }
 
   async function deletePurchaseOrder(id: string) {
+    await procurementService.deletePO(id)
     purchaseOrders.value = purchaseOrders.value.filter((p) => p.id !== id)
   }
 
   async function updateSupplierQuote(id: string, data: any) {
-    const res = await procurementService.createSQ({ ...data, id })
+    const res = await procurementService.updateSQ(id, data)
     if (res.success) {
       const idx = supplierQuotes.value.findIndex((s) => s.id === id)
       if (idx !== -1) supplierQuotes.value[idx] = toSupplierQuote(res.data)
@@ -134,6 +125,7 @@ export const useProcurementStore = defineStore('procurement', () => {
   }
 
   async function deleteSupplierQuote(id: string) {
+    await procurementService.deleteSQ(id)
     supplierQuotes.value = supplierQuotes.value.filter((s) => s.id !== id)
   }
 
@@ -161,8 +153,6 @@ export const useProcurementStore = defineStore('procurement', () => {
     getSupplierQuotesForProduct,
     getReceiptHistoryForProduct,
     getSupplierItemsForProduct,
-    generatePoNumber,
-    generateSqNumber,
     getBestSupplierPrice,
     updatePurchaseOrder,
     deletePurchaseOrder,

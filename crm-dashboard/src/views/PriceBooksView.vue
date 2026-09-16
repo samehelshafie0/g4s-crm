@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref, computed, watch } from 'vue'
+import { onMounted, ref, computed, watch, reactive } from 'vue'
 import {
   Plus,
   Search,
@@ -28,8 +28,18 @@ function formatSAR(v: number): string {
   return v.toLocaleString('en-SA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
+import { priceBooksService, customersService, http } from '@/services'
+import type { ApiResponse } from '@/services/http'
+import { allPages } from '@/services/collections'
+import { errorMessage } from '@/services/payload'
+
 const priceBookStore = usePriceBooksStore()
-onMounted(() => priceBookStore.fetchPriceBooks())
+async function reloadBooks() { priceBooks.value = (await allPages(priceBooksService.list)).map(book => ({...book, validFrom:book.validFrom?.slice(0,10) ?? '', validTo:book.validTo?.slice(0,10) ?? '', entries:book.entries.map(entry => ({...entry,kind:entry.kind ?? 'product'}))})) }
+onMounted(async () => { try {
+ await reloadBooks(); customers.value = (await allPages(customersService.list)).map(c => ({id:c.id,name:c.companyName}))
+ const catalog = (await http.get<ApiResponse<{products:{id:string;sku:string;name:string;manufacturer:string;unitPrice:number}[];services:{id:string;sku:string;name:string;unitPrice:number}[];recurring:{id:string;sku:string;name:string;monthlyPrice:number}[]}>>('/catalog')).data.data
+ catalogItems.push(...catalog.products.map(p => ({...p,kind:'product' as const,standardPrice:p.unitPrice})),...catalog.services.map(p => ({...p,kind:'service' as const,standardPrice:p.unitPrice})),...catalog.recurring.map(p => ({...p,kind:'recurring' as const,standardPrice:p.monthlyPrice})))
+ } catch (e) { window.alert(errorMessage(e)) } })
 
 const typeLabels: Record<PriceBookType, string> = {
   standard: 'Standard',
@@ -59,51 +69,14 @@ interface CatalogItem {
   standardPrice: number
 }
 
-const catalogItems: CatalogItem[] = [
-  // Products
-  { id: 'p1', sku: 'HIK-DS2CD2143', name: 'DS-2CD2143G2-IU 4MP Dome', kind: 'product', manufacturer: 'Hikvision', standardPrice: 522.32 },
-  { id: 'p2', sku: 'HIK-DS2CD2T87', name: 'DS-2CD2T87G2-L 8MP Bullet', kind: 'product', manufacturer: 'Hikvision', standardPrice: 1198.66 },
-  { id: 'p3', sku: 'HIK-DS7732NI', name: 'DS-7732NI-K4 32CH NVR', kind: 'product', manufacturer: 'Hikvision', standardPrice: 2436.00 },
-  { id: 'p4', sku: 'DH-IPC-HFW5442', name: 'IPC-HFW5442T-ASE 4MP AI Bullet', kind: 'product', manufacturer: 'Dahua', standardPrice: 676.34 },
-  { id: 'p5', sku: 'DH-NVR5432-EI', name: 'NVR5432-EI 32CH AI NVR', kind: 'product', manufacturer: 'Dahua', standardPrice: 4960.00 },
-  { id: 'p6', sku: 'AXIS-P3265LVE', name: 'P3265-LVE 2MP Dome', kind: 'product', manufacturer: 'Axis', standardPrice: 2656.00 },
-  { id: 'p7', sku: 'AXIS-Q6135LE', name: 'Q6135-LE PTZ Camera', kind: 'product', manufacturer: 'Axis', standardPrice: 24600.00 },
-  { id: 'p8', sku: 'HON-MAXPRO', name: 'MAXPRO Access 4-Door', kind: 'product', manufacturer: 'Honeywell', standardPrice: 2800.00 },
-  { id: 'p9', sku: 'HON-MNPDS2', name: 'Morley-IAS Fire Panel 2L', kind: 'product', manufacturer: 'Honeywell', standardPrice: 6510.00 },
-  { id: 'p10', sku: 'ZKT-SPEEDFACE', name: 'SpeedFace-V5L Facial Terminal', kind: 'product', manufacturer: 'ZKTeco', standardPrice: 2917.42 },
-  { id: 'p11', sku: 'ZKT-INBIO460', name: 'InBio460 4-Door Controller', kind: 'product', manufacturer: 'ZKTeco', standardPrice: 1320.00 },
-  { id: 'p12', sku: 'BOSCH-FPA5000', name: 'FPA-5000 Fire Panel', kind: 'product', manufacturer: 'Bosch', standardPrice: 10693.55 },
-  { id: 'p13', sku: 'BOSCH-NDV3503', name: 'FLEXIDOME IP 3000i 5MP', kind: 'product', manufacturer: 'Bosch', standardPrice: 1660.00 },
-  { id: 'p14', sku: 'CBL-CAT6A-305', name: 'Cat6A UTP Cable 305m Box', kind: 'product', manufacturer: 'Belden', standardPrice: 580.00 },
-  // Services (manpower)
-  { id: 's1', sku: 'SVC-INSTALL-SR', name: 'Senior Installation Engineer (per day)', kind: 'service', standardPrice: 1200.00 },
-  { id: 's2', sku: 'SVC-INSTALL-JR', name: 'Technician (per day)', kind: 'service', standardPrice: 700.00 },
-  { id: 's3', sku: 'SVC-PM-MONTH', name: 'Project Manager (per month)', kind: 'service', standardPrice: 18000.00 },
-  { id: 's4', sku: 'SVC-AC-SPEC', name: 'Access Control Specialist (per day)', kind: 'service', standardPrice: 1350.00 },
-  { id: 's5', sku: 'SVC-DESIGN', name: 'System Design & Engineering', kind: 'service', standardPrice: 8500.00 },
-  // Recurring services
-  { id: 'r1', sku: 'REC-GUARD-24', name: 'Security Guard Service (24/7 per month)', kind: 'recurring', standardPrice: 12000.00 },
-  { id: 'r2', sku: 'REC-MAINT-STD', name: 'System Maintenance (monthly)', kind: 'recurring', standardPrice: 3500.00 },
-  { id: 'r3', sku: 'REC-MON-247', name: '24/7 Remote Monitoring (monthly)', kind: 'recurring', standardPrice: 5000.00 },
-  { id: 'r4', sku: 'REC-PATROL', name: 'Mobile Patrol Service (monthly)', kind: 'recurring', standardPrice: 8000.00 },
-  { id: 'r5', sku: 'REC-FM', name: 'Facility Management (monthly)', kind: 'recurring', standardPrice: 15000.00 },
-  { id: 'r6', sku: 'REC-ALARM', name: 'Alarm Response Service (monthly)', kind: 'recurring', standardPrice: 2500.00 },
-]
+const catalogItems = reactive<CatalogItem[]>([])
 
 const kindIcons = { product: Package, service: Users, recurring: RefreshCw } as const
 const kindLabels: Record<CatalogItemKind, string> = { product: 'Product', service: 'Service', recurring: 'Recurring' }
 const kindBadge: Record<CatalogItemKind, string> = { product: 'badge-primary', service: 'badge-warning', recurring: 'badge-success' }
 
-// ── Mock customers ──────────────────────────────────────────
-const mockCustomers = [
-  { id: 'c1', name: 'Saudi Aramco' },
-  { id: 'c2', name: 'SABIC' },
-  { id: 'c3', name: 'NEOM' },
-  { id: 'c4', name: 'STC' },
-  { id: 'c5', name: 'Ministry of Interior' },
-  { id: 'c6', name: 'King Faisal Specialist Hospital' },
-  { id: 'c7', name: 'Al Rajhi Bank' },
-]
+// ── Customer directory ──────────────────────────────────────────
+const customers = ref<{id:string;name:string}[]>([])
 
 // ── Extended entry type (adds kind) ─────────────────────────
 interface PBEntry extends PriceBookEntry {
@@ -111,42 +84,7 @@ interface PBEntry extends PriceBookEntry {
 }
 
 // ── Price Book Data ─────────────────────────────────────────
-const priceBooks = ref<(Omit<PriceBook, 'entries'> & { entries: PBEntry[] })[]>([
-  {
-    id: 'pb1', name: 'Standard Price List 2026', type: 'standard', description: 'Default pricing for all products and services',
-    validFrom: '2026-01-01', validTo: '2026-12-31', isActive: true, createdAt: '2025-12-15T08:00:00Z', updatedAt: '2026-01-02T08:00:00Z',
-    entries: [
-      { id: 'e1', productId: 'p1', productSku: 'HIK-DS2CD2143', productName: 'DS-2CD2143G2-IU 4MP Dome', standardPrice: 522.32, customPrice: 522.32, discountPercent: 0, kind: 'product' },
-      { id: 'e2', productId: 'p2', productSku: 'HIK-DS2CD2T87', productName: 'DS-2CD2T87G2-L 8MP Bullet', standardPrice: 1198.66, customPrice: 1198.66, discountPercent: 0, kind: 'product' },
-      { id: 'e3', productId: 'p3', productSku: 'HIK-DS7732NI', productName: 'DS-7732NI-K4 32CH NVR', standardPrice: 2436.00, customPrice: 2436.00, discountPercent: 0, kind: 'product' },
-      { id: 'e4', productId: 'p6', productSku: 'AXIS-P3265LVE', productName: 'P3265-LVE 2MP Dome', standardPrice: 2656.00, customPrice: 2656.00, discountPercent: 0, kind: 'product' },
-      { id: 'e5', productId: 's1', productSku: 'SVC-INSTALL-SR', productName: 'Senior Installation Engineer (per day)', standardPrice: 1200.00, customPrice: 1200.00, discountPercent: 0, kind: 'service' },
-      { id: 'e6', productId: 'r2', productSku: 'REC-MAINT-STD', productName: 'System Maintenance (monthly)', standardPrice: 3500.00, customPrice: 3500.00, discountPercent: 0, kind: 'recurring' },
-    ],
-  },
-  {
-    id: 'pb2', name: 'Aramco Volume Discount', type: 'volume', description: 'Volume-based pricing for Saudi Aramco bulk orders',
-    customerId: 'c1', customerName: 'Saudi Aramco', validFrom: '2026-01-01', validTo: '2026-06-30', isActive: true,
-    createdAt: '2025-12-20T08:00:00Z', updatedAt: '2026-01-10T08:00:00Z',
-    entries: [
-      { id: 'e7', productId: 'p1', productSku: 'HIK-DS2CD2143', productName: 'DS-2CD2143G2-IU 4MP Dome', standardPrice: 522.32, customPrice: 469.09, discountPercent: 10.19, kind: 'product' },
-      { id: 'e8', productId: 'p2', productSku: 'HIK-DS2CD2T87', productName: 'DS-2CD2T87G2-L 8MP Bullet', standardPrice: 1198.66, customPrice: 1018.86, discountPercent: 15.0, kind: 'product' },
-      { id: 'e9', productId: 'p4', productSku: 'DH-IPC-HFW5442', productName: 'IPC-HFW5442T-ASE 4MP AI Bullet', standardPrice: 676.34, customPrice: 608.71, discountPercent: 10.0, kind: 'product' },
-      { id: 'e10', productId: 'r1', productSku: 'REC-GUARD-24', productName: 'Security Guard Service (24/7 per month)', standardPrice: 12000.00, customPrice: 10200.00, discountPercent: 15.0, kind: 'recurring' },
-    ],
-  },
-  {
-    id: 'pb3', name: 'Q1 2026 Promo', type: 'promotional', description: 'First quarter promotional pricing on Bosch & Honeywell',
-    validFrom: '2026-01-01', validTo: '2026-03-31', isActive: true,
-    createdAt: '2025-12-28T08:00:00Z', updatedAt: '2026-01-05T08:00:00Z',
-    entries: [
-      { id: 'e11', productId: 'p8', productSku: 'HON-MAXPRO', productName: 'MAXPRO Access 4-Door', standardPrice: 2800.00, customPrice: 2380.00, discountPercent: 15.0, kind: 'product' },
-      { id: 'e12', productId: 'p12', productSku: 'BOSCH-FPA5000', productName: 'FPA-5000 Fire Panel', standardPrice: 10693.55, customPrice: 8554.84, discountPercent: 20.0, kind: 'product' },
-      { id: 'e13', productId: 's3', productSku: 'SVC-PM-MONTH', productName: 'Project Manager (per month)', standardPrice: 18000.00, customPrice: 15300.00, discountPercent: 15.0, kind: 'service' },
-    ],
-  },
-])
-
+const priceBooks = ref<(Omit<PriceBook, 'entries'> & { entries: PBEntry[] })[]>([])
 // ── View Mode: list vs builder ──────────────────────────────
 const mode = ref<'list' | 'builder'>('list')
 const activeBook = ref<(Omit<PriceBook, 'entries'> & { entries: PBEntry[] }) | null>(null)
@@ -256,7 +194,7 @@ function openBuilder(book: Omit<PriceBook, 'entries'> & { entries: PBEntry[] }) 
 
 function createNewBook() {
   activeBook.value = {
-    id: uid(), name: '', type: 'standard', description: '',
+    id: '', name: '', type: 'standard', description: '',
     validFrom: new Date().toISOString().slice(0, 10),
     validTo: new Date(Date.now() + 365 * 86400000).toISOString().slice(0, 10),
     isActive: true, entries: [],
@@ -274,22 +212,23 @@ function goBack() {
   activeBook.value = null
 }
 
-function saveBook() {
-  if (!activeBook.value || !activeBook.value.name) return
-  activeBook.value.updatedAt = new Date().toISOString()
-  const idx = priceBooks.value.findIndex(b => b.id === activeBook.value!.id)
-  if (idx !== -1) {
-    priceBooks.value[idx] = JSON.parse(JSON.stringify(activeBook.value))
-  } else {
-    priceBooks.value.push(JSON.parse(JSON.stringify(activeBook.value)))
-  }
-  saveMessage.value = 'Price book saved'
-  window.setTimeout(() => { saveMessage.value = '' }, 2500)
+const saving = ref(false)
+async function saveBook() {
+ if (!activeBook.value?.name || saving.value) return
+ saving.value = true
+ try {
+  const book = activeBook.value
+  const result = book.id ? await priceBooksService.update(book.id, book) : await priceBooksService.create(book)
+  book.id = result.data.id
+  const saved = await priceBooksService.replaceEntries(book.id, book.entries)
+  activeBook.value = { ...saved.data, validFrom:saved.data.validFrom?.slice(0,10) ?? '',validTo:saved.data.validTo?.slice(0,10) ?? '',entries:saved.data.entries.map(entry => ({...entry,kind:entry.kind ?? 'product'})) }
+  await reloadBooks(); saveMessage.value = 'Price book saved'; window.setTimeout(() => {saveMessage.value=''},2500)
+ } catch (e) { window.alert(errorMessage(e)) } finally { saving.value=false }
 }
 
 function onCustomerChange() {
   if (!activeBook.value) return
-  const c = mockCustomers.find(c => c.id === activeBook.value!.customerId)
+  const c = customers.value.find(c => c.id === activeBook.value!.customerId)
   if (c) activeBook.value.customerName = c.name
 }
 
@@ -401,7 +340,7 @@ watch(searchQuery, (val) => {
           <label class="info-label">Customer</label>
           <select v-model="activeBook.customerId" class="form-select info-select" @change="onCustomerChange">
             <option value="">None (General)</option>
-            <option v-for="c in mockCustomers" :key="c.id" :value="c.id">{{ c.name }}</option>
+            <option v-for="c in customers" :key="c.id" :value="c.id">{{ c.name }}</option>
           </select>
         </div>
         <div class="info-field">

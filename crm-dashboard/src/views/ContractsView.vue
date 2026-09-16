@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { contractsService, customersService } from '@/services'
+import { allPages } from '@/services/collections'
+import { errorMessage } from '@/services/payload'
 import { onMounted, ref, computed } from 'vue'
 import {
   Plus,
@@ -33,7 +36,7 @@ function formatDate(d: string): string {
 }
 
 const contractStore = useContractsStore()
-onMounted(() => contractStore.fetchContracts())
+onMounted(async () => { try { const [items, customers] = await Promise.all([allPages(contractsService.list), allPages(customersService.list)]); contracts.value = items; customerOptions.value = customers.map(c => ({id:c.id, name:c.companyName})) } catch (e) { window.alert(errorMessage(e)) } })
 
 const typeLabels: Record<ContractType, string> = {
   sales: 'Sales',
@@ -69,54 +72,7 @@ const statusBadge: Record<ContractStatus, string> = {
   renewed: 'badge-info',
 }
 
-const contracts = ref<Contract[]>([
-  {
-    id: uid(), contractNumber: 'CTR-2025-001', title: 'CCTV Maintenance Agreement',
-    customerId: 'c1', customerName: 'Saudi Aramco', type: 'maintenance', status: 'active',
-    startDate: '2025-04-01', endDate: '2026-03-31', value: 480000,
-    autoRenew: true, renewalNoticeDays: 60,
-    terms: 'Quarterly preventive maintenance for all CCTV systems across Dhahran and Ras Tanura sites. Includes 4-hour SLA for critical failures.',
-    notes: 'Renewed from CTR-2024-003. Key account — assign senior technicians.',
-    createdAt: '2025-03-15T08:00:00Z', updatedAt: '2026-01-20T10:00:00Z',
-  },
-  {
-    id: uid(), contractNumber: 'CTR-2025-002', title: 'Access Control System Supply & Install',
-    customerId: 'c5', customerName: 'Ministry of Interior', type: 'project', status: 'active',
-    startDate: '2025-06-01', endDate: '2026-05-31', value: 1250000,
-    autoRenew: false, renewalNoticeDays: 90,
-    terms: 'Supply and installation of ZKTeco access control for 12 government buildings. Includes one-year warranty and training.',
-    notes: 'Phase 1 of 3. Government procurement — strict delivery milestones.',
-    createdAt: '2025-05-20T08:00:00Z', updatedAt: '2026-02-10T14:00:00Z',
-  },
-  {
-    id: uid(), contractNumber: 'CTR-2026-001', title: 'Security Monitoring Subscription',
-    customerId: 'c4', customerName: 'Saudi Telecom Company (STC)', type: 'subscription', status: 'pending-approval',
-    startDate: '2026-03-01', endDate: '2027-02-28', value: 360000,
-    autoRenew: true, renewalNoticeDays: 30,
-    terms: '24/7 remote monitoring of all STC sites. Monthly reports and quarterly reviews.',
-    notes: 'Awaiting procurement VP signature. Expected approval by end of Feb.',
-    createdAt: '2026-01-15T08:00:00Z', updatedAt: '2026-02-18T09:00:00Z',
-  },
-  {
-    id: uid(), contractNumber: 'CTR-2024-003', title: 'Fire Alarm Maintenance',
-    customerId: 'c2', customerName: 'King Faisal Specialist Hospital', type: 'maintenance', status: 'expired',
-    startDate: '2024-01-01', endDate: '2024-12-31', value: 195000,
-    autoRenew: false, renewalNoticeDays: 60,
-    terms: 'Semi-annual inspection and testing of Honeywell fire alarm panels. Emergency call-out within 2 hours.',
-    notes: 'Contract expired — renewal proposal sent Jan 2025.',
-    createdAt: '2023-11-01T08:00:00Z', updatedAt: '2025-01-15T08:00:00Z',
-  },
-  {
-    id: uid(), contractNumber: 'CTR-2026-002', title: 'Integrated Security Systems',
-    customerId: 'c6', customerName: 'Al Rajhi Bank', type: 'sales', status: 'draft',
-    startDate: '2026-04-01', endDate: '2027-03-31', value: 875000,
-    autoRenew: true, renewalNoticeDays: 45,
-    terms: 'Supply of CCTV, access control, and intrusion detection for 50 bank branches. Phased rollout over 12 months.',
-    notes: 'Draft — pricing under review with procurement team.',
-    createdAt: '2026-02-01T08:00:00Z', updatedAt: '2026-02-22T16:00:00Z',
-  },
-])
-
+const contracts = ref<Contract[]>([])
 const searchQuery = ref('')
 const filterStatus = ref<ContractStatus | ''>('')
 const filterType = ref<ContractType | ''>('')
@@ -185,14 +141,7 @@ const defaultForm = (): ContractForm => ({
 
 const form = ref<ContractForm>(defaultForm())
 
-const customerOptions = [
-  { id: 'c1', name: 'Saudi Aramco' },
-  { id: 'c2', name: 'King Faisal Specialist Hospital' },
-  { id: 'c4', name: 'Saudi Telecom Company (STC)' },
-  { id: 'c5', name: 'Ministry of Interior' },
-  { id: 'c6', name: 'Al Rajhi Bank' },
-  { id: 'c3', name: 'NEOM' },
-]
+const customerOptions = ref<{id:string;name:string}[]>([])
 
 function openAddModal() {
   editingId.value = null
@@ -209,8 +158,8 @@ function openEditModal(c: Contract) {
     customerName: c.customerName,
     type: c.type,
     status: c.status,
-    startDate: c.startDate,
-    endDate: c.endDate,
+    startDate: c.startDate?.slice(0, 10) ?? '',
+    endDate: c.endDate?.slice(0, 10) ?? '',
     value: c.value,
     autoRenew: c.autoRenew,
     renewalNoticeDays: c.renewalNoticeDays,
@@ -225,39 +174,27 @@ function openViewModal(c: Contract) {
   showViewModal.value = true
 }
 
-function saveContract() {
-  const now = new Date().toISOString()
-  const cust = customerOptions.find(o => o.id === form.value.customerId)
-
-  const base = {
-    contractNumber: form.value.contractNumber,
-    title: form.value.title,
-    customerId: form.value.customerId,
-    customerName: cust?.name ?? form.value.customerName,
-    type: form.value.type,
-    status: form.value.status,
-    startDate: form.value.startDate,
-    endDate: form.value.endDate,
-    value: form.value.value,
-    autoRenew: form.value.autoRenew,
-    renewalNoticeDays: form.value.renewalNoticeDays,
-    terms: form.value.terms,
-    notes: form.value.notes,
-  }
-
-  if (editingId.value) {
-    const idx = contracts.value.findIndex(c => c.id === editingId.value)
-    if (idx !== -1) {
-      contracts.value[idx] = { ...contracts.value[idx], ...base, updatedAt: now } as Contract
-    }
-  } else {
-    contracts.value.push({ id: uid(), ...base, createdAt: now, updatedAt: now })
-  }
-  showModal.value = false
+const saving = ref(false)
+async function saveContract() {
+ if (saving.value) return
+ saving.value = true
+ try {
+   const existing = contracts.value.find(c => c.id === editingId.value)
+   const data = { ...form.value }
+   // Accepted quote amounts are snapshots and cannot be rewritten through a contract form.
+   const update = existing?.quoteId ? { title:data.title, startDate:data.startDate, endDate:data.endDate, autoRenew:data.autoRenew, renewalNoticeDays:data.renewalNoticeDays, terms:data.terms, notes:data.notes } : data
+   const result = editingId.value ? await contractsService.update(editingId.value, update) : await contractsService.create(data)
+   if (form.value.status === 'active' && result.data.status === 'draft') await contractsService.activate(result.data.id)
+   contracts.value = await allPages(contractsService.list); showModal.value = false
+ } catch (e) { window.alert(errorMessage(e)) } finally { saving.value = false }
 }
-
-function deleteContract(id: string) {
-  contracts.value = contracts.value.filter(c => c.id !== id)
+async function deleteContract(id: string) {
+ try { await contractsService.delete(id); contracts.value = contracts.value.filter(c => c.id !== id) }
+ catch (e) { window.alert(errorMessage(e)) }
+}
+async function contractAction(action: 'activate' | 'terminate' | 'renew', id: string) {
+ try { await contractsService[action](id); contracts.value = await allPages(contractsService.list); showViewModal.value = false }
+ catch (e) { window.alert(errorMessage(e)) }
 }
 
 function daysRemaining(endDate: string): number {
@@ -403,7 +340,7 @@ function daysRemaining(endDate: string): number {
             <div class="form-row">
               <div class="form-group">
                 <label class="form-label">Contract # <span class="required">*</span></label>
-                <input v-model="form.contractNumber" type="text" class="form-input text-mono" placeholder="CTR-2026-XXX" />
+                <input :value="form.contractNumber" type="text" class="form-input text-mono" placeholder="Assigned when saved" readonly />
               </div>
               <div class="form-group">
                 <label class="form-label">Title <span class="required">*</span></label>
@@ -428,7 +365,7 @@ function daysRemaining(endDate: string): number {
             <div class="form-row">
               <div class="form-group">
                 <label class="form-label">Status</label>
-                <select v-model="form.status" class="form-select">
+                <select disabled v-model="form.status" class="form-select">
                   <option v-for="(label, key) in statusLabels" :key="key" :value="key">{{ label }}</option>
                 </select>
               </div>
@@ -553,7 +490,10 @@ function daysRemaining(endDate: string): number {
           </div>
           <div class="modal-footer">
             <button class="btn btn-secondary" @click="showViewModal = false">Close</button>
-            <button class="btn btn-primary" @click="showViewModal = false; openEditModal(viewingContract!)">Edit</button>
+            <button v-if="viewingContract.status === 'draft'" class="btn btn-primary" @click="showViewModal = false; openEditModal(viewingContract!)">Edit</button>
+            <button v-if="viewingContract.status === 'draft'" class="btn btn-primary" @click="contractAction('activate', viewingContract.id)">Activate</button>
+            <button v-if="viewingContract.status === 'active'" class="btn btn-secondary" @click="contractAction('terminate', viewingContract.id)">Terminate</button>
+            <button v-if="['active', 'expired'].includes(viewingContract.status)" class="btn btn-primary" @click="contractAction('renew', viewingContract.id)">Create renewal</button>
           </div>
         </div>
       </div>

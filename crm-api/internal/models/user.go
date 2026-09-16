@@ -10,25 +10,25 @@ type UserRole string
 type Department string
 
 const (
-	RoleAdmin               UserRole = "admin"
-	RoleSalesManager        UserRole = "sales_manager"
-	RoleSalesExecutive      UserRole = "sales_executive"
-	RolePreSales            UserRole = "pre_sales"
-	RoleProcurementManager  UserRole = "procurement_manager"
-	RoleProcurementOfficer  UserRole = "procurement_officer"
-	RoleWarehouseManager    UserRole = "warehouse_manager"
-	RoleProjectManager      UserRole = "project_manager"
-	RoleViewer              UserRole = "viewer"
+	RoleAdmin              UserRole = "admin"
+	RoleSalesManager       UserRole = "sales_manager"
+	RoleSalesExecutive     UserRole = "sales_executive"
+	RolePreSales           UserRole = "pre_sales"
+	RoleProcurementManager UserRole = "procurement_manager"
+	RoleProcurementOfficer UserRole = "procurement_officer"
+	RoleWarehouseManager   UserRole = "warehouse_manager"
+	RoleProjectManager     UserRole = "project_manager"
+	RoleViewer             UserRole = "viewer"
 )
 
 const (
-	DeptSales       Department = "sales"
-	DeptPreSales    Department = "pre-sales"
-	DeptTechnical   Department = "technical"
-	DeptSupport     Department = "support"
-	DeptMarketing   Department = "marketing"
-	DeptManagement  Department = "management"
-	DeptOperations  Department = "operations"
+	DeptSales      Department = "sales"
+	DeptPreSales   Department = "pre-sales"
+	DeptTechnical  Department = "technical"
+	DeptSupport    Department = "support"
+	DeptMarketing  Department = "marketing"
+	DeptManagement Department = "management"
+	DeptOperations Department = "operations"
 )
 
 type User struct {
@@ -52,10 +52,10 @@ func (u *User) FullName() string {
 
 // RefreshToken stores hashed refresh tokens
 type RefreshToken struct {
-	ID        uuid.UUID  `gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
-	UserID    uuid.UUID  `gorm:"type:uuid;not null;index"`
-	TokenHash string     `gorm:"not null"`
-	ExpiresAt time.Time  `gorm:"not null"`
+	ID        uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
+	UserID    uuid.UUID `gorm:"type:uuid;not null;index"`
+	TokenHash string    `gorm:"not null"`
+	ExpiresAt time.Time `gorm:"not null"`
 	CreatedAt time.Time
 	RevokedAt *time.Time
 }

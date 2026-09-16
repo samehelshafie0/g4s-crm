@@ -243,6 +243,7 @@ func TestFoundation(t *testing.T) {
 		}
 	})
 
+	testModuleAPIs(t, db, r, adminToken, customerID)
 	t.Run("current role and deactivation take effect for existing access token", func(t *testing.T) {
 		must(t, db.Model(&sales).Update("role", models.RoleViewer).Error)
 		code, res := call("POST", "/api/v1/customers", `{}`, salesToken)

@@ -21,37 +21,42 @@ const (
 
 type PriceBook struct {
 	Base
-	Name        string          `gorm:"not null" json:"name"`
-	Type        PriceBookType   `gorm:"not null" json:"type"`
-	Description string          `json:"description"`
-	CustomerID  *uuid.UUID      `gorm:"type:uuid" json:"customerId,omitempty"`
-	Customer    *Customer       `gorm:"foreignKey:CustomerID" json:"customer,omitempty"`
-	ContractID  *uuid.UUID      `gorm:"type:uuid" json:"contractId,omitempty"`
-	ValidFrom   *time.Time      `json:"validFrom,omitempty"`
-	ValidTo     *time.Time      `json:"validTo,omitempty"`
-	IsActive    bool            `gorm:"default:true" json:"isActive"`
+	Name        string           `gorm:"not null" json:"name"`
+	Type        PriceBookType    `gorm:"not null" json:"type"`
+	Description string           `json:"description"`
+	CustomerID  *uuid.UUID       `gorm:"type:uuid" json:"customerId,omitempty"`
+	Customer    *Customer        `gorm:"foreignKey:CustomerID" json:"customer,omitempty"`
+	ContractID  *uuid.UUID       `gorm:"type:uuid" json:"contractId,omitempty"`
+	ValidFrom   *time.Time       `json:"validFrom,omitempty"`
+	ValidTo     *time.Time       `json:"validTo,omitempty"`
+	IsActive    bool             `gorm:"default:true" json:"isActive"`
 	Entries     []PriceBookEntry `gorm:"foreignKey:PriceBookID" json:"entries,omitempty"`
 }
 
 type PriceBookEntry struct {
 	Base
-	PriceBookID     uuid.UUID `gorm:"type:uuid;not null;index" json:"priceBookId"`
-	ProductID       uuid.UUID `gorm:"type:uuid;not null" json:"productId"`
-	Product         *Product  `gorm:"foreignKey:ProductID" json:"product,omitempty"`
-	StandardPrice   float64   `json:"standardPrice"`
-	CustomPrice     float64   `json:"customPrice"`
-	DiscountPercent float64   `json:"discountPercent"`
+	PriceBookID        uuid.UUID         `gorm:"type:uuid;not null;index" json:"priceBookId"`
+	ProductID          *uuid.UUID        `gorm:"type:uuid" json:"productId,omitempty"`
+	Kind               string            `json:"kind"`
+	ServiceID          *uuid.UUID        `gorm:"type:uuid" json:"serviceId,omitempty"`
+	Service            *CatalogService   `gorm:"foreignKey:ServiceID" json:"service,omitempty"`
+	RecurringServiceID *uuid.UUID        `gorm:"type:uuid" json:"recurringServiceId,omitempty"`
+	RecurringService   *RecurringService `gorm:"foreignKey:RecurringServiceID" json:"recurringService,omitempty"`
+	Product            *Product          `gorm:"foreignKey:ProductID" json:"product,omitempty"`
+	StandardPrice      float64           `json:"standardPrice"`
+	CustomPrice        float64           `json:"customPrice"`
+	DiscountPercent    float64           `json:"discountPercent"`
 }
 
 // ─── Exchange Rates ────────────────────────────────────────
 
 type ExchangeRate struct {
 	Base
-	FromCurrency  Currency               `gorm:"not null;uniqueIndex:idx_fx_pair" json:"fromCurrency"`
-	ToCurrency    string                 `gorm:"not null;default:'SAR';uniqueIndex:idx_fx_pair" json:"toCurrency"`
-	CurrentRate   float64                `gorm:"not null" json:"currentRate"`
-	EffectiveDate time.Time              `gorm:"not null" json:"effectiveDate"`
-	History       []ExchangeRateHistory  `gorm:"foreignKey:ExchangeRateID" json:"history,omitempty"`
+	FromCurrency  Currency              `gorm:"not null;uniqueIndex:idx_fx_pair" json:"fromCurrency"`
+	ToCurrency    string                `gorm:"not null;default:'SAR';uniqueIndex:idx_fx_pair" json:"toCurrency"`
+	CurrentRate   float64               `gorm:"not null" json:"currentRate"`
+	EffectiveDate time.Time             `gorm:"not null" json:"effectiveDate"`
+	History       []ExchangeRateHistory `gorm:"foreignKey:ExchangeRateID" json:"history,omitempty"`
 }
 
 type ExchangeRateHistory struct {
@@ -80,6 +85,7 @@ const (
 
 type RecurringService struct {
 	Base
+	LineItems           []RecurringLine      `gorm:"serializer:json;type:jsonb" json:"lineItems"`
 	Name                string               `gorm:"not null" json:"name"`
 	ServiceType         RecurringServiceType `json:"serviceType"`
 	Description         string               `json:"description"`
@@ -121,7 +127,7 @@ type Document struct {
 	FileName     string           `json:"fileName"`
 	FileSize     int64            `json:"fileSize"`
 	FileType     string           `json:"fileType"`
-	FilePath     string           `json:"filePath"`
+	FilePath     string           `json:"-"`
 	UploadedByID *uuid.UUID       `gorm:"type:uuid" json:"uploadedById,omitempty"`
 	UploadedBy   *User            `gorm:"foreignKey:UploadedByID" json:"uploadedBy,omitempty"`
 	Links        []DocumentLink   `gorm:"foreignKey:DocumentID" json:"links,omitempty"`
@@ -129,24 +135,24 @@ type Document struct {
 
 type DocumentLink struct {
 	Base
-	DocumentID  uuid.UUID `gorm:"type:uuid;not null;index" json:"documentId"`
-	EntityType  string    `gorm:"not null" json:"entityType"`
-	EntityID    uuid.UUID `gorm:"type:uuid;not null" json:"entityId"`
-	EntityName  string    `json:"entityName"`
+	DocumentID uuid.UUID `gorm:"type:uuid;not null;index" json:"documentId"`
+	EntityType string    `gorm:"not null" json:"entityType"`
+	EntityID   uuid.UUID `gorm:"type:uuid;not null" json:"entityId"`
+	EntityName string    `json:"entityName"`
 }
 
 // ─── Activity Log ──────────────────────────────────────────
 
 type ActivityLog struct {
 	Base
-	UserID     *uuid.UUID `gorm:"type:uuid;index" json:"userId,omitempty"`
-	User       *User      `gorm:"foreignKey:UserID" json:"user,omitempty"`
-	EntityType string     `gorm:"not null;index" json:"entityType"`
-	EntityID   uuid.UUID  `gorm:"type:uuid;not null;index" json:"entityId"`
-	Action     string     `gorm:"not null" json:"action"`
-	Description string    `json:"description"`
-	OldValues  *string    `gorm:"type:jsonb" json:"oldValues,omitempty"`
-	NewValues  *string    `gorm:"type:jsonb" json:"newValues,omitempty"`
+	UserID      *uuid.UUID `gorm:"type:uuid;index" json:"userId,omitempty"`
+	User        *User      `gorm:"foreignKey:UserID" json:"user,omitempty"`
+	EntityType  string     `gorm:"not null;index" json:"entityType"`
+	EntityID    uuid.UUID  `gorm:"type:uuid;not null;index" json:"entityId"`
+	Action      string     `gorm:"not null" json:"action"`
+	Description string     `json:"description"`
+	OldValues   *string    `gorm:"type:jsonb" json:"oldValues,omitempty"`
+	NewValues   *string    `gorm:"type:jsonb" json:"newValues,omitempty"`
 }
 
 // ─── Sequence ──────────────────────────────────────────────
@@ -156,4 +162,31 @@ type Sequence struct {
 	Prefix  string `gorm:"not null" json:"prefix"`
 	Year    int    `gorm:"not null" json:"year"`
 	Current int    `gorm:"not null;default:0" json:"current"`
+}
+
+type DocumentVersion struct {
+	Base
+	DocumentID   uuid.UUID  `gorm:"type:uuid" json:"documentId"`
+	Version      string     `json:"version"`
+	FileName     string     `json:"fileName"`
+	FileSize     int64      `json:"fileSize"`
+	FileType     string     `json:"fileType"`
+	FilePath     string     `json:"-"`
+	UploadedByID *uuid.UUID `gorm:"type:uuid" json:"uploadedById,omitempty"`
+}
+
+func (ExchangeRateHistory) TableName() string { return "exchange_rate_history" }
+
+type RecurringLine struct {
+	ID          string     `json:"id" validate:"max=100"`
+	Source      string     `json:"source" validate:"required,oneof=product service vendor write-in"`
+	SourceID    *uuid.UUID `json:"sourceId,omitempty"`
+	SKU         string     `json:"sku" validate:"max=100"`
+	Name        string     `json:"name" validate:"required,max=255"`
+	Description string     `json:"description" validate:"max=2000"`
+	Qty         float64    `json:"qty" validate:"gt=0,lte=1000000"`
+	UnitCost    float64    `json:"unitCost" validate:"gte=0,lte=100000000"`
+	UnitPrice   float64    `json:"unitPrice" validate:"gte=0,lte=100000000"`
+	VendorName  string     `json:"vendorName" validate:"max=255"`
+	VendorFile  string     `json:"vendorFile" validate:"max=255"`
 }

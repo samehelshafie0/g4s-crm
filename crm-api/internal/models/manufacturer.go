@@ -12,15 +12,15 @@ const (
 
 type Manufacturer struct {
 	Base
-	Name         string                  `gorm:"not null" json:"name"`
-	Code         string                  `gorm:"uniqueIndex" json:"code"`
-	Country      string                  `json:"country"`
-	ContactEmail string                  `json:"contactEmail"`
-	ContactPhone string                  `json:"contactPhone"`
-	Website      string                  `json:"website"`
-	VendorType   VendorType              `json:"vendorType"`
-	IsActive     bool                    `gorm:"default:true" json:"isActive"`
-	Categories   []ManufacturerCategory  `gorm:"foreignKey:ManufacturerID" json:"categories,omitempty"`
+	Name         string                 `gorm:"not null" json:"name"`
+	Code         string                 `gorm:"uniqueIndex" json:"code"`
+	Country      string                 `json:"country"`
+	ContactEmail string                 `json:"contactEmail"`
+	ContactPhone string                 `json:"contactPhone"`
+	Website      string                 `json:"website"`
+	VendorType   VendorType             `json:"vendorType"`
+	IsActive     bool                   `gorm:"default:true" json:"isActive"`
+	Categories   []ManufacturerCategory `gorm:"foreignKey:ManufacturerID" json:"categories,omitempty"`
 }
 
 type ManufacturerCategory struct {

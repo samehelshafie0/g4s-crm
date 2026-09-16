@@ -24,7 +24,7 @@ func (h *QuoteHandler) List(c *gin.Context) {
 	var quotes []models.Quote
 	var total int64
 
-	query := h.db.Model(&models.Quote{}).Preload("Customer")
+	query := h.db.Model(&models.Quote{}).Preload("Customer").Preload("LineItems", func(db *gorm.DB) *gorm.DB { return db.Order("sort_order ASC") })
 	if q := c.Query("q"); q != "" {
 		query = query.Where("quote_number ILIKE ?", "%"+q+"%")
 	}
@@ -42,7 +42,7 @@ func (h *QuoteHandler) List(c *gin.Context) {
 
 func (h *QuoteHandler) Get(c *gin.Context) {
 	var quote models.Quote
-	if err := h.db.Preload("LineItems.Product").Preload("Customer").Preload("Opportunity").
+	if err := h.db.Preload("LineItems", func(db *gorm.DB) *gorm.DB { return db.Order("sort_order ASC") }).Preload("LineItems.Product").Preload("Customer").Preload("Opportunity").
 		First(&quote, "id = ?", c.Param("id")).Error; err != nil {
 		response.NotFound(c, "Quote not found")
 		return
@@ -60,6 +60,7 @@ type quoteLineRequest struct {
 	UnitPrice   float64                  `json:"unitPrice" validate:"gte=0,lte=1000000000"`
 }
 type createQuoteRequest struct {
+	PriceBookID     *uuid.UUID         `json:"priceBookId"`
 	CustomerID      uuid.UUID          `json:"customerId" validate:"required"`
 	OpportunityID   *uuid.UUID         `json:"opportunityId"`
 	Currency        models.Currency    `json:"currency" validate:"omitempty,oneof=SAR USD EUR GBP AED CNY"`
@@ -93,12 +94,15 @@ func (h *QuoteHandler) Create(c *gin.Context) {
 				return errInvalidRelationship
 			}
 		}
+		if err := eligiblePriceBook(tx, req.PriceBookID, req.CustomerID); err != nil {
+			return errInvalidRelationship
+		}
 		number, err := seqgen.NextNumber(tx, "quote")
 		if err != nil {
 			return err
 		}
 		userID := middleware.GetCurrentUserID(c)
-		quote = models.Quote{QuoteNumber: number, CustomerID: req.CustomerID, OpportunityID: req.OpportunityID, Status: models.QuoteStatusDraft, Currency: req.Currency, DiscountPercent: req.DiscountPercent, VATPercent: 15, Notes: req.Notes, CreatedByID: &userID}
+		quote = models.Quote{PriceBookID: req.PriceBookID, QuoteNumber: number, CustomerID: req.CustomerID, OpportunityID: req.OpportunityID, Status: models.QuoteStatusDraft, Currency: req.Currency, DiscountPercent: req.DiscountPercent, VATPercent: 15, Notes: req.Notes, CreatedByID: &userID}
 		if quote.Currency == "" {
 			quote.Currency = models.CurrencySAR
 		}
@@ -116,7 +120,7 @@ func (h *QuoteHandler) Create(c *gin.Context) {
 					return errInvalidRelationship
 				}
 			}
-			line := models.QuoteLineItem{Category: input.Category, ProductID: input.ProductID, SKU: input.SKU, Description: input.Description, Quantity: input.Quantity, UnitCost: input.UnitCost, UnitPrice: input.UnitPrice, SortOrder: index}
+			line := models.QuoteLineItem{Category: input.Category, ProductID: input.ProductID, SKU: input.SKU, Description: input.Description, Quantity: float64(input.Quantity), UnitCost: input.UnitCost, UnitPrice: input.UnitPrice, SortOrder: index}
 			line.Calculate()
 			quote.LineItems = append(quote.LineItems, line)
 		}
@@ -155,7 +159,11 @@ func (h *QuoteHandler) mutate(c *gin.Context, expected models.QuoteStatus, fn fu
 		if quote.Status != expected {
 			return errQuoteState
 		}
-		return fn(tx, &quote)
+		quote.LockVersion++
+		if err := fn(tx, &quote); err != nil {
+			return err
+		}
+		return recordActivity(tx, c, "quote", quote.ID, string(quote.Status))
 	})
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		response.NotFound(c, "Quote not found")
@@ -230,8 +238,17 @@ func (h *QuoteHandler) Recalculate(c *gin.Context) {
 }
 func (h *QuoteHandler) changeStatus(c *gin.Context, from, to models.QuoteStatus) {
 	h.mutate(c, from, func(tx *gorm.DB, quote *models.Quote) error {
-		if to == models.QuoteStatusPendingApproval && len(quote.LineItems) == 0 {
-			return errQuoteState
+		if to == models.QuoteStatusPendingApproval {
+			hasItem := false
+			for _, line := range quote.LineItems {
+				if (line.RowType == "item" || line.RowType == "") && (!line.IsOptional || line.IsSelected) && line.Quantity > 0 {
+					hasItem = true
+					break
+				}
+			}
+			if !hasItem {
+				return errQuoteState
+			}
 		}
 		quote.Status = to
 		if to == models.QuoteStatusApproved {

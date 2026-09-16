@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { recurringServicesService, productsService } from '@/services'
+import { allPages } from '@/services/collections'
+import { errorMessage } from '@/services/payload'
 import { onMounted, ref, computed, watch } from 'vue'
 import {
   Plus, Pencil, Trash2, X, Shield, Wrench, Eye as Monitor, Car, Building,
@@ -11,7 +14,8 @@ import { useProductsStore } from '@/stores/products'
 import { useRecurringServicesStore } from '@/stores/recurringServices'
 
 const recurringStore = useRecurringServicesStore()
-onMounted(() => recurringStore.fetchServices())
+async function reloadServices() { services.value = await allPages(recurringServicesService.list); for (const service of services.value) serviceItems.value[service.id] = service.lineItems ?? [] }
+onMounted(async () => { try { await reloadServices(); productsStore.products = await allPages(productsService.list) } catch (e) { window.alert(errorMessage(e)) } })
 
 const productsStore = useProductsStore()
 
@@ -68,15 +72,7 @@ function lineMargin(item: ServiceLineItem): number {
 }
 
 // ── Data ─────────────────────────────────────────────────────
-const services = ref<RecurringService[]>([
-  { id: uid(), name: 'Security Guard Service (24/7)', serviceType: 'guarding', description: 'Professional uniformed security guard services for commercial and government facilities.', monthlyCost: 8000, monthlyPrice: 12000, annualCost: 96000, annualPrice: 144000, targetMarginPercent: 33.3, billingFrequency: 'monthly', isActive: true, createdAt: '2024-01-01T08:00:00Z', updatedAt: '2026-01-15T10:00:00Z' },
-  { id: uid(), name: 'System Maintenance', serviceType: 'maintenance', description: 'Scheduled preventive maintenance for CCTV, access control, fire alarm, and intrusion detection systems.', monthlyCost: 2200, monthlyPrice: 3500, annualCost: 26400, annualPrice: 42000, targetMarginPercent: 37.1, billingFrequency: 'quarterly', isActive: true, createdAt: '2024-02-01T08:00:00Z', updatedAt: '2026-02-01T08:00:00Z' },
-  { id: uid(), name: '24/7 Remote Monitoring', serviceType: 'monitoring', description: 'Round-the-clock remote CCTV and alarm monitoring from our SOC.', monthlyCost: 3200, monthlyPrice: 5000, annualCost: 38400, annualPrice: 60000, targetMarginPercent: 36.0, billingFrequency: 'monthly', isActive: true, createdAt: '2024-03-01T08:00:00Z', updatedAt: '2025-12-20T08:00:00Z' },
-  { id: uid(), name: 'Mobile Patrol Service', serviceType: 'patrol', description: 'Scheduled and random mobile patrol visits covering perimeter checks and incident response.', monthlyCost: 5500, monthlyPrice: 8000, annualCost: 66000, annualPrice: 96000, targetMarginPercent: 31.3, billingFrequency: 'monthly', isActive: true, createdAt: '2024-04-01T08:00:00Z', updatedAt: '2026-01-10T08:00:00Z' },
-  { id: uid(), name: 'Facility Management', serviceType: 'facility-management', description: 'Comprehensive facility management including security infrastructure and compliance.', monthlyCost: 9500, monthlyPrice: 15000, annualCost: 114000, annualPrice: 180000, targetMarginPercent: 36.7, billingFrequency: 'annually', isActive: true, createdAt: '2024-06-01T08:00:00Z', updatedAt: '2026-02-05T08:00:00Z' },
-  { id: uid(), name: 'Alarm Response Service', serviceType: 'monitoring', description: 'Rapid alarm response dispatch with guaranteed 15-min response time.', monthlyCost: 1500, monthlyPrice: 2500, annualCost: 18000, annualPrice: 30000, targetMarginPercent: 40.0, billingFrequency: 'monthly', isActive: false, createdAt: '2024-08-01T08:00:00Z', updatedAt: '2025-11-30T08:00:00Z' },
-])
-
+const services = ref<RecurringService[]>([])
 // Service-level line items map (serviceId -> items)
 const serviceItems = ref<Record<string, ServiceLineItem[]>>({})
 
@@ -318,44 +314,16 @@ function openEditModal(s: RecurringService) {
   showModal.value = true
 }
 
-function saveService() {
-  if (!form.value.name) return
-  const now = new Date().toISOString()
-  const base = {
-    ...form.value,
-    annualCost: formAnnualCost.value,
-    annualPrice: formAnnualPrice.value,
-  }
-
-  if (editingId.value) {
-    const idx = services.value.findIndex(s => s.id === editingId.value)
-    if (idx !== -1) {
-      services.value[idx] = { ...services.value[idx], ...base, updatedAt: now } as RecurringService
-      serviceItems.value[editingId.value] = [...lineItems.value]
-    }
-  } else {
-    const newId = uid()
-    services.value.push({ id: newId, ...base, createdAt: now, updatedAt: now })
-    if (lineItems.value.length) serviceItems.value[newId] = [...lineItems.value]
-  }
-  showModal.value = false
+const saving = ref(false)
+async function saveService() {
+ if (!form.value.name || saving.value) return
+ saving.value = true
+ try { const data = { ...form.value, lineItems:lineItems.value }; if (editingId.value) await recurringServicesService.update(editingId.value, data); else await recurringServicesService.create(data); await reloadServices(); showModal.value = false }
+ catch (e) { window.alert(errorMessage(e)) } finally { saving.value = false }
 }
-
-function deleteService(id: string) {
-  services.value = services.value.filter(s => s.id !== id)
-  delete serviceItems.value[id]
-}
-
-function duplicateService(s: RecurringService) {
-  const newId = uid()
-  services.value.push({ ...s, id: newId, name: s.name + ' (Copy)', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() })
-  if (serviceItems.value[s.id]) serviceItems.value[newId] = JSON.parse(JSON.stringify(serviceItems.value[s.id]))
-}
-
-function toggleActive(s: RecurringService) {
-  s.isActive = !s.isActive
-  s.updatedAt = new Date().toISOString()
-}
+async function deleteService(id: string) { try { await recurringServicesService.delete(id); await reloadServices() } catch (e) { window.alert(errorMessage(e)) } }
+async function duplicateService(s: RecurringService) { try { await recurringServicesService.create({ ...s, name:s.name + ' (Copy)' }); await reloadServices() } catch (e) { window.alert(errorMessage(e)) } }
+async function toggleActive(s: RecurringService) { try { await recurringServicesService.update(s.id, { isActive:!s.isActive }); await reloadServices() } catch (e) { window.alert(errorMessage(e)) } }
 
 function getItemCount(sId: string): number { return serviceItems.value[sId]?.length ?? 0 }
 
