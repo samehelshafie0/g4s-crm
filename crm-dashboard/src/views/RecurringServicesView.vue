@@ -201,14 +201,14 @@ function parseVendorCSV(text: string) {
   const items: typeof vendorItems.value = []
 
   for (let i = 1; i < lines.length; i++) {
-    const cols = lines[i].split(',').map(c => c.trim().replace(/^"|"$/g, ''))
+    const cols = (lines[i] ?? '').split(',').map(c => c.trim().replace(/^"|"$/g, ''))
     if (cols.length >= 3) {
       items.push({
         name: cols[0] || `Item ${i}`,
         description: cols[1] || '',
-        qty: parseInt(cols[2]) || 1,
-        unitCost: parseFloat(cols[3]) || 0,
-        unitPrice: parseFloat(cols[4]) || parseFloat(cols[3]) || 0,
+        qty: parseInt(cols[2] ?? '0') || 1,
+        unitCost: parseFloat(cols[3] ?? '0') || 0,
+        unitPrice: parseFloat(cols[4] ?? '0') || parseFloat(cols[3] ?? '0') || 0,
       })
     }
   }

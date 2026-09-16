@@ -1,6 +1,9 @@
 package models
 
-import "github.com/google/uuid"
+import (
+	"encoding/json"
+	"github.com/google/uuid"
+)
 
 type CustomerStatus string
 type CustomerType string
@@ -28,16 +31,16 @@ const (
 
 type Customer struct {
 	Base
-	CompanyName string         `gorm:"not null" json:"companyName"`
-	Sector      Sector         `gorm:"not null" json:"sector"`
-	Region      string         `gorm:"not null" json:"region"`
-	Status      CustomerStatus `gorm:"not null;default:'prospect'" json:"status"`
-	Type        CustomerType   `gorm:"not null;default:'get'" json:"type"`
-	CRNumber    string         `gorm:"uniqueIndex" json:"crNumber"`
-	VATNumber   string         `json:"vatNumber"`
-	Notes       string         `json:"notes"`
-	CreatedByID *uuid.UUID     `gorm:"type:uuid" json:"createdById,omitempty"`
-	CreatedBy   *User          `gorm:"foreignKey:CreatedByID" json:"createdBy,omitempty"`
+	CompanyName string            `gorm:"not null" json:"companyName"`
+	Sector      Sector            `gorm:"not null" json:"sector"`
+	Region      string            `gorm:"not null" json:"region"`
+	Status      CustomerStatus    `gorm:"not null;default:'prospect'" json:"status"`
+	Type        CustomerType      `gorm:"not null;default:'get'" json:"type"`
+	CRNumber    string            `gorm:"uniqueIndex;default:null" json:"crNumber"`
+	VATNumber   string            `json:"vatNumber"`
+	Notes       string            `json:"notes"`
+	CreatedByID *uuid.UUID        `gorm:"type:uuid" json:"createdById,omitempty"`
+	CreatedBy   *User             `gorm:"foreignKey:CreatedByID" json:"createdBy,omitempty"`
 	Sites       []CustomerSite    `gorm:"foreignKey:CustomerID" json:"sites,omitempty"`
 	Contacts    []CustomerContact `gorm:"foreignKey:CustomerID" json:"contacts,omitempty"`
 }
@@ -61,4 +64,29 @@ type CustomerContact struct {
 	Phone      string     `json:"phone"`
 	Position   string     `json:"position"`
 	IsPrimary  bool       `gorm:"default:false" json:"isPrimary"`
+}
+
+func (c Customer) MarshalJSON() ([]byte, error) {
+	type plain Customer
+	if c.Sites == nil {
+		c.Sites = []CustomerSite{}
+	}
+	if c.Contacts == nil {
+		c.Contacts = []CustomerContact{}
+	}
+	return json.Marshal(struct {
+		plain
+		Sites    []CustomerSite    `json:"sites"`
+		Contacts []CustomerContact `json:"contacts"`
+	}{plain(c), c.Sites, c.Contacts})
+}
+func (s CustomerSite) MarshalJSON() ([]byte, error) {
+	type plain CustomerSite
+	if s.Contacts == nil {
+		s.Contacts = []CustomerContact{}
+	}
+	return json.Marshal(struct {
+		plain
+		Contacts []CustomerContact `json:"contacts"`
+	}{plain(s), s.Contacts})
 }

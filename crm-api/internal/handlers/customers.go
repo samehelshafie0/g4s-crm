@@ -9,6 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
+	"strings"
 )
 
 type CustomerHandler struct {
@@ -27,7 +28,7 @@ func NewCustomerHandler(db *gorm.DB) *CustomerHandler {
 // @Success      200  {object}  response.Response
 // @Router       /customers [get]
 func (h *CustomerHandler) List(c *gin.Context) {
-	params := pagination.GetParams(c)
+	params := pagination.GetParams(c, "company_name", "sector", "region", "status", "type")
 	q := c.Query("q")
 	sector := c.Query("sector")
 	status := c.Query("status")
@@ -86,14 +87,14 @@ func (h *CustomerHandler) Get(c *gin.Context) {
 }
 
 type createCustomerRequest struct {
-	CompanyName string                 `json:"companyName" validate:"required"`
-	Sector      models.Sector          `json:"sector" validate:"required"`
-	Region      string                 `json:"region" validate:"required"`
-	Status      models.CustomerStatus  `json:"status" validate:"required,oneof=active inactive prospect"`
-	Type        models.CustomerType    `json:"type" validate:"required,oneof=get grow"`
-	CRNumber    string                 `json:"crNumber"`
-	VATNumber   string                 `json:"vatNumber"`
-	Notes       string                 `json:"notes"`
+	CompanyName string                `json:"companyName" validate:"required"`
+	Sector      models.Sector         `json:"sector" validate:"required,oneof=government healthcare education retail banking oil-gas telecom hospitality real-estate other"`
+	Region      string                `json:"region" validate:"required"`
+	Status      models.CustomerStatus `json:"status" validate:"required,oneof=active inactive prospect"`
+	Type        models.CustomerType   `json:"type" validate:"required,oneof=get grow"`
+	CRNumber    string                `json:"crNumber"`
+	VATNumber   string                `json:"vatNumber"`
+	Notes       string                `json:"notes"`
 }
 
 // Create godoc
@@ -118,7 +119,7 @@ func (h *CustomerHandler) Create(c *gin.Context) {
 		Region:      req.Region,
 		Status:      req.Status,
 		Type:        req.Type,
-		CRNumber:    req.CRNumber,
+		CRNumber:    strings.TrimSpace(req.CRNumber),
 		VATNumber:   req.VATNumber,
 		Notes:       req.Notes,
 		CreatedByID: &userID,
@@ -149,18 +150,55 @@ func (h *CustomerHandler) Update(c *gin.Context) {
 		return
 	}
 
-	var req map[string]interface{}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		response.BadRequest(c, err.Error())
+	var req struct {
+		CompanyName *string                `json:"companyName" validate:"omitempty,min=1,max=255"`
+		Sector      *models.Sector         `json:"sector" validate:"omitempty,oneof=government healthcare education retail banking oil-gas telecom hospitality real-estate other"`
+		Region      *string                `json:"region" validate:"omitempty,min=1,max=100"`
+		Status      *models.CustomerStatus `json:"status" validate:"omitempty,oneof=active inactive prospect"`
+		Type        *models.CustomerType   `json:"type" validate:"omitempty,oneof=get grow"`
+		CRNumber    *string                `json:"crNumber" validate:"omitempty,max=50"`
+		VATNumber   *string                `json:"vatNumber" validate:"omitempty,max=50"`
+		Notes       *string                `json:"notes" validate:"omitempty,max=20000"`
+	}
+	if !v.BindStrict(c, &req) {
 		return
 	}
-
-	if err := h.db.Model(&customer).Updates(req).Error; err != nil {
-		response.InternalError(c, "Failed to update customer")
+	// Empty CR means NULL; it must not participate in the unique identifier check.
+	updates := map[string]interface{}{}
+	if req.CompanyName != nil {
+		updates["company_name"] = *req.CompanyName
+	}
+	if req.Sector != nil {
+		updates["sector"] = *req.Sector
+	}
+	if req.Region != nil {
+		updates["region"] = *req.Region
+	}
+	if req.Status != nil {
+		updates["status"] = *req.Status
+	}
+	if req.Type != nil {
+		updates["type"] = *req.Type
+	}
+	if req.CRNumber != nil {
+		value := strings.TrimSpace(*req.CRNumber)
+		if value == "" {
+			updates["cr_number"] = nil
+		} else {
+			updates["cr_number"] = value
+		}
+	}
+	if req.VATNumber != nil {
+		updates["vat_number"] = *req.VATNumber
+	}
+	if req.Notes != nil {
+		updates["notes"] = *req.Notes
+	}
+	if err := h.db.Model(&customer).Updates(updates).Error; err != nil {
+		response.Conflict(c, "Customer could not be updated; registration number may already exist")
 		return
 	}
-
-	response.OK(c, customer)
+	h.Get(c)
 }
 
 // Delete godoc
@@ -245,11 +283,11 @@ func (h *CustomerHandler) AddContact(c *gin.Context) {
 	}
 
 	var req struct {
-		Name      string `json:"name" validate:"required"`
-		Email     string `json:"email"`
-		Phone     string `json:"phone"`
-		Position  string `json:"position"`
-		IsPrimary bool   `json:"isPrimary"`
+		Name      string     `json:"name" validate:"required"`
+		Email     string     `json:"email"`
+		Phone     string     `json:"phone"`
+		Position  string     `json:"position"`
+		IsPrimary bool       `json:"isPrimary"`
 		SiteID    *uuid.UUID `json:"siteId"`
 	}
 	if !v.BindAndValidate(c, &req) {

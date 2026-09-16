@@ -1,9 +1,9 @@
-.PHONY: run build test lint tidy migrate migrate-down keys seed clean docker-up docker-down help
+.PHONY: run build test lint tidy migrate keys seed clean docker-up docker-down help
 
 # ─── Variables ──────────────────────────────────────────────
 BINARY_NAME=g4s-crm-api
 MAIN=./cmd/server
-MIGRATE=migrate -path ./migrations -database "postgres://$(DB_USER):$(DB_PASSWORD)@$(DB_HOST):$(DB_PORT)/$(DB_NAME)?sslmode=$(DB_SSLMODE)"
+
 
 # Load .env if it exists
 -include .env
@@ -35,20 +35,10 @@ keys:
 
 # ─── Migrations ─────────────────────────────────────────────
 migrate:
-	$(MIGRATE) up
+	go run $(MAIN) migrate
 
-migrate-down:
-	$(MIGRATE) down 1
-
-migrate-force:
-	$(MIGRATE) force $(VERSION)
-
-migrate-status:
-	$(MIGRATE) version
-
-# ─── Database Seed ──────────────────────────────────────────
 seed:
-	go run ./seeds/main.go
+	go run $(MAIN) bootstrap-admin
 
 # ─── Docker ─────────────────────────────────────────────────
 docker-up:
@@ -80,8 +70,7 @@ help:
 	@echo "  make tidy            Tidy go modules"
 	@echo "  make keys            Generate RSA key pair for JWT"
 	@echo "  make migrate         Run all up migrations"
-	@echo "  make migrate-down    Roll back 1 migration"
-	@echo "  make seed            Seed the database"
+	@echo "  make seed            Create first admin (ADMIN_* environment variables)"
 	@echo "  make docker-up       Start Docker stack"
 	@echo "  make docker-down     Stop Docker stack"
 	@echo "  make clean           Remove binary and cache"

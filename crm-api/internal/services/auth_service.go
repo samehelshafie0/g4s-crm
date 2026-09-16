@@ -15,6 +15,7 @@ import (
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type AuthService struct {
@@ -79,42 +80,34 @@ func (s *AuthService) Login(email, password string) (*LoginResponse, error) {
 }
 
 func (s *AuthService) Refresh(rawRefreshToken string) (*LoginResponse, error) {
-	hash := hashToken(rawRefreshToken)
-
-	var stored models.RefreshToken
-	if err := s.db.Where("token_hash = ? AND revoked_at IS NULL AND expires_at > ?", hash, time.Now()).
-		First(&stored).Error; err != nil {
-		return nil, errors.New("invalid or expired refresh token")
-	}
-
-	// Rotate: revoke old token
-	now := time.Now()
-	s.db.Model(&stored).Update("revoked_at", now)
-
-	var user models.User
-	if err := s.db.Where("id = ? AND is_active = true", stored.UserID).First(&user).Error; err != nil {
-		return nil, errors.New("user not found or inactive")
-	}
-
-	accessToken, err := s.generateAccessToken(&user)
-	if err != nil {
-		return nil, err
-	}
-
-	newRefreshToken, newRaw, err := s.generateRefreshToken(&user)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := s.db.Create(newRefreshToken).Error; err != nil {
-		return nil, err
-	}
-
-	return &LoginResponse{
-		User:         &user,
-		AccessToken:  accessToken,
-		RefreshToken: newRaw,
-	}, nil
+	var result *LoginResponse
+	err := s.db.Transaction(func(tx *gorm.DB) error {
+		var stored models.RefreshToken
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("token_hash = ? AND revoked_at IS NULL AND expires_at > ?", hashToken(rawRefreshToken), time.Now()).First(&stored).Error; err != nil {
+			return errors.New("invalid or expired refresh token")
+		}
+		var user models.User
+		if err := tx.Where("id = ? AND is_active = true", stored.UserID).First(&user).Error; err != nil {
+			return errors.New("user not found or inactive")
+		}
+		access, err := s.generateAccessToken(&user)
+		if err != nil {
+			return err
+		}
+		refresh, raw, err := s.generateRefreshToken(&user)
+		if err != nil {
+			return err
+		}
+		if err := tx.Model(&stored).Update("revoked_at", time.Now()).Error; err != nil {
+			return err
+		}
+		if err := tx.Create(refresh).Error; err != nil {
+			return err
+		}
+		result = &LoginResponse{User: &user, AccessToken: access, RefreshToken: raw}
+		return nil
+	})
+	return result, err
 }
 
 func (s *AuthService) Logout(rawRefreshToken string) error {
@@ -162,7 +155,12 @@ func (s *AuthService) ChangePassword(userID uuid.UUID, currentPassword, newPassw
 		return err
 	}
 
-	return s.db.Model(&user).Update("password_hash", string(newHash)).Error
+	return s.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(&user).Update("password_hash", string(newHash)).Error; err != nil {
+			return err
+		}
+		return tx.Model(&models.RefreshToken{}).Where("user_id = ? AND revoked_at IS NULL", userID).Update("revoked_at", time.Now()).Error
+	})
 }
 
 func (s *AuthService) generateAccessToken(user *models.User) (string, error) {

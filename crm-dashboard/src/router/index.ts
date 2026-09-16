@@ -125,23 +125,21 @@ const router = createRouter({
 })
 
 // ─── Auth Guard ──────────────────────────────────────────────
-router.beforeEach((to, _from, next) => {
+router.beforeEach((to) => {
   document.title = `${to.meta.title || 'CRM'} | G4S CRM`
 
   const isPublic = to.meta.public === true
   const hasToken = !!tokenStorage.getAccess()
 
   if (!isPublic && !hasToken) {
-    next({ name: 'login', query: { redirect: to.fullPath } })
-    return
+    return { name: 'login', query: { redirect: to.fullPath } }
   }
 
   if (to.name === 'login' && hasToken) {
-    next({ name: 'dashboard' })
-    return
+    return { name: 'dashboard' }
   }
 
-  next()
+  return true
 })
 
 export default router

@@ -9,10 +9,12 @@ import (
 	"syscall"
 	"time"
 
+	"g4s-crm/api/internal/bootstrap"
 	"g4s-crm/api/internal/config"
 	"g4s-crm/api/internal/database"
 	"g4s-crm/api/internal/middleware"
 	"g4s-crm/api/internal/router"
+	"g4s-crm/api/migrations"
 	pkgvalidator "g4s-crm/api/pkg/validator"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -49,6 +51,25 @@ func main() {
 	defer sqlDB.Close()
 
 	log.Info().Str("host", cfg.DB.Host).Str("name", cfg.DB.Name).Msg("Database connected")
+
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "migrate":
+			err = migrations.Up(context.Background(), sqlDB)
+		case "bootstrap-admin":
+			err = bootstrap.Admin(db, os.Getenv("ADMIN_EMAIL"), os.Getenv("ADMIN_PASSWORD"), os.Getenv("ADMIN_FIRST_NAME"), os.Getenv("ADMIN_LAST_NAME"))
+		default:
+			log.Fatal().Msg("Unknown command; use migrate or bootstrap-admin")
+		}
+		if err != nil {
+			log.Fatal().Err(err).Msg("Command failed")
+		}
+		log.Info().Msg("Command completed")
+		return
+	}
+	if err := migrations.Ready(context.Background(), sqlDB); err != nil {
+		log.Fatal().Err(err).Msg("Database migrations are not ready; run migrate first")
+	}
 
 	// ─── Load JWT public key ──────────────────────────────────
 	if err := middleware.LoadPublicKey(cfg.JWT.PublicKeyPath); err != nil {

@@ -1,7 +1,8 @@
 package config
 
 import (
-	"fmt"
+	"net"
+	"net/url"
 	"strings"
 	"time"
 
@@ -9,13 +10,13 @@ import (
 )
 
 type Config struct {
-	App      AppConfig
-	DB       DBConfig
-	Redis    RedisConfig
-	JWT      JWTConfig
-	Storage  StorageConfig
-	SMTP     SMTPConfig
-	Log      LogConfig
+	App     AppConfig
+	DB      DBConfig
+	Redis   RedisConfig
+	JWT     JWTConfig
+	Storage StorageConfig
+	SMTP    SMTPConfig
+	Log     LogConfig
 }
 
 type AppConfig struct {
@@ -122,10 +123,12 @@ func Load() (*Config, error) {
 }
 
 func (d *DBConfig) DSN() string {
-	return fmt.Sprintf(
-		"host=%s port=%s user=%s password=%s dbname=%s sslmode=%s TimeZone=Asia/Riyadh",
-		d.Host, d.Port, d.User, d.Password, d.Name, d.SSLMode,
-	)
+	connection := url.URL{Scheme: "postgres", User: url.UserPassword(d.User, d.Password), Host: net.JoinHostPort(d.Host, d.Port), Path: "/" + d.Name}
+	query := connection.Query()
+	query.Set("sslmode", d.SSLMode)
+	query.Set("TimeZone", "UTC")
+	connection.RawQuery = query.Encode()
+	return connection.String()
 }
 
 func setDefaults() {

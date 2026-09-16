@@ -11,4 +11,6 @@ Vue 3 / TypeScript frontend in `crm-dashboard/`, Go / Gin API in `crm-api/`, and
 
 The original documents contain outdated statements and describe some features that are not implemented. The review and status file distinguish actual implementation from intended behavior.
 
-The project is not production-ready. Follow the verified setup work in STATUS.md before using the old Makefile deployment instructions; migration tooling and first-admin provisioning are incomplete.
+The project is not production-ready. Built-in migrations, first-admin creation and isolated local startup now work; the remaining module and server-release gaps are tracked in STATUS.md.
+
+Local setup and tests: [docs/LOCAL_DEVELOPMENT.md](docs/LOCAL_DEVELOPMENT.md).

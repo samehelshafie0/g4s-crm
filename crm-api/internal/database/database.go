@@ -26,6 +26,7 @@ func Connect(cfg *config.DBConfig) (*gorm.DB, error) {
 			SlowThreshold:             200 * time.Millisecond,
 			LogLevel:                  logLevel,
 			IgnoreRecordNotFoundError: true,
+			ParameterizedQueries:      true,
 			Colorful:                  true,
 		},
 	)

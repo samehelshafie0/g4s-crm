@@ -9,7 +9,7 @@ RUN npm ci
 
 # Copy source and build
 COPY . .
-RUN npm run build-only
+RUN npm run build
 
 # ─── Stage 2: Serve with Nginx ───────────────────────────────
 FROM nginx:1.27-alpine AS runtime

@@ -162,12 +162,14 @@ const aggregatedProducts = computed<AggregatedProduct[]>(() => {
   for (const s of stockItems.value) {
     (grouped[s.productSku] ??= []).push(s)
   }
-  return Object.entries(grouped).map(([sku, items]) => {
+  return Object.entries(grouped).flatMap(([sku, items]) => {
+    const first = items[0]
+    if (!first) return []
     const totalOnHand = items.reduce((s, i) => s + i.onHandQty, 0)
     const totalReserved = items.reduce((s, i) => s + i.reservedQty, 0)
     const totalAvailable = items.reduce((s, i) => s + i.availableQty, 0)
     const totalValue = items.reduce((s, i) => s + i.totalValue, 0)
-    const avgUnitCost = totalOnHand > 0 ? totalValue / totalOnHand : items[0].unitCost
+    const avgUnitCost = totalOnHand > 0 ? totalValue / totalOnHand : first.unitCost
     const maxReorder = Math.max(...items.map(i => i.reorderLevel ?? 0))
 
     const incomingQty = procStore.purchaseOrders
@@ -184,9 +186,9 @@ const aggregatedProducts = computed<AggregatedProduct[]>(() => {
     else if (totalAvailable <= maxReorder) stockStatus = 'low-stock'
 
     return {
-      productId: items[0].productId,
+      productId: first.productId,
       productSku: sku,
-      productName: items[0].productName,
+      productName: first.productName,
       manufacturer: productManufacturer[sku] || '',
       category: productCategory[sku] || '',
       totalOnHand, totalReserved, totalAvailable,
@@ -351,7 +353,7 @@ const detailHighestCost = computed(() => {
 const detailLastLandingCost = computed(() => {
   const grEntries = detailPriceHistory.value.filter(e => e.source === 'Goods Receipt' && e.landingCost)
   if (grEntries.length === 0) return null
-  return grEntries[0].landingCost
+  return grEntries[0]?.landingCost ?? null
 })
 
 // Past Orders
@@ -1555,7 +1557,7 @@ function delayHideMoveDropdown() { window.setTimeout(() => { showMoveItemDropdow
                     <td class="font-bold">{{ si.supplierName }}</td>
                     <td class="text-muted">{{ si.manufacturerName }}</td>
                     <td class="text-right whitespace-nowrap font-medium">SAR {{ formatSAR(si.latestCost) }}</td>
-                    <td class="text-right whitespace-nowrap text-muted">SAR {{ formatSAR(si.previousCost) }}</td>
+                    <td class="text-right whitespace-nowrap text-muted">SAR {{ si.previousCost == null ? '—' : formatSAR(si.previousCost) }}</td>
                     <td class="text-center">
                       <span v-if="si.costTrend === 'down'" class="stock-green"><TrendingDown :size="14" /></span>
                       <span v-else-if="si.costTrend === 'up'" class="stock-red"><TrendingUp :size="14" /></span>

@@ -26,8 +26,8 @@ export const authService = {
   login: (payload: LoginPayload) =>
     http.post<ApiResponse<AuthTokens>>('/auth/login', payload).then((r) => r.data),
 
-  logout: (refreshToken: string) =>
-    http.post<ApiResponse<null>>('/auth/logout', { refreshToken }).then((r) => r.data),
+  logout: (refreshToken: string, accessToken: string | null) =>
+    http.post<ApiResponse<null>>('/auth/logout', { refreshToken }, { headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {} }).then((r) => r.data),
 
   refresh: (refreshToken: string) =>
     http.post<ApiResponse<AuthTokens>>('/auth/refresh', { refreshToken }).then((r) => r.data),

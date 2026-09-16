@@ -520,7 +520,7 @@ const overallMargin = computed(() => subtotalAfterDiscount.value > 0 ? (marginAm
 
 // Category breakdowns
 const categoryBreakdown = computed(() => {
-  const map: Record<string, { count: number; total: number }> = { product: { count: 0, total: 0 }, service: { count: 0, total: 0 }, recurring: { count: 0, total: 0 }, 'write-in': { count: 0, total: 0 } }
+  const map: Record<ItemSource, { count: number; total: number }> = { product: { count: 0, total: 0 }, service: { count: 0, total: 0 }, recurring: { count: 0, total: 0 }, 'write-in': { count: 0, total: 0 } }
   for (const r of activeItemRows.value) {
     map[r.source].count++
     map[r.source].total += r.lineTotal
@@ -564,7 +564,7 @@ function delayHideDropdown() { window.setTimeout(() => { showDropdown.value = fa
 
 watch(searchQuery, (val) => { showDropdown.value = val.trim().length > 0 })
 
-const searchResults = computed(() => {
+const searchResults = computed<{ id: string; sku: string; name: string; meta: string; price: string; stockLabel?: string; inStock?: boolean }[]>(() => {
   const q = searchQuery.value.toLowerCase().trim()
   if (!q) return [] as { id: string; sku: string; name: string; meta: string; price: string; stockLabel?: string; inStock?: boolean }[]
 
@@ -616,8 +616,8 @@ function handleQuickAdd() {
   const val = quickAddValue.value.trim()
   if (!val) return
   const parts = val.split(/[\s,]+/)
-  const skuPart = parts[0].toUpperCase()
-  const qty = parts.length > 1 ? parseInt(parts[1]) || 1 : 1
+  const skuPart = (parts[0] ?? '').toUpperCase()
+  const qty = parts.length > 1 ? parseInt(parts[1] ?? '1') || 1 : 1
 
   const found = productCatalog.find(p => p.sku.toUpperCase() === skuPart) ||
     serviceCatalog.find(s => s.sku.toUpperCase() === skuPart)
@@ -675,7 +675,7 @@ function computeRunningSubtotal(upToIndex: number): number {
   let sum = 0
   for (let i = 0; i <= upToIndex; i++) {
     const r = rows.value[i]
-    if (r.rowType === 'item' && (!r.isOptional || r.isSelected)) sum += r.lineTotal
+    if (r?.rowType === 'item' && (!r.isOptional || r.isSelected)) sum += r.lineTotal
   }
   return sum
 }

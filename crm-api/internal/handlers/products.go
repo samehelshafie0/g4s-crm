@@ -14,7 +14,7 @@ type ProductHandler struct{ db *gorm.DB }
 func NewProductHandler(db *gorm.DB) *ProductHandler { return &ProductHandler{db: db} }
 
 func (h *ProductHandler) List(c *gin.Context) {
-	params := pagination.GetParams(c)
+	params := pagination.GetParams(c, "sku", "name", "selling_price")
 	var items []models.Product
 	var total int64
 	query := h.db.Model(&models.Product{}).Preload("Manufacturer").Preload("Category")
@@ -45,18 +45,18 @@ func (h *ProductHandler) Get(c *gin.Context) {
 
 func (h *ProductHandler) Create(c *gin.Context) {
 	var req struct {
-		SKU             string              `json:"sku" validate:"required"`
-		Name            string              `json:"name" validate:"required"`
-		Description     string              `json:"description"`
-		ManufacturerID  *string             `json:"manufacturerId"`
-		ProductType     models.ProductType  `json:"productType" validate:"required"`
-		OriginCurrency  models.Currency     `json:"originCurrency"`
-		UnitCostOrigin  float64             `json:"unitCostOrigin"`
-		FXRate          float64             `json:"fxRate"`
-		FreightPercent  float64             `json:"freightPercent"`
-		CustomsPercent  float64             `json:"customsPercent"`
-		SellingPrice    float64             `json:"sellingPrice"`
-		LeadTimeDays    int                 `json:"leadTimeDays"`
+		SKU            string             `json:"sku" validate:"required"`
+		Name           string             `json:"name" validate:"required"`
+		Description    string             `json:"description"`
+		ManufacturerID *string            `json:"manufacturerId"`
+		ProductType    models.ProductType `json:"productType" validate:"required"`
+		OriginCurrency models.Currency    `json:"originCurrency"`
+		UnitCostOrigin float64            `json:"unitCostOrigin"`
+		FXRate         float64            `json:"fxRate"`
+		FreightPercent float64            `json:"freightPercent"`
+		CustomsPercent float64            `json:"customsPercent"`
+		SellingPrice   float64            `json:"sellingPrice"`
+		LeadTimeDays   int                `json:"leadTimeDays"`
 	}
 	if !v.BindAndValidate(c, &req) {
 		return

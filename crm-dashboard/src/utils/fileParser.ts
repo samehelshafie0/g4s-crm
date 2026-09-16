@@ -1,11 +1,4 @@
 import * as XLSX from 'xlsx'
-import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist'
-
-GlobalWorkerOptions.workerSrc = new URL(
-  'pdfjs-dist/build/pdf.worker.min.mjs',
-  import.meta.url,
-).toString()
-
 // ─── Types ──────────────────────────────────────────────────
 
 export interface ParsedRow {
@@ -592,15 +585,16 @@ export async function parseExcelFile(
   const hRow = jsonData[headerIdx]
   if (!hRow) return { headers: [], rows: [], mappedColumns: {}, rawRowCount: 0, detectionMethod: {} }
   const headerRow = hRow.map(h => String(h).trim())
-  const headers = headerRow.filter(h => h.length > 0)
+  const sourceColumns = headerRow.map((name, index) => ({ name, index })).filter(column => column.name.length > 0)
+  const headers = sourceColumns.map(column => column.name)
 
   const rows: ParsedRow[] = []
   for (let i = headerIdx + 1; i < jsonData.length; i++) {
     const cells = jsonData[i]
     if (!cells || cells.every(c => !String(c).trim())) continue
     const row: ParsedRow = {}
-    headers.forEach((h, idx) => {
-      row[h] = idx < cells.length ? String(cells[idx]).trim() : ''
+    sourceColumns.forEach(({ name, index }) => {
+      row[name] = String(cells[index] ?? '').trim()
     })
     rows.push(row)
   }
@@ -653,6 +647,8 @@ export async function parsePDFFile(
   file: File,
   columnAliases: ColumnMapping[] = DEFAULT_COLUMN_ALIASES,
 ): Promise<ParseResult> {
+  const { getDocument, GlobalWorkerOptions } = await import('pdfjs-dist')
+  GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString()
   const buffer = await file.arrayBuffer()
   const pdf = await getDocument({ data: new Uint8Array(buffer) }).promise
   const allItems: TextItem[] = []

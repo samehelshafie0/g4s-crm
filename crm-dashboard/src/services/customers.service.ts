@@ -1,6 +1,12 @@
 import { http, type ApiResponse, type PaginationParams } from './http'
 import type { Customer, CustomerSite, CustomerContact } from '@/types'
 
+// Send only editable header fields; contacts and sites have their own endpoints.
+function customerPayload(data: Partial<Customer>) {
+  const { companyName, sector, region, status, type, crNumber, vatNumber, notes } = data
+  return { companyName, sector, region, status, type, crNumber, vatNumber, notes }
+}
+
 export const customersService = {
   list: (params?: PaginationParams) =>
     http.get<ApiResponse<Customer[]>>('/customers', { params }).then((r) => r.data),
@@ -9,10 +15,10 @@ export const customersService = {
     http.get<ApiResponse<Customer>>(`/customers/${id}`).then((r) => r.data),
 
   create: (data: Partial<Customer>) =>
-    http.post<ApiResponse<Customer>>('/customers', data).then((r) => r.data),
+    http.post<ApiResponse<Customer>>('/customers', customerPayload(data)).then((r) => r.data),
 
   update: (id: string, data: Partial<Customer>) =>
-    http.patch<ApiResponse<Customer>>(`/customers/${id}`, data).then((r) => r.data),
+    http.patch<ApiResponse<Customer>>(`/customers/${id}`, customerPayload(data)).then((r) => r.data),
 
   delete: (id: string) =>
     http.delete<ApiResponse<null>>(`/customers/${id}`).then((r) => r.data),

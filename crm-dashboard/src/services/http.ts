@@ -34,62 +34,42 @@ http.interceptors.request.use((config: InternalAxiosRequestConfig) => {
 })
 
 // ─── Response Interceptor — auto-refresh on 401 ─────────────
-let isRefreshing = false
-let failedQueue: Array<{ resolve: (v: unknown) => void; reject: (e: unknown) => void }> = []
+// One bounded refresh request shared by all expired requests. Every request retries once.
+let refreshPromise: Promise<string> | null = null
+export const refreshHttp = axios.create({ baseURL: '/api/v1', timeout: 15_000 })
 
-const processQueue = (error: unknown, token: string | null = null) => {
-  failedQueue.forEach(({ resolve, reject }) => {
-    if (error) reject(error)
-    else resolve(token)
-  })
-  failedQueue = []
+function expireSession() {
+  tokenStorage.clear()
+  if (window.location.pathname !== '/login') window.location.replace('/login')
 }
 
 http.interceptors.response.use(
-  (response) => response,
+  response => response,
   async (error: AxiosError) => {
-    const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean }
-
-    if (error.response?.status === 401 && !originalRequest._retry) {
-      if (isRefreshing) {
-        return new Promise((resolve, reject) => {
-          failedQueue.push({ resolve, reject })
-        }).then((token) => {
-          originalRequest.headers.Authorization = `Bearer ${token}`
-          return http(originalRequest)
-        })
+    const request = error.config as (InternalAxiosRequestConfig & { _retry?: boolean }) | undefined
+    if (error.response?.status !== 401 || !request || request.url?.startsWith('/auth/login') || request.url?.startsWith('/auth/refresh') || request.url?.startsWith('/auth/logout')) throw error
+    if (request._retry) { expireSession(); throw error }
+    request._retry = true
+    const refresh = tokenStorage.getRefresh()
+    if (!refresh) { expireSession(); throw error }
+    try {
+      if (!refreshPromise) {
+        refreshPromise = refreshHttp.post<ApiResponse<{ accessToken: string; refreshToken: string }>>('/auth/refresh', { refreshToken: refresh })
+          .then(({ data }) => {
+            if (!data.success || !data.data?.accessToken || !data.data?.refreshToken) throw new Error('Invalid refresh response')
+            // A logout or different login while refresh was in flight must win.
+            if (tokenStorage.getRefresh() !== refresh) throw new Error('Session changed')
+            tokenStorage.setTokens(data.data.accessToken, data.data.refreshToken)
+            return data.data.accessToken
+          }).finally(() => { refreshPromise = null })
       }
-
-      originalRequest._retry = true
-      isRefreshing = true
-
-      const refreshToken = tokenStorage.getRefresh()
-      if (!refreshToken) {
-        tokenStorage.clear()
-        window.location.href = '/login'
-        return Promise.reject(error)
-      }
-
-      try {
-        const { data } = await axios.post('/api/v1/auth/refresh', {
-          refreshToken,
-        })
-        const { accessToken, refreshToken: newRefresh } = data.data
-        tokenStorage.setTokens(accessToken, newRefresh)
-        processQueue(null, accessToken)
-        originalRequest.headers.Authorization = `Bearer ${accessToken}`
-        return http(originalRequest)
-      } catch (refreshError) {
-        processQueue(refreshError, null)
-        tokenStorage.clear()
-        window.location.href = '/login'
-        return Promise.reject(refreshError)
-      } finally {
-        isRefreshing = false
-      }
+      const token = await refreshPromise
+      request.headers.Authorization = `Bearer ${token}`
+      return http(request)
+    } catch (refreshError) {
+      if (tokenStorage.getRefresh() === refresh) expireSession()
+      throw refreshError
     }
-
-    return Promise.reject(error)
   },
 )
 

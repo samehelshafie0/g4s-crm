@@ -328,8 +328,14 @@ function applyCatalogParseResult(result: ParseResult) {
 
 async function handleCatalogFile(e: Event) {
   const input = e.target as HTMLInputElement
-  if (!input.files?.length) return
-  const file = input.files[0]
+  const file = input.files?.[0]
+  if (!file) return
+  await readCatalogFile(file)
+  input.value = ''
+}
+
+async function readCatalogFile(file?: File) {
+  if (!file) return
   catalogFileName.value = file.name
   catalogParseError.value = ''
   catalogPreviewRows.value = []
@@ -341,7 +347,6 @@ async function handleCatalogFile(e: Event) {
   if ('error' in out) { catalogParseError.value = out.error; return }
   catalogFileType.value = out.fileType
   applyCatalogParseResult(out.result)
-  input.value = ''
 }
 
 const catalogPasteText = ref('')
@@ -442,8 +447,8 @@ function savePrice() {
             <td class="text-right whitespace-nowrap font-medium">SAR {{ formatSAR(p.sellingPrice) }}</td>
             <td class="text-right"><span :class="['font-semibold', marginClass(p.targetMarginPercent)]">{{ p.targetMarginPercent.toFixed(1) }}%</span></td>
             <td class="text-center">{{ p.leadTimeDays }}d</td>
-            <td class="text-center"><span v-if="(vendorCatalogs[p.sku] || []).length" class="badge badge-info">{{ vendorCatalogs[p.sku].length }}</span><span v-else class="text-muted">—</span></td>
-            <td class="text-center"><span v-if="(productDocs[p.sku] || []).length" class="badge badge-gray">{{ productDocs[p.sku].length }}</span><span v-else class="text-muted">—</span></td>
+            <td class="text-center"><span v-if="(vendorCatalogs[p.sku] || []).length" class="badge badge-info">{{ (vendorCatalogs[p.sku]?.length ?? 0) }}</span><span v-else class="text-muted">—</span></td>
+            <td class="text-center"><span v-if="(productDocs[p.sku] || []).length" class="badge badge-gray">{{ (productDocs[p.sku]?.length ?? 0) }}</span><span v-else class="text-muted">—</span></td>
             <td><span :class="['badge badge-dot', p.isActive ? 'badge-success' : 'badge-danger']">{{ p.isActive ? 'Active' : 'Inactive' }}</span></td>
             <td>
               <div class="table-actions">
@@ -627,7 +632,7 @@ function savePrice() {
           </div>
 
           <!-- Upload area -->
-          <div class="cat-upload-zone" @click="triggerCatalogUpload" @dragover.prevent @drop.prevent="(e: DragEvent) => { if (e.dataTransfer?.files.length) { const dt = new DataTransfer(); dt.items.add(e.dataTransfer.files[0]); const inp = catalogFileRef; if (inp) { inp.files = dt.files; handleCatalogFile({ target: inp } as unknown as Event) } } }">
+          <div class="cat-upload-zone" @click="triggerCatalogUpload" @dragover.prevent @drop.prevent="readCatalogFile($event.dataTransfer?.files[0])">
             <input ref="catalogFileRef" type="file" accept=".csv,.tsv,.txt,.xlsx,.xls,.pdf" style="display:none" @change="handleCatalogFile" />
             <div v-if="!catalogFileName" class="cat-upload-placeholder">
               <Upload :size="32" class="text-muted" />

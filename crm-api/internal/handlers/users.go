@@ -19,7 +19,7 @@ func NewUserHandler(db *gorm.DB) *UserHandler {
 }
 
 func (h *UserHandler) List(c *gin.Context) {
-	params := pagination.GetParams(c)
+	params := pagination.GetParams(c, "first_name", "last_name", "email", "role")
 	role := c.Query("role")
 	dept := c.Query("department")
 	q := c.Query("q")

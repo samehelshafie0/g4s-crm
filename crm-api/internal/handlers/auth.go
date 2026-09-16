@@ -23,12 +23,12 @@ type loginRequest struct {
 }
 
 type registerRequest struct {
-	FirstName  string              `json:"firstName" validate:"required"`
-	LastName   string              `json:"lastName" validate:"required"`
-	Email      string              `json:"email" validate:"required,email"`
-	Password   string              `json:"password" validate:"required,min=8"`
-	Role       models.UserRole     `json:"role" validate:"required,oneof=admin sales_manager sales_executive pre_sales procurement_manager procurement_officer warehouse_manager project_manager viewer"`
-	Department models.Department   `json:"department"`
+	FirstName  string            `json:"firstName" validate:"required"`
+	LastName   string            `json:"lastName" validate:"required"`
+	Email      string            `json:"email" validate:"required,email"`
+	Password   string            `json:"password" validate:"required,min=8"`
+	Role       models.UserRole   `json:"role" validate:"required,oneof=admin sales_manager sales_executive pre_sales procurement_manager procurement_officer warehouse_manager project_manager viewer"`
+	Department models.Department `json:"department"`
 }
 
 type refreshRequest struct {
@@ -141,16 +141,12 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 // @Success      200  {object}  response.Response
 // @Router       /auth/me [get]
 func (h *AuthHandler) Me(c *gin.Context) {
-	userID := middleware.GetCurrentUserID(c)
-	if userID.String() == "00000000-0000-0000-0000-000000000000" {
+	user, ok := c.Get("currentUser")
+	if !ok {
 		response.Unauthorized(c, "Not authenticated")
 		return
 	}
-	response.OK(c, gin.H{
-		"id":    userID,
-		"role":  middleware.GetCurrentUserRole(c),
-		"email": c.GetString("userEmail"),
-	})
+	response.OK(c, user)
 }
 
 // ChangePassword godoc

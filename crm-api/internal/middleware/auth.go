@@ -10,12 +10,13 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
+	"gorm.io/gorm"
 )
 
 type Claims struct {
-	UserID uuid.UUID        `json:"userId"`
-	Role   models.UserRole  `json:"role"`
-	Email  string           `json:"email"`
+	UserID uuid.UUID       `json:"userId"`
+	Role   models.UserRole `json:"role"`
+	Email  string          `json:"email"`
 	jwt.RegisteredClaims
 }
 
@@ -34,7 +35,7 @@ func LoadPublicKey(path string) error {
 	return nil
 }
 
-func Auth() gin.HandlerFunc {
+func Auth(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		header := c.GetHeader("Authorization")
 		if header == "" {
@@ -58,7 +59,7 @@ func Auth() gin.HandlerFunc {
 				return nil, jwt.ErrSignatureInvalid
 			}
 			return publicKey, nil
-		})
+		}, jwt.WithValidMethods([]string{"RS256"}), jwt.WithExpirationRequired())
 
 		if err != nil || !token.Valid {
 			response.Unauthorized(c, "Invalid or expired token")
@@ -66,6 +67,15 @@ func Auth() gin.HandlerFunc {
 			return
 		}
 
+		var user models.User
+		if err := db.Where("id = ? AND is_active = true", claims.UserID).First(&user).Error; err != nil {
+			response.Unauthorized(c, "User is unavailable or inactive")
+			c.Abort()
+			return
+		}
+		c.Set("currentUser", user)
+		claims.Role = user.Role
+		claims.Email = user.Email
 		c.Set("userID", claims.UserID)
 		c.Set("userRole", claims.Role)
 		c.Set("userEmail", claims.Email)

@@ -16,10 +16,11 @@ export default defineConfig({
     },
   },
   server: {
-    port: 5173,
+    port: Number(process.env.CRM_WEB_PORT ?? 5174),
+    strictPort: true,
     proxy: {
       '/api': {
-        target: 'http://localhost:8080',
+        target: process.env.CRM_API_URL ?? 'http://127.0.0.1:18080',
         changeOrigin: true,
         secure: false,
       },

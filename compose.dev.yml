@@ -1,0 +1,20 @@
+# Isolated local PostgreSQL; no production services or existing volumes are used.
+name: g4s-crm-dev
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: g4s_crm_dev
+      POSTGRES_USER: g4s_dev
+      POSTGRES_PASSWORD: crm-local-development
+    ports:
+      - "127.0.0.1:${CRM_DB_PORT:-55432}:5432"
+    volumes:
+      - dev_db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U g4s_dev -d g4s_crm_dev"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+volumes:
+  dev_db:

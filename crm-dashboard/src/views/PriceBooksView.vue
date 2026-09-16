@@ -111,7 +111,7 @@ interface PBEntry extends PriceBookEntry {
 }
 
 // ── Price Book Data ─────────────────────────────────────────
-const priceBooks = ref<(PriceBook & { entries: PBEntry[] })[]>([
+const priceBooks = ref<(Omit<PriceBook, 'entries'> & { entries: PBEntry[] })[]>([
   {
     id: 'pb1', name: 'Standard Price List 2026', type: 'standard', description: 'Default pricing for all products and services',
     validFrom: '2026-01-01', validTo: '2026-12-31', isActive: true, createdAt: '2025-12-15T08:00:00Z', updatedAt: '2026-01-02T08:00:00Z',
@@ -149,7 +149,7 @@ const priceBooks = ref<(PriceBook & { entries: PBEntry[] })[]>([
 
 // ── View Mode: list vs builder ──────────────────────────────
 const mode = ref<'list' | 'builder'>('list')
-const activeBook = ref<(PriceBook & { entries: PBEntry[] }) | null>(null)
+const activeBook = ref<(Omit<PriceBook, 'entries'> & { entries: PBEntry[] }) | null>(null)
 const saveMessage = ref('')
 
 // ── Builder: Search & Filter ────────────────────────────────
@@ -245,7 +245,7 @@ const summaryStats = computed(() => {
 })
 
 // ── Navigation ──────────────────────────────────────────────
-function openBuilder(book: PriceBook & { entries: PBEntry[] }) {
+function openBuilder(book: Omit<PriceBook, 'entries'> & { entries: PBEntry[] }) {
   activeBook.value = JSON.parse(JSON.stringify(book))
   entryKindFilter.value = 'all'
   searchQuery.value = ''

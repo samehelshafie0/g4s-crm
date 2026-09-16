@@ -101,6 +101,7 @@ async function handleLogin() {
 
 <style scoped>
 .login-page {
+  width: 100%;
   min-height: 100vh;
   display: flex;
   align-items: center;

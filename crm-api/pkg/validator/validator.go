@@ -4,14 +4,15 @@ import (
 	"reflect"
 	"strings"
 
+	"g4s-crm/api/pkg/response"
 	"github.com/gin-gonic/gin"
 	"github.com/gin-gonic/gin/binding"
 	"github.com/go-playground/validator/v10"
-	"g4s-crm/api/pkg/response"
 )
 
 func Setup() {
 	if v, ok := binding.Validator.Engine().(*validator.Validate); ok {
+		v.SetTagName("validate")
 		// Use JSON field names in error messages
 		v.RegisterTagNameFunc(func(fld reflect.StructField) string {
 			name := strings.SplitN(fld.Tag.Get("json"), ",", 2)[0]
@@ -31,7 +32,7 @@ func BindAndValidate(c *gin.Context, obj interface{}) bool {
 		if ve, ok := err.(validator.ValidationErrors); ok {
 			for _, e := range ve {
 				details = append(details, response.FieldError{
-					Field:   e.Field(),
+					Field:   e.Namespace(),
 					Message: buildMessage(e),
 					Code:    e.Tag(),
 				})
@@ -52,9 +53,9 @@ func buildMessage(e validator.FieldError) string {
 	case "email":
 		return e.Field() + " must be a valid email address"
 	case "min":
-		return e.Field() + " must be at least " + e.Param() + " characters"
+		return e.Field() + " must meet minimum " + e.Param()
 	case "max":
-		return e.Field() + " must be at most " + e.Param() + " characters"
+		return e.Field() + " must not exceed " + e.Param()
 	case "oneof":
 		return e.Field() + " must be one of: " + e.Param()
 	case "uuid4":

@@ -431,8 +431,14 @@ function applyPOParseResult(result: ParseResult) {
 
 async function handlePOFile(e: Event) {
   const input = e.target as HTMLInputElement
-  if (!input.files?.length) return
-  const file = input.files[0]
+  const file = input.files?.[0]
+  if (!file) return
+  await readPOFile(file)
+  input.value = ''
+}
+
+async function readPOFile(file?: File) {
+  if (!file) return
   poFileName.value = file.name
   poFileError.value = ''
   poFileRows.value = []
@@ -444,7 +450,6 @@ async function handlePOFile(e: Event) {
   if ('error' in out) { poFileError.value = out.error; return }
   poFileType.value = out.fileType
   applyPOParseResult(out.result)
-  input.value = ''
 }
 
 function parsePOPastedText() {
@@ -822,7 +827,12 @@ async function handleFileUpload(event: Event) {
   const input = event.target as HTMLInputElement
   const file = input.files?.[0]
   if (!file) return
+  await readSQFile(file)
+  input.value = ''
+}
 
+async function readSQFile(file?: File) {
+  if (!file) return
   csvFileName.value = file.name
   csvParseError.value = ''
   csvPreviewItems.value = []
@@ -834,7 +844,6 @@ async function handleFileUpload(event: Event) {
   if ('error' in out) { csvParseError.value = out.error; return }
   csvFileType.value = out.fileType
   applySQParseResult(out.result)
-  input.value = ''
 }
 
 function parseSQPastedText() {
@@ -1646,7 +1655,7 @@ function delayHideSQDropdown() { window.setTimeout(() => { showSQItemDropdown.va
               <h4 class="sq-form-section-title"><Upload :size="14" /> Import from File</h4>
               <div class="sq-upload-area">
                 <input ref="fileInputRef" type="file" accept=".csv,.tsv,.txt,.xlsx,.xls,.pdf" class="sq-file-input" @change="handleFileUpload" />
-                <div class="sq-upload-box" @click="triggerFileUpload" @dragover.prevent @drop.prevent="(e: DragEvent) => { if (e.dataTransfer?.files.length) { const dt = new DataTransfer(); dt.items.add(e.dataTransfer.files[0]); if (fileInputRef) { fileInputRef.files = dt.files; handleFileUpload({ target: fileInputRef } as unknown as Event) } } }">
+                <div class="sq-upload-box" @click="triggerFileUpload" @dragover.prevent @drop.prevent="readSQFile($event.dataTransfer?.files[0])">
                   <div v-if="!csvFileName" class="sq-upload-inner">
                     <Upload :size="24" />
                     <div class="sq-upload-text">
@@ -2035,7 +2044,7 @@ function delayHideSQDropdown() { window.setTimeout(() => { showSQItemDropdown.va
                   <button class="btn btn-ghost btn-icon btn-sm" @click="closePOFileUpload"><X :size="16" /></button>
                 </div>
 
-                <div class="po-file-upload-zone" @click="triggerPOFileUpload" @dragover.prevent @drop.prevent="(e: DragEvent) => { if (e.dataTransfer?.files.length) { const dt = new DataTransfer(); dt.items.add(e.dataTransfer.files[0]); if (poFileRef) { poFileRef.files = dt.files; handlePOFile({ target: poFileRef } as unknown as Event) } } }">
+                <div class="po-file-upload-zone" @click="triggerPOFileUpload" @dragover.prevent @drop.prevent="readPOFile($event.dataTransfer?.files[0])">
                   <input ref="poFileRef" type="file" accept=".csv,.tsv,.txt,.xlsx,.xls,.pdf" style="display:none" @change="handlePOFile" />
                   <div v-if="!poFileName" class="po-file-placeholder">
                     <Upload :size="24" class="text-muted" />

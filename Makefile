@@ -30,8 +30,8 @@ logs-frontend:
 setup:
 	@echo "Generating RSA key pair for JWT..."
 	@mkdir -p crm-api/keys
-	@openssl genrsa -out crm-api/keys/private.pem 2048
-	@openssl rsa -in crm-api/keys/private.pem -pubout -out crm-api/keys/public.pem
+	@test -f crm-api/keys/private.pem || (umask 077; openssl genrsa -out crm-api/keys/private.pem 2048)
+	@test -f crm-api/keys/public.pem || openssl rsa -in crm-api/keys/private.pem -pubout -out crm-api/keys/public.pem
 	@echo "Keys created in crm-api/keys/"
 	@echo ""
 	@echo "Copying .env.example → .env"
@@ -41,12 +41,29 @@ setup:
 
 # ─── Database ────────────────────────────────────────────────
 migrate:
-	docker compose exec api sh -c \
-	  'migrate -path ./migrations -database "postgres://g4s_app:$$DB_PASSWORD@postgres:5432/g4s_crm?sslmode=disable" up'
+	docker compose run --rm --no-deps api ./g4s-crm-api migrate
 
-migrate-down:
-	docker compose exec api sh -c \
-	  'migrate -path ./migrations -database "postgres://g4s_app:$$DB_PASSWORD@postgres:5432/g4s_crm?sslmode=disable" down 1'
+seed:
+	docker compose run --rm --no-deps -e ADMIN_EMAIL -e ADMIN_PASSWORD -e ADMIN_FIRST_NAME -e ADMIN_LAST_NAME api ./g4s-crm-api bootstrap-admin
+
+# Local development uses its own compose project and ports.
+dev-db:
+	docker compose -f compose.dev.yml up -d --wait
+
+dev-migrate:
+	./scripts/dev-api.sh migrate
+
+dev-admin:
+	./scripts/dev-api.sh bootstrap-admin
+
+dev-api:
+	./scripts/dev-api.sh
+
+dev-web:
+	cd crm-dashboard && npm run dev
+
+test-integration:
+	./scripts/test-integration.sh
 
 psql:
 	docker compose exec postgres psql -U g4s_app -d g4s_crm
@@ -78,7 +95,6 @@ help:
 	@echo "  DATABASE:"
 	@echo "    make psql           Open psql shell"
 	@echo "    make migrate        Apply all migrations"
-	@echo "    make migrate-down   Roll back 1 migration"
 	@echo ""
 	@echo "  CLEANUP:"
 	@echo "    make clean          Stop + delete all volumes (wipes DB!)"

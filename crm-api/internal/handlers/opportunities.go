@@ -16,7 +16,7 @@ func NewOpportunityHandler(db *gorm.DB) *OpportunityHandler {
 }
 
 func (h *OpportunityHandler) List(c *gin.Context) {
-	params := pagination.GetParams(c)
+	params := pagination.GetParams(c, "title", "stage", "estimated_value", "expected_close_date")
 	var opps []models.Opportunity
 	var total int64
 

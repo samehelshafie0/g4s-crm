@@ -1,3 +1,4 @@
+import type { PurchaseOrderDto, SupplierQuoteDto, GoodsReceiptDto } from './procurementDtos'
 import { http, type ApiResponse, type PaginationParams } from './http'
 import type { Contract, PriceBook, ExchangeRate, RecurringService } from '@/types'
 
@@ -84,23 +85,23 @@ export const inventoryService = {
 // ─── Procurement ────────────────────────────────────────────
 export const procurementService = {
   listPOs: (params?: PaginationParams) =>
-    http.get<ApiResponse<unknown[]>>('/procurement/purchase-orders', { params }).then((r) => r.data),
+    http.get<ApiResponse<PurchaseOrderDto[]>>('/procurement/purchase-orders', { params }).then((r) => r.data),
   getPO: (id: string) =>
-    http.get<ApiResponse<unknown>>(`/procurement/purchase-orders/${id}`).then((r) => r.data),
+    http.get<ApiResponse<PurchaseOrderDto>>(`/procurement/purchase-orders/${id}`).then((r) => r.data),
   createPO: (data: Record<string, unknown>) =>
-    http.post<ApiResponse<unknown>>('/procurement/purchase-orders', data).then((r) => r.data),
+    http.post<ApiResponse<PurchaseOrderDto>>('/procurement/purchase-orders', data).then((r) => r.data),
   approvePO: (id: string) =>
-    http.patch<ApiResponse<unknown>>(`/procurement/purchase-orders/${id}/approve`).then((r) => r.data),
+    http.patch<ApiResponse<PurchaseOrderDto>>(`/procurement/purchase-orders/${id}/approve`).then((r) => r.data),
   listSQs: (params?: PaginationParams) =>
-    http.get<ApiResponse<unknown[]>>('/procurement/supplier-quotes', { params }).then((r) => r.data),
+    http.get<ApiResponse<SupplierQuoteDto[]>>('/procurement/supplier-quotes', { params }).then((r) => r.data),
   createSQ: (data: Record<string, unknown>) =>
-    http.post<ApiResponse<unknown>>('/procurement/supplier-quotes', data).then((r) => r.data),
+    http.post<ApiResponse<SupplierQuoteDto>>('/procurement/supplier-quotes', data).then((r) => r.data),
   convertToPO: (id: string) =>
-    http.post<ApiResponse<unknown>>(`/procurement/supplier-quotes/${id}/convert-to-po`).then((r) => r.data),
+    http.post<ApiResponse<PurchaseOrderDto>>(`/procurement/supplier-quotes/${id}/convert-to-po`).then((r) => r.data),
   listGRs: (params?: PaginationParams) =>
-    http.get<ApiResponse<unknown[]>>('/procurement/goods-receipts', { params }).then((r) => r.data),
+    http.get<ApiResponse<GoodsReceiptDto[]>>('/procurement/goods-receipts', { params }).then((r) => r.data),
   createGR: (data: Record<string, unknown>) =>
-    http.post<ApiResponse<unknown>>('/procurement/goods-receipts', data).then((r) => r.data),
+    http.post<ApiResponse<GoodsReceiptDto>>('/procurement/goods-receipts', data).then((r) => r.data),
 }
 
 // ─── Documents ──────────────────────────────────────────────

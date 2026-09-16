@@ -22,11 +22,22 @@ type Meta struct {
 	TotalPages int   `json:"totalPages"`
 }
 
-func GetParams(c *gin.Context) Params {
+// GetParams accepts only caller-declared database columns. Unknown sort keys use created_at.
+func GetParams(c *gin.Context, allowedSorts ...string) Params {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "25"))
 	sort := c.DefaultQuery("sort", "created_at")
 	order := c.DefaultQuery("order", "desc")
+	allowed := sort == "created_at" || sort == "updated_at" || sort == "id"
+	for _, column := range allowedSorts {
+		if sort == column {
+			allowed = true
+			break
+		}
+	}
+	if !allowed {
+		sort = "created_at"
+	}
 
 	if page < 1 {
 		page = 1

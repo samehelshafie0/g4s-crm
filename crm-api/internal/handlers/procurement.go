@@ -43,10 +43,10 @@ func (h *ProcurementHandler) GetPO(c *gin.Context) {
 
 func (h *ProcurementHandler) CreatePO(c *gin.Context) {
 	var req struct {
-		SupplierID   *string          `json:"supplierId"`
-		SupplierName string           `json:"supplierName" validate:"required"`
-		Currency     models.Currency  `json:"currency"`
-		Notes        string           `json:"notes"`
+		SupplierID   *string         `json:"supplierId"`
+		SupplierName string          `json:"supplierName" validate:"required"`
+		Currency     models.Currency `json:"currency"`
+		Notes        string          `json:"notes"`
 	}
 	if !v.BindAndValidate(c, &req) {
 		return
@@ -76,20 +76,45 @@ func (h *ProcurementHandler) ApprovePO(c *gin.Context) {
 	}
 	userID := middleware.GetCurrentUserID(c)
 	now := time.Now()
-	h.db.Model(&po).Updates(map[string]interface{}{
+	result := h.db.Model(&po).Where("status = ?", models.POStatusPendingApproval).Updates(map[string]interface{}{
 		"status": models.POStatusApproved, "approved_by_id": userID, "approved_at": now,
 	})
+	if result.Error != nil {
+		response.InternalError(c, "Failed to approve PO")
+		return
+	}
+	if result.RowsAffected != 1 {
+		response.Conflict(c, "PO changed; reload before approving")
+		return
+	}
 	response.OK(c, po)
 }
 
 func (h *ProcurementHandler) UpdatePOStatus(c *gin.Context) {
 	var req struct {
-		Status models.PurchaseOrderStatus `json:"status" validate:"required"`
+		Status models.PurchaseOrderStatus `json:"status" validate:"required,oneof=pending-approval ordered cancelled"`
 	}
-	if !v.BindAndValidate(c, &req) {
+	if !v.BindStrict(c, &req) {
 		return
 	}
-	h.db.Model(&models.PurchaseOrder{}).Where("id = ?", c.Param("id")).Update("status", req.Status)
+	var allowed []models.PurchaseOrderStatus
+	switch req.Status {
+	case models.POStatusPendingApproval:
+		allowed = []models.PurchaseOrderStatus{models.POStatusDraft}
+	case models.POStatusOrdered:
+		allowed = []models.PurchaseOrderStatus{models.POStatusApproved}
+	case models.POStatusCancelled:
+		allowed = []models.PurchaseOrderStatus{models.POStatusDraft, models.POStatusPendingApproval, models.POStatusApproved}
+	}
+	result := h.db.Model(&models.PurchaseOrder{}).Where("id = ? AND status IN ?", c.Param("id"), allowed).Update("status", req.Status)
+	if result.Error != nil {
+		response.InternalError(c, "Failed to update PO")
+		return
+	}
+	if result.RowsAffected != 1 {
+		response.Conflict(c, "PO is missing or this transition is not allowed")
+		return
+	}
 	response.OK(c, gin.H{"status": req.Status})
 }
 
@@ -181,7 +206,7 @@ func (h *ProcurementHandler) ListGRs(c *gin.Context) {
 	var items []models.GoodsReceipt
 	var total int64
 	h.db.Model(&models.GoodsReceipt{}).Count(&total)
-	h.db.Preload("Items.Product").Order(params.Sort+" "+params.Order).
+	h.db.Preload("Items.Product").Order(params.Sort + " " + params.Order).
 		Scopes(pagination.Paginate(params)).Find(&items)
 	response.OKWithMeta(c, items, pagination.BuildMeta(params, total))
 }
@@ -197,9 +222,9 @@ func (h *ProcurementHandler) GetGR(c *gin.Context) {
 
 func (h *ProcurementHandler) CreateGR(c *gin.Context) {
 	var req struct {
-		POID        string                   `json:"poId" validate:"required"`
-		ReceiveDate string                   `json:"receiveDate" validate:"required"`
-		Notes       string                   `json:"notes"`
+		POID        string `json:"poId" validate:"required"`
+		ReceiveDate string `json:"receiveDate" validate:"required"`
+		Notes       string `json:"notes"`
 		Items       []struct {
 			POItemID        string                `json:"poItemId" validate:"required"`
 			ProductID       string                `json:"productId" validate:"required"`
@@ -207,7 +232,7 @@ func (h *ProcurementHandler) CreateGR(c *gin.Context) {
 			UnitCost        float64               `json:"unitCost"`
 			StorageLocation string                `json:"storageLocation"`
 			Condition       models.GoodsCondition `json:"condition"`
-		} `json:"items" validate:"required,min=1"`
+		} `json:"items" validate:"required,min=1,dive"`
 	}
 	if !v.BindAndValidate(c, &req) {
 		return

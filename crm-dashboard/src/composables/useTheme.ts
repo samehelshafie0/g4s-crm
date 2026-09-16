@@ -40,7 +40,7 @@ function toggle() {
 function cycleMode() {
   const order: ThemeMode[] = ['light', 'dark', 'system']
   const idx = order.indexOf(mode.value)
-  setMode(order[(idx + 1) % order.length])
+  setMode(order[(idx + 1) % order.length] ?? 'system')
 }
 
 window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {

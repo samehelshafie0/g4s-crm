@@ -1,13 +1,16 @@
 package router
 
 import (
+	"context"
 	"g4s-crm/api/internal/config"
 	"g4s-crm/api/internal/handlers"
 	"g4s-crm/api/internal/middleware"
 	"g4s-crm/api/internal/models"
 	"g4s-crm/api/internal/services"
+	"g4s-crm/api/migrations"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
+	"time"
 )
 
 func Setup(db *gorm.DB, cfg *config.Config) *gin.Engine {
@@ -23,6 +26,20 @@ func Setup(db *gorm.DB, cfg *config.Config) *gin.Engine {
 	// Health check
 	r.GET("/health", func(c *gin.Context) {
 		c.JSON(200, gin.H{"status": "ok", "version": "1.0.0"})
+	})
+
+	r.GET("/ready", func(c *gin.Context) {
+		ctx, cancel := context.WithTimeout(c.Request.Context(), 2*time.Second)
+		defer cancel()
+		sqlDB, err := db.DB()
+		if err == nil {
+			err = migrations.Ready(ctx, sqlDB)
+		}
+		if err != nil {
+			c.JSON(503, gin.H{"status": "unavailable"})
+			return
+		}
+		c.JSON(200, gin.H{"status": "ready"})
 	})
 
 	// Initialize services
@@ -61,7 +78,7 @@ func Setup(db *gorm.DB, cfg *config.Config) *gin.Engine {
 		auth.POST("/reset-password", func(c *gin.Context) { c.JSON(200, gin.H{"message": "not implemented"}) })
 
 		authProtected := auth.Group("")
-		authProtected.Use(middleware.Auth())
+		authProtected.Use(middleware.Auth(db))
 		{
 			authProtected.POST("/register", middleware.Authorize("users:create"), authH.Register)
 			authProtected.POST("/logout", authH.Logout)
@@ -72,7 +89,7 @@ func Setup(db *gorm.DB, cfg *config.Config) *gin.Engine {
 
 	// All routes below require authentication
 	protected := api.Group("")
-	protected.Use(middleware.Auth())
+	protected.Use(middleware.Auth(db))
 
 	// ─── Users ──────────────────────────────────────────────
 	users := protected.Group("/users")
