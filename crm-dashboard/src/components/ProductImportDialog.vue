@@ -112,10 +112,13 @@ async function readFile(file?: File) {
         candidates.push({ label: 'Whole-document text', result, priced: pricedRows(result) })
       }
       if (!candidates.length) {
-        error.value =
-          server.status === 'rejected'
-            ? `${errorMessage(server.reason)} A scanned PDF holds no text: attach it to the record and enter the lines by hand.`
-            : 'No priced table was found in this PDF. Paste the rows below, or use the Excel template.'
+        const reason = server.status === 'rejected' ? errorMessage(server.reason) : ''
+        // A PDF that yielded no text at all is almost always a scan; a server
+        // error is a different problem and must not be reported as one.
+        const noText = server.status === 'fulfilled' || /no text|no priced table|scan/i.test(reason)
+        error.value = noText
+          ? 'No text could be read from this PDF, so it is most likely a scan. Attach it to the record and enter the lines by hand, or paste them below.'
+          : `${reason} Paste the rows below, or use the Excel template.`
         return
       }
     } else {

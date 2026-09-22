@@ -43,3 +43,26 @@ test('logout during refresh cannot restore the expired session', async () => {
  http.defaults.adapter = async config => unauthorized(config)
  await assert.rejects(http.get('/customers')); assert.equal(tokenStorage.getAccess(), null)
 })
+
+test('a file upload is not sent with the instance JSON content type', async () => {
+ // The shared instance defaults to JSON. Without stripping it for FormData the
+ // multipart boundary is never generated and the server rejects the body.
+ // The adapter sees the config after every request interceptor has run.
+ const { http } = await import('../src/services/http.ts')
+ const sentFor = async (body) => {
+  let captured = null
+  await http.post('/upload-probe', body, {
+   adapter: async config => { captured = config; throw new Error('stop') },
+  }).catch(() => {})
+  assert.ok(captured, 'request was not built')
+  return captured.headers['Content-Type']
+ }
+
+ // What the transport then chooses is its own business — in a browser it fills
+ // in multipart with a boundary. The invariant here is that the instance's JSON
+ // default never reaches a file upload, which is what breaks the boundary.
+ const form = new FormData()
+ form.append('file', new Blob(['x']), 'vendor.pdf')
+ assert.notEqual(await sentFor(form), 'application/json', 'FormData must not carry the JSON content type')
+ assert.equal(await sentFor({ a: 1 }), 'application/json', 'JSON bodies keep their content type')
+})

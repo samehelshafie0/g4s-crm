@@ -30,7 +30,10 @@ export const pdfExtractService = {
     const form = new FormData()
     form.append('file', file)
     return http
-      .post<ApiResponse<{ fileName: string; tables: ExtractedTable[] }>>('/extract/pdf-tables', form, { timeout: 90_000 })
+      .post<ApiResponse<{ fileName: string; tables: ExtractedTable[] }>>('/extract/pdf-tables', form, {
+        timeout: 90_000,
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
       .then(r => r.data)
   },
 }

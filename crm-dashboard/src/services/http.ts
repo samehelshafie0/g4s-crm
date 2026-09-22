@@ -30,6 +30,12 @@ http.interceptors.request.use((config: InternalAxiosRequestConfig) => {
   if (token) {
     config.headers.Authorization = `Bearer ${token}`
   }
+  // This instance defaults to JSON. A file upload must not inherit that: the
+  // multipart boundary is generated only when the header is left unset, and
+  // without it the server rejects the body as malformed.
+  if (typeof FormData !== 'undefined' && config.data instanceof FormData) {
+    delete config.headers['Content-Type']
+  }
   return config
 })
 
