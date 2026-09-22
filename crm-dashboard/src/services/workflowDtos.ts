@@ -14,12 +14,18 @@ export interface BuilderLine extends QuoteLineItem {
   isOptional: boolean; isSelected: boolean; isPrintable: boolean
   headingText?: string; commentText?: string; rateType?: string; billingCycle?: string
 }
+export interface QuoteAppendix {
+  id?: string; documentId: string; documentVersionId: string; label: string; documentName: string
+  version: string; fileName: string; fileType: string; fileSize: number; sortOrder?: number
+}
 export interface BuilderQuote extends Quote {
+  appendices?: QuoteAppendix[]
   lockVersion: number; parentQuoteId?: string; paymentTerms: string; deliveryTerms: string
   introductionText: string; closingText: string; internalNotes: string; purchasingNotes: string; statementOfWork: string
   soldTo: QuoteAddress; shipTo: QuoteAddress; lineItems: BuilderLine[]
 }
 export interface BuilderInput {
+  appendices?: Array<{documentVersionId:string;label:string}>
   lockVersion: number; customerId: string; opportunityId?: string | null; currency: string
   validUntil?: string | null; discountPercent: number; vatPercent: number; notes: string
   paymentTerms: string; deliveryTerms: string; introductionText: string; closingText: string

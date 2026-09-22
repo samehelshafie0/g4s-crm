@@ -223,6 +223,7 @@ func Setup(db *gorm.DB, cfg *config.Config) *gin.Engine {
 		quotes.PATCH("/:id/decline", middleware.Authorize("quotes:update"), quoteH.Decline)
 		quotes.POST("/:id/recalculate", middleware.Authorize("quotes:update"), quoteH.Recalculate)
 		quotes.GET("/:id/activity", middleware.Authorize("quotes:read"), quoteH.Activity)
+		quotes.GET("/:id/pdf", middleware.Authorize("quotes:read"), docH.ExportQuote)
 		quotes.GET("/:id/builder", middleware.Authorize("quotes:read"), quoteH.Get)
 		quotes.PUT("/:id/builder", middleware.Authorize("quotes:update"), quoteH.SaveBuilder)
 		quotes.POST("/:id/duplicate", middleware.Authorize("quotes:create"), quoteH.Duplicate)

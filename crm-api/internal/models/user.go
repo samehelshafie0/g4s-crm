@@ -33,6 +33,7 @@ const (
 
 type User struct {
 	Base
+	Permissions  []string   `gorm:"-" json:"permissions,omitempty"`
 	Email        string     `gorm:"uniqueIndex;not null" json:"email"`
 	PasswordHash string     `gorm:"not null" json:"-"`
 	FirstName    string     `gorm:"not null" json:"firstName"`

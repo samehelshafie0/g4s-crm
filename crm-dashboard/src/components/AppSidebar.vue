@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useAuthStore } from '@/stores/auth'
 import { useRoute, useRouter } from 'vue-router'
 import {
   LayoutDashboard,
@@ -30,6 +31,7 @@ const emit = defineEmits<{
   toggle: []
 }>()
 
+const auth = useAuthStore()
 const route = useRoute()
 const router = useRouter()
 
@@ -55,6 +57,7 @@ const navGroups = computed(() => [
     items: [
       { name: 'Manufacturers', path: '/manufacturers', icon: Factory },
       { name: 'Products', path: '/products', icon: Package },
+      { name: 'Service Catalog', path: '/services', icon: BookOpen },
       { name: 'Price Books', path: '/price-books', icon: BookOpen },
       { name: 'Inventory', path: '/inventory', icon: Warehouse },
       { name: 'Procurement', path: '/procurement', icon: ShoppingCart },
@@ -67,9 +70,15 @@ const navGroups = computed(() => [
       { name: 'Exchange Rates', path: '/exchange-rates', icon: ArrowLeftRight },
       { name: 'Teams', path: '/teams', icon: UserCog },
       { name: 'Documents', path: '/documents', icon: FolderOpen },
+      { name: 'User Management', path: '/users', icon: UserCog },
+      { name: 'My Profile', path: '/profile', icon: Users },
     ],
   },
-])
+].map(group => ({...group, items: group.items.filter(item => {
+  if (item.path === '/profile') return true
+  const resource = item.path === '/leads' ? 'opportunities' : item.path === '/services' ? 'products' : item.path.slice(1)
+  return auth.can(`${resource}:${resource === 'users' ? 'update' : 'read'}`)
+})})).filter(group => group.items.length))
 
 function isActive(path: string): boolean {
   return route.path === path || route.path.startsWith(path + '/')
@@ -115,7 +124,7 @@ function navigate(path: string) {
       </div>
     </nav>
 
-    <button class="sidebar-toggle" @click="emit('toggle')">
+    <button class="sidebar-toggle" :aria-label="collapsed ? 'Expand navigation' : 'Collapse navigation'" @click="emit('toggle')">
       <ChevronLeft v-if="!collapsed" :size="18" />
       <ChevronRight v-else :size="18" />
     </button>

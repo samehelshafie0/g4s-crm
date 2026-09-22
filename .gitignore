@@ -14,3 +14,6 @@
 crm-api/g4s-crm-api
 .cursor/
 .idea/
+
+**/__pycache__/
+**/*.pyc

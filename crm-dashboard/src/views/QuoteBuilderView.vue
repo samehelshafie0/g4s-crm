@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import AppDialog from '@/components/shared/AppDialog.vue'
+import QuoteAppendices from '@/components/QuoteAppendices.vue'
 import { ref, computed, watch, reactive, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import {
@@ -13,7 +15,7 @@ import { useProcurementStore } from '@/stores/procurement'
 
 import { quotesService, http } from '@/services'
 import type { ApiResponse } from '@/services/http'
-import type { BuilderQuote, BuilderInput } from '@/services/workflowDtos'
+import type { BuilderQuote, BuilderInput, QuoteAppendix } from '@/services/workflowDtos'
 import { priceBooksService } from '@/services'
 import { errorMessage } from '@/services/payload'
 import { useAuthStore } from '@/stores/auth'
@@ -127,7 +129,7 @@ const paymentTerms = ref('Net 30')
 const deliveryTerms = ref('Ex-Works')
 
 // ── Builder Tabs ─────────────────────────────────────────────
-type BuilderTab = 'items' | 'addresses' | 'notes'
+type BuilderTab = 'items' | 'addresses' | 'notes' | 'documents'
 const builderTab = ref<BuilderTab>('items')
 
 // ── Sold To / Ship To ────────────────────────────────────────
@@ -587,11 +589,16 @@ function computeRunningSubtotal(upToIndex: number): number {
 const saveMessage = ref('')
 function showSaveToast(msg: string) { saveMessage.value = msg; window.setTimeout(() => { saveMessage.value = '' }, 2500) }
 const saving = ref(false)
+const exportingPdf = ref(false)
+const appendixBusy = ref(false)
+const appendices = ref<QuoteAppendix[]>([])
+const pdfError = ref('')
 const loadedQuote = ref<BuilderQuote | null>(null)
-const locked = computed(() => !loadedQuote.value || quoteStatus.value !== 'draft' || saving.value)
-const canApprove = computed(() => ['admin', 'sales_manager'].includes(auth.userRole))
+const locked = computed(() => !loadedQuote.value || !auth.can('quotes:update') || quoteStatus.value !== 'draft' || saving.value || exportingPdf.value)
+const canApprove = computed(() => auth.can('quotes:approve'))
 function applyQuote(q: BuilderQuote) {
   loadedQuote.value = q
+  appendices.value = q.appendices ?? []
   quoteNumber.value = q.quoteNumber; customerId.value = q.customerId; customerName.value = q.customerName
   quoteStatus.value = q.status; validUntil.value = q.validUntil?.slice(0, 10) ?? ''; currency.value = q.currency
   notes.value = q.notes; discountPercent.value = q.discountPercent; vatPercent.value = q.vatPercent
@@ -626,7 +633,8 @@ onMounted(async () => {
   } catch (error) { window.alert(errorMessage(error)) }
 })
 async function saveDraft(): Promise<boolean> {
-  if (locked.value || !loadedQuote.value) return false
+  if (locked.value || appendixBusy.value || !loadedQuote.value) return false
+  if (appendices.value.some(item => !item.label.trim())) { pdfError.value = 'Give every appendix a label before saving.'; return false }
   saving.value = true
   try {
     const payload: BuilderInput = {
@@ -635,6 +643,7 @@ async function saveDraft(): Promise<boolean> {
       notes: notes.value, paymentTerms: paymentTerms.value, deliveryTerms: deliveryTerms.value,
       introductionText: introductionText.value, closingText: closingText.value, internalNotes: internalNotes.value,
       purchasingNotes: purchasingNotes.value, statementOfWork: statementOfWork.value, soldTo: soldTo.value, shipTo: shipTo.value,
+      appendices: appendices.value.map(item => ({documentVersionId:item.documentVersionId,label:item.label.trim()})),
       rows: rows.value.map(row => ({
         id: row.id, rowType: row.rowType, source: row.source,
         productId: row.source === 'product' ? row.productId : undefined,
@@ -670,115 +679,36 @@ async function createRevision() {
   try { const revised = await quotesService.revise(String(route.params.id)); await router.replace(`/quotes/${revised.data.id}/builder`); applyQuote(revised.data) }
   catch (error) { window.alert(errorMessage(error)) }
 }
+const contractOpen = ref(false)
+const contractError = ref('')
+const contractDates = ref({startDate:new Date().toISOString().slice(0,10),endDate:''})
 async function convertToContract() {
-  const startDate = window.prompt('Contract start date (YYYY-MM-DD)', new Date().toISOString().slice(0, 10))
-  if (!startDate) return
-  const endDate = window.prompt('Contract end date (YYYY-MM-DD)')
-  if (!endDate) return
-  try { await quotesService.convertToContract(String(route.params.id), { title: `${customerName.value} — ${quoteNumber.value}`, type: 'sales', startDate, endDate, terms: paymentTerms.value }); showSaveToast('Contract created'); await router.push('/contracts') }
-  catch (error) { window.alert(errorMessage(error)) }
+  if (saving.value) return
+  contractError.value = ''
+  if (contractDates.value.endDate <= contractDates.value.startDate) { contractError.value = 'End date must be after the start date.'; return }
+  saving.value = true
+  try { await quotesService.convertToContract(String(route.params.id), { title: `${customerName.value} — ${quoteNumber.value}`, type: 'sales', ...contractDates.value, terms: paymentTerms.value }); contractOpen.value = false; await router.push('/contracts') }
+  catch (error) { contractError.value = errorMessage(error) } finally { saving.value = false }
 }
 
 // ── Print ────────────────────────────────────────────────────
-function htmlText(value: unknown): string { return String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]!) }
-function printQuote() {
-  const printableRows = rows.value.filter(r => r.isPrintable && (!r.isOptional || r.isSelected))
-  let lineNum = 0
-
-  const rowsHtml = printableRows.map(r => {
-    if (r.rowType === 'heading') {
-      return `<tr class="heading"><td colspan="7" style="background:#f1f5f9;font-weight:700;text-transform:uppercase;letter-spacing:.04em;padding:10px 12px;font-size:13px;border-bottom:2px solid #cbd5e1">${htmlText(r.headingText)}</td></tr>`
-    }
-    if (r.rowType === 'comment') {
-      return `<tr class="comment"><td colspan="7" style="background:#fffbeb;padding:8px 12px;font-style:italic;color:#78716c;font-size:12px">${htmlText(r.commentText)}</td></tr>`
-    }
-    if (r.rowType === 'subtotal') {
-      return `<tr class="subtotal"><td colspan="5" style="border-top:2px solid #94a3b8;padding:8px 12px;font-weight:600;text-transform:uppercase;font-size:11px;color:#64748b">Subtotal</td><td colspan="2" style="border-top:2px solid #94a3b8;text-align:right;padding:8px 12px;font-weight:700;font-family:monospace">SAR ${formatSAR(computeRunningSubtotal(rows.value.indexOf(r)))}</td></tr>`
-    }
-    lineNum++
-    const optLabel = r.isOptional ? ' <span style="color:#f59e0b;font-size:10px">(OPTIONAL)</span>' : ''
-    return `<tr>
-      <td style="text-align:center;color:#94a3b8;width:30px">${lineNum}</td>
-      <td><strong>${htmlText(r.description)}</strong>${optLabel}<br><span style="font-family:monospace;font-size:11px;color:#3b82f6">${htmlText(r.sku)}</span> ${r.manufacturer ? `<span style="color:#94a3b8;font-size:11px">· ${htmlText(r.manufacturer)}</span>` : ''}</td>
-      <td style="text-align:center">${r.quantity * r.multiplier}</td>
-      <td style="text-align:right;font-family:monospace">SAR ${formatSAR(r.unitPrice)}</td>
-      <td style="text-align:right">${r.discountPercent > 0 ? r.discountPercent.toFixed(1) + '%' : '—'}</td>
-      <td style="text-align:right;font-family:monospace;font-weight:600">SAR ${formatSAR(r.lineTotal)}</td>
-    </tr>`
-  }).join('')
-
-  const soldToHtml = `<div style="flex:1">
-    <h4 style="margin:0 0 8px;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:#64748b">Sold To</h4>
-    <p style="margin:0;font-weight:600">${htmlText(soldTo.value.contactName)}</p>
-    <p style="margin:0">${htmlText(soldTo.value.company)}</p>
-    <p style="margin:0;color:#64748b">${htmlText(soldTo.value.address)}</p>
-    <p style="margin:0;color:#64748b">${htmlText(soldTo.value.city)}, ${htmlText(soldTo.value.country)}</p>
-    <p style="margin:4px 0 0;font-size:12px;color:#64748b">${htmlText(soldTo.value.phone)} · ${htmlText(soldTo.value.email)}</p>
-  </div>`
-
-  const shipToHtml = shipTo.value.contactName ? `<div style="flex:1">
-    <h4 style="margin:0 0 8px;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:#64748b">Ship To</h4>
-    <p style="margin:0;font-weight:600">${htmlText(shipTo.value.contactName)}</p>
-    <p style="margin:0">${htmlText(shipTo.value.company)}</p>
-    <p style="margin:0;color:#64748b">${htmlText(shipTo.value.address)}</p>
-    <p style="margin:0;color:#64748b">${htmlText(shipTo.value.city)}, ${htmlText(shipTo.value.country)}</p>
-    <p style="margin:4px 0 0;font-size:12px;color:#64748b">${htmlText(shipTo.value.phone)} · ${htmlText(shipTo.value.email)}</p>
-  </div>` : ''
-
-  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${htmlText(quoteNumber.value)}</title>
-<style>
-  * { margin:0; padding:0; box-sizing:border-box; }
-  body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; font-size:13px; color:#1e293b; padding:40px; line-height:1.5; }
-  .header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:32px; padding-bottom:20px; border-bottom:3px solid #2563eb; }
-  .logo { font-size:28px; font-weight:800; color:#2563eb; }
-  .logo-sub { font-size:11px; color:#64748b; text-transform:uppercase; letter-spacing:.1em; }
-  .quote-info { text-align:right; }
-  .quote-num { font-size:20px; font-weight:700; color:#1e293b; }
-  .quote-meta { font-size:12px; color:#64748b; margin-top:4px; }
-  .addresses { display:flex; gap:40px; margin-bottom:28px; }
-  .intro { margin-bottom:24px; padding:12px 16px; background:#f8fafc; border-left:3px solid #2563eb; font-size:13px; color:#475569; line-height:1.6; }
-  table { width:100%; border-collapse:collapse; margin-bottom:24px; }
-  th { background:#f1f5f9; padding:10px 12px; font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:#64748b; border-bottom:2px solid #e2e8f0; text-align:left; }
-  td { padding:8px 12px; border-bottom:1px solid #f1f5f9; }
-  .totals { width:320px; margin-left:auto; margin-bottom:28px; }
-  .totals td { padding:6px 12px; font-size:13px; }
-  .totals .grand { border-top:2px solid #334155; font-size:16px; font-weight:700; }
-  .totals .grand td:last-child { color:#2563eb; }
-  .closing { margin-bottom:24px; padding:12px 16px; background:#f0fdf4; border-left:3px solid #22c55e; font-size:13px; color:#475569; line-height:1.6; }
-  .footer { margin-top:40px; padding-top:16px; border-top:1px solid #e2e8f0; display:flex; justify-content:space-between; font-size:11px; color:#94a3b8; }
-  @media print { body { padding:20px; } @page { margin:15mm; } }
-</style></head><body>
-<div class="header">
-  <div><div class="logo">G4S</div><div class="logo-sub">Security Solutions</div></div>
-  <div class="quote-info">
-    <div class="quote-num">${htmlText(quoteNumber.value)}</div>
-    <div class="quote-meta">Status: ${statusConfig[quoteStatus.value].label} · Valid Until: ${htmlText(validUntil.value)}<br>Payment: ${htmlText(paymentTerms.value)} · Delivery: ${htmlText(deliveryTerms.value)}</div>
-  </div>
-</div>
-<div class="addresses">${soldToHtml}${shipToHtml}</div>
-${introductionText.value ? `<div class="intro">${htmlText(introductionText.value)}</div>` : ''}
-<table>
-  <thead><tr><th style="width:30px;text-align:center">#</th><th>Description</th><th style="text-align:center;width:60px">Qty</th><th style="text-align:right;width:110px">Unit Price</th><th style="text-align:right;width:70px">Disc</th><th style="text-align:right;width:130px">Total</th></tr></thead>
-  <tbody>${rowsHtml}</tbody>
-</table>
-<table class="totals">
-  <tr><td>Subtotal</td><td style="text-align:right;font-family:monospace">SAR ${formatSAR(subtotal.value)}</td></tr>
-  ${discountPercent.value > 0 ? `<tr><td>Discount (${discountPercent.value}%)</td><td style="text-align:right;font-family:monospace;color:#ef4444">- SAR ${formatSAR(discountAmount.value)}</td></tr>` : ''}
-  ${discountPercent.value > 0 ? `<tr><td>After Discount</td><td style="text-align:right;font-family:monospace">SAR ${formatSAR(subtotalAfterDiscount.value)}</td></tr>` : ''}
-  <tr><td>VAT (${vatPercent.value}%)</td><td style="text-align:right;font-family:monospace">SAR ${formatSAR(vatAmount.value)}</td></tr>
-  <tr class="grand"><td>Grand Total</td><td style="text-align:right;font-family:monospace">SAR ${formatSAR(total.value)}</td></tr>
-</table>
-${closingText.value ? `<div class="closing">${htmlText(closingText.value)}</div>` : ''}
-${statementOfWork.value ? `<div style="margin-bottom:24px"><h4 style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:#64748b;margin-bottom:8px">Statement of Work</h4><p style="font-size:13px;color:#475569;line-height:1.6;white-space:pre-wrap">${htmlText(statementOfWork.value)}</p></div>` : ''}
-<div class="footer"><span>Generated on ${new Date().toLocaleDateString('en-GB', { day:'numeric', month:'long', year:'numeric' })}</span><span>${htmlText(quoteNumber.value)} · ${htmlText(customerName.value)}</span></div>
-</body></html>`
-
-  const w = window.open('', '_blank', 'width=900,height=700')
-  if (w) {
-    w.document.write(html)
-    w.document.close()
-    w.onload = () => { w.print() }
-  }
+async function printQuote() {
+  if (exportingPdf.value || saving.value || appendixBusy.value || !loadedQuote.value) return
+  pdfError.value = ''
+  // Export canonical saved data. Stop if saving failed or a concurrent edit won.
+  if (quoteStatus.value === 'draft' && auth.can('quotes:update') && !await saveDraft()) return
+  exportingPdf.value = true
+  try {
+    const blob = await quotesService.pdf(String(route.params.id),loadedQuote.value.lockVersion)
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a'); link.href = url; link.download = `${quoteNumber.value}.pdf`; link.click()
+    window.setTimeout(() => URL.revokeObjectURL(url),60_000)
+  } catch(error) {
+    const data = (error as {response?:{data?:unknown}}).response?.data
+    if (data instanceof Blob) {
+      try { pdfError.value = JSON.parse(await data.text()).error?.message || 'PDF export failed.' } catch { pdfError.value = 'PDF export failed. Try again.' }
+    } else { pdfError.value = errorMessage(error) }
+  } finally { exportingPdf.value = false }
 }
 
 // ── Excel/CSV Export ─────────────────────────────────────────
@@ -854,6 +784,7 @@ function exportExcel() {
 
 <template>
   <div class="builder-page">
+    <AppDialog v-model:open="contractOpen" title="Create contract from accepted quote" :busy="saving"><p>The contract will use this accepted quote's saved amount and currency.</p><form id="convert-contract" @submit.prevent="convertToContract"><label class="form-label" for="contract-start">Start date</label><input id="contract-start" v-model="contractDates.startDate" class="input form-input" type="date" required /><label class="form-label" for="contract-end">End date</label><input id="contract-end" v-model="contractDates.endDate" class="input form-input" type="date" required :min="contractDates.startDate" /><p v-if="contractError" class="form-error" role="alert">{{ contractError }}</p></form><template #footer><button class="btn" :disabled="saving" @click="contractOpen = false">Cancel</button><button class="btn btn-primary" form="convert-contract" type="submit" :disabled="saving">Create contract</button></template></AppDialog>
     <!-- Save Toast -->
     <Transition name="toast">
       <div v-if="saveMessage" class="save-toast"><CheckCircle2 :size="16" />{{ saveMessage }}</div>
@@ -872,13 +803,14 @@ function exportExcel() {
         </div>
       </div>
       <div class="builder-header-actions">
+<button class="btn btn-secondary btn-sm" @click="printQuote" :disabled="exportingPdf || saving || appendixBusy || !loadedQuote"><Printer :size="14" /> {{ exportingPdf ? 'Preparing PDF…' : 'Export PDF' }}</button>
         <button v-if="quoteStatus === 'pending-approval' && canApprove" class="btn btn-sm" :disabled="saving" @click="transition('approve')">Approve</button>
         <button v-if="quoteStatus === 'pending-approval' && canApprove" class="btn btn-sm" :disabled="saving" @click="transition('reject')">Return to draft</button>
-        <button v-if="quoteStatus === 'approved'" class="btn btn-sm" :disabled="saving" @click="transition('send')">Mark sent</button>
-        <button v-if="quoteStatus === 'sent'" class="btn btn-sm" :disabled="saving" @click="transition('accept')">Mark accepted</button>
-        <button v-if="quoteStatus === 'sent'" class="btn btn-sm" :disabled="saving" @click="transition('decline')">Mark declined</button>
-        <button v-if="quoteStatus === 'accepted' && canApprove" class="btn btn-sm" :disabled="saving" @click="convertToContract">Create contract</button>
-        <button v-if="quoteStatus !== 'draft'" class="btn btn-sm" :disabled="saving" @click="createRevision">New revision</button>
+        <button v-if="quoteStatus === 'approved' && auth.can('quotes:update')" class="btn btn-sm" :disabled="saving" @click="transition('send')">Mark sent</button>
+        <button v-if="quoteStatus === 'sent' && auth.can('quotes:update')" class="btn btn-sm" :disabled="saving" @click="transition('accept')">Mark accepted</button>
+        <button v-if="quoteStatus === 'sent' && auth.can('quotes:update')" class="btn btn-sm" :disabled="saving" @click="transition('decline')">Mark declined</button>
+        <button v-if="quoteStatus === 'accepted' && auth.can('contracts:create')" class="btn btn-sm" :disabled="saving" @click="contractError = ''; contractOpen = true">Create contract</button>
+        <button v-if="quoteStatus !== 'draft' && auth.can('quotes:create')" class="btn btn-sm" :disabled="saving" @click="createRevision">New revision</button>
         <button class="btn btn-secondary btn-sm" @click="saveDraft" :disabled="locked"><Save :size="14" /> Save Draft</button>
         <button class="btn btn-primary btn-sm" @click="submitForApproval" :disabled="locked"><Send :size="14" /> Submit</button>
       </div>
@@ -913,6 +845,8 @@ function exportExcel() {
     </div>
 
     <!-- Builder Tabs -->
+    <p v-if="pdfError" class="form-error" role="alert">{{ pdfError }}</p>
+    <p v-if="exportingPdf" role="status">Preparing PDF and converting supporting documents…</p>
     <div class="builder-tabs">
       <button :class="['builder-tab', builderTab === 'items' && 'builder-tab--active']" @click="builderTab = 'items'">
         <Package :size="16" /> Document Items <span class="builder-tab-count">{{ itemRows.length }}</span>
@@ -920,6 +854,7 @@ function exportExcel() {
       <button :class="['builder-tab', builderTab === 'addresses' && 'builder-tab--active']" @click="builderTab = 'addresses'">
         <MapPin :size="16" /> Sold To / Ship To
       </button>
+      <button :class="['builder-tab', builderTab === 'documents' && 'builder-tab--active']" @click="builderTab = 'documents'"><FileText :size="16" /> Documents <span class="builder-tab-count">{{ appendices.length }}</span></button>
       <button :class="['builder-tab', builderTab === 'notes' && 'builder-tab--active']" @click="builderTab = 'notes'">
         <FileText :size="16" /> Notes
       </button>
@@ -1205,7 +1140,7 @@ function exportExcel() {
             </div>
 
             <!-- Procurement Needed -->
-            <div v-if="outOfStockRows.length > 0" class="procurement-section">
+            <div v-if="outOfStockRows.length > 0 && auth.can('procurement:create')" class="procurement-section">
               <h4 class="procurement-title">
                 <ShoppingCart :size="14" />
                 Procurement Needed
@@ -1253,7 +1188,7 @@ function exportExcel() {
               <button class="btn btn-primary btn-lg summary-action-btn" @click="saveDraft" :disabled="locked"><Save :size="16" /> Save Draft</button>
               <button class="btn btn-success summary-action-btn" @click="submitForApproval" :disabled="locked"><CheckCircle2 :size="16" /> Submit for Approval</button>
               <div class="summary-secondary">
-                <button class="btn btn-secondary btn-sm" @click="printQuote"><Printer :size="14" /> Print</button>
+
                 <button class="btn btn-secondary btn-sm" @click="exportExcel"><FileSpreadsheet :size="14" /> Excel</button>
               </div>
             </div>
@@ -1263,6 +1198,8 @@ function exportExcel() {
     </div>
 
     <!-- Tab: Sold To / Ship To -->
+    <div v-show="builderTab === 'documents'" class="tab-content-panel"><QuoteAppendices v-if="loadedQuote" v-model="appendices" :customer-id="customerId" :disabled="locked || exportingPdf" @busy="appendixBusy = $event" /></div>
+
     <div v-show="builderTab === 'addresses'" class="tab-content-panel">
       <div class="addresses-grid">
         <div class="card address-card">
@@ -1633,11 +1570,11 @@ function exportExcel() {
 .toast-enter-from, .toast-leave-to { opacity: 0; transform: translateY(-12px); }
 
 /* Header */
-.builder-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-5); }
+.builder-header { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: center; justify-content: space-between; margin-bottom: var(--space-5); }
 .builder-header-left { display: flex; align-items: center; gap: var(--space-3); }
 .builder-title { font-size: var(--text-2xl); font-weight: 700; color: var(--color-neutral-900); }
 .builder-subtitle { display: flex; align-items: center; gap: var(--space-2); margin-top: 2px; font-size: var(--text-sm); }
-.builder-header-actions { display: flex; gap: var(--space-2); }
+.builder-header-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 
 /* Info Bar */
 .info-bar { display: flex; align-items: flex-end; gap: var(--space-4); padding: var(--space-4) var(--space-5); background: var(--content-surface); border: 1px solid var(--color-neutral-200); border-radius: var(--radius-lg); margin-bottom: var(--space-5); flex-wrap: wrap; }
@@ -1812,7 +1749,7 @@ function exportExcel() {
 .summary-secondary .btn { flex: 1; justify-content: center; }
 
 /* Builder Tabs */
-.builder-tabs { display: flex; gap: var(--space-1); border-bottom: 2px solid var(--color-neutral-200); margin-bottom: var(--space-5); }
+.builder-tabs { display: flex; overflow-x: auto; gap: var(--space-1); border-bottom: 2px solid var(--color-neutral-200); margin-bottom: var(--space-5); }
 .builder-tab { display: inline-flex; align-items: center; gap: var(--space-2); padding: var(--space-3) var(--space-4); font-size: var(--text-sm); font-weight: 500; color: var(--color-neutral-500); background: none; border: none; border-bottom: 2px solid transparent; margin-bottom: -2px; cursor: pointer; transition: all .15s; white-space: nowrap; }
 .builder-tab:hover { color: var(--color-neutral-700); }
 .builder-tab--active { color: var(--color-primary); border-bottom-color: var(--color-primary); }
@@ -1961,4 +1898,5 @@ function exportExcel() {
   .notes-grid { grid-template-columns: 1fr; }
   .form-row { grid-template-columns: 1fr; }
 }
+@media (max-width: 700px) { .builder-tabs { flex-wrap: wrap; } }
 </style>

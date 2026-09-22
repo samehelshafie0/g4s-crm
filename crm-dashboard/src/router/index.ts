@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
 import { tokenStorage } from '@/services/http'
 
 const router = createRouter({
@@ -116,6 +117,10 @@ const router = createRouter({
       meta: { title: 'Documents' },
     },
 
+    { path: '/users', name: 'users', component: () => import('@/views/UsersView.vue'), meta: { title: 'User Management', permission: 'users:update' } },
+    { path: '/profile', name: 'profile', component: () => import('@/views/ProfileView.vue'), meta: { title: 'My Profile' } },
+    { path: '/services', name: 'services', component: () => import('@/views/ServicesView.vue'), meta: { title: 'Service Catalog', permission: 'products:read' } },
+
     // ─── Catch-all ────────────────────────────────────────────
     {
       path: '/:pathMatch(.*)*',
@@ -125,7 +130,7 @@ const router = createRouter({
 })
 
 // ─── Auth Guard ──────────────────────────────────────────────
-router.beforeEach((to) => {
+router.beforeEach(async (to) => {
   document.title = `${to.meta.title || 'CRM'} | G4S CRM`
 
   const isPublic = to.meta.public === true
@@ -134,6 +139,13 @@ router.beforeEach((to) => {
   if (!isPublic && !hasToken) {
     return { name: 'login', query: { redirect: to.fullPath } }
   }
+
+  const auth = useAuthStore()
+  if (!isPublic && hasToken && !auth.user) await auth.fetchMe()
+  if (!isPublic && !auth.user) return { name: 'login', query: { redirect: to.fullPath } }
+  const resource = to.path.split('/')[1]
+  const permission = to.meta.permission as string | undefined ?? (resource === 'profile' ? undefined : `${resource === 'leads' ? 'opportunities' : resource}:read`)
+  if (!isPublic && permission && !auth.can(permission)) return { name: 'dashboard' }
 
   if (to.name === 'login' && hasToken) {
     return { name: 'dashboard' }

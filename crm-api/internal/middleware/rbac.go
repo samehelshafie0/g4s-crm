@@ -4,6 +4,7 @@ import (
 	"g4s-crm/api/internal/models"
 	"g4s-crm/api/pkg/response"
 	"github.com/gin-gonic/gin"
+	"sort"
 )
 
 // rolePermissions maps each role to the set of permissions it holds.
@@ -45,7 +46,7 @@ var rolePermissions = map[models.UserRole]map[string]bool{
 		"teams:read": true, "users:read": true, "dashboard:read": true,
 	},
 	models.RolePreSales: {
-		"customers:read": true,
+		"customers:read":     true,
 		"opportunities:read": true, "opportunities:update": true,
 		"quotes:read": true, "quotes:create": true, "quotes:update": true,
 		"products:read": true, "products:create": true, "products:update": true,
@@ -116,4 +117,16 @@ func Authorize(permission string) gin.HandlerFunc {
 func HasPermission(role models.UserRole, permission string) bool {
 	perms, exists := rolePermissions[role]
 	return exists && perms[permission]
+}
+
+// Permissions is the same authoritative policy used by Authorize.
+func Permissions(role models.UserRole) []string {
+	permissions := []string{}
+	for permission, allowed := range rolePermissions[role] {
+		if allowed {
+			permissions = append(permissions, permission)
+		}
+	}
+	sort.Strings(permissions)
+	return permissions
 }

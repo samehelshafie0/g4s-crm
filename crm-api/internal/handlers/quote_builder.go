@@ -44,6 +44,7 @@ var errStaleQuote = errors.New("quote changed")
 
 func (h *QuoteHandler) SaveBuilder(c *gin.Context) {
 	var req struct {
+		Appendices       *[]appendixInput    `json:"appendices" validate:"omitempty,max=20,dive"`
 		LockVersion      int                 `json:"lockVersion" validate:"required,gt=0"`
 		CustomerID       uuid.UUID           `json:"customerId" validate:"required"`
 		OpportunityID    *uuid.UUID          `json:"opportunityId"`
@@ -89,6 +90,11 @@ func (h *QuoteHandler) SaveBuilder(c *gin.Context) {
 			var opp models.Opportunity
 			if err := tx.First(&opp, "id = ? AND customer_id = ?", req.OpportunityID, req.CustomerID).Error; err != nil {
 				return invalid("Opportunity must belong to the customer")
+			}
+		}
+		if req.Appendices != nil {
+			if err := replaceAppendices(tx, c, &quote, *req.Appendices); err != nil {
+				return err
 			}
 		}
 		lines := []models.QuoteLineItem{}
@@ -175,7 +181,7 @@ func (h *QuoteHandler) Duplicate(c *gin.Context) {
 	var result models.Quote
 	err := h.db.Transaction(func(tx *gorm.DB) error {
 		var source models.Quote
-		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Preload("LineItems", func(db *gorm.DB) *gorm.DB { return db.Order("sort_order ASC") }).Preload("Customer").First(&source, "id = ?", c.Param("id")).Error; err != nil {
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Preload("LineItems", func(db *gorm.DB) *gorm.DB { return db.Order("sort_order ASC") }).Preload("Appendices", func(db *gorm.DB) *gorm.DB { return db.Order("sort_order ASC") }).Preload("Customer").First(&source, "id = ?", c.Param("id")).Error; err != nil {
 			return err
 		}
 		number, err := seqgen.NextNumber(tx, "quote")
@@ -197,6 +203,8 @@ func (h *QuoteHandler) Duplicate(c *gin.Context) {
 		result.CreatedBy = nil
 		userID := middleware.GetCurrentUserID(c)
 		result.CreatedByID = &userID
+		appendices := result.Appendices
+		result.Appendices = nil
 		lines := result.LineItems
 		result.LineItems = nil
 		if err := tx.Omit(clause.Associations).Create(&result).Error; err != nil {
@@ -206,6 +214,14 @@ func (h *QuoteHandler) Duplicate(c *gin.Context) {
 			return err
 		}
 		result.VATPercent = source.VATPercent
+		for _, appendix := range appendices {
+			appendix.Base = models.Base{}
+			appendix.QuoteID = result.ID
+			if err := tx.Create(&appendix).Error; err != nil {
+				return err
+			}
+			result.Appendices = append(result.Appendices, appendix)
+		}
 		for _, line := range lines {
 			selected, printable := line.IsSelected, line.IsPrintable
 			line.Base = models.Base{}

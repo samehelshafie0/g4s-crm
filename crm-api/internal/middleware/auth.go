@@ -73,6 +73,7 @@ func Auth(db *gorm.DB) gin.HandlerFunc {
 			c.Abort()
 			return
 		}
+		user.Permissions = Permissions(user.Role)
 		c.Set("currentUser", user)
 		claims.Role = user.Role
 		claims.Email = user.Email

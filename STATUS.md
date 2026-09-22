@@ -1,11 +1,11 @@
 # G4S CRM — current status and work plan
 
-**Last updated:** 2026-09-16  
-**Current phase:** API/frontend integration batch implemented and verified; M1–M5 acceptance work remains.
-**Release state:** not ready for production.  
-**Primary objective:** make customers → opportunities → quotes → contracts work end to end, then finish remaining modules and deploy to the owner's server.  
+**Last updated:** 2026-09-17
+**Current phase:** quote document appendices and combined PDF export implemented, following user/workflow controls. Broader M1–M5 acceptance remains.
+**Release state:** not ready for production.
+**Primary objective:** make customers → opportunities → quotes → contracts work end to end, then finish remaining modules and deploy to the owner's server.
 **Detailed findings:** [docs/CRM_REVIEW.md](docs/CRM_REVIEW.md).
-**Current API coverage:** [docs/API_COVERAGE.md](docs/API_COVERAGE.md); [179-route inventory](docs/API_ENDPOINTS.md).
+**Current API coverage:** [docs/API_COVERAGE.md](docs/API_COVERAGE.md); [180-route inventory](docs/API_ENDPOINTS.md).
 
 ## Start here each work session
 
@@ -97,9 +97,28 @@ M6 can follow M4 only if the owner chooses a sales-only first release and incomp
 
 Dependencies: T03/T04 protect all mutations. T05 enables repeatable environments. T06 precedes live UI integration. T11 precedes T13/T14. T17 requires an accepted persisted quote revision. T21/T22 depend on agreed catalog/stock contracts. T24/T25 require actual server details. Work on those independent foundations need not wait for optional design decisions.
 
-## Current API/frontend integration batch — 2026-09-16
+## Latest batch — quote PDF appendices, 2026-09-17
 
-**Batch state: DONE for the implementation and checks below. Overall modules remain PARTIAL.** The [coverage matrix](docs/API_COVERAGE.md) is the current source for implemented behavior versus unfinished UI and release work.
+**DONE locally:** quote Documents tab selects/uploads PDF, PNG/JPG, DOC/DOCX and XLS/XLSX; labels/reordering persist with pinned versions. Server-generated PDF includes quotation, appendix index/page ranges, full document pages, version labels, bookmarks and continuous page numbers. Revisions retain selections and approved/submitted quotes remain immutable. [Usage, API, setup and evidence](docs/QUOTE_PDF_APPENDICES.md).
+
+- New migration 000005 applied locally; one new authenticated PDF route (180 routes total).
+- Checks: 27 PostgreSQL integration groups with race detector; five renderer tests including real Office conversion, crop preservation/form fields, encrypted/corrupt failure; 14 frontend tests; checked build and Go vet pass.
+- Browser selection → reorder/relabel → save/reload → mixed PDF download verified. Native chooser blocked by extension setting; multipart upload checked through API. Desktop/mobile and 13-page PDF visually inspected; reviewer fixes exclude generic CRM notes and preserve source crop.
+- Local QA quote `QT-2026-0002` and four `QA` documents retained. Docker build remains unverified after two Docker Hub metadata timeouts. Local runtime is working; no production deployment or push.
+
+## Active batch — 2026-09-17
+
+**DONE for items 2, 3 and 4 at the scope below.** Customer contacts/sites are **DEFERRED by owner**. Existing backend role grants are unchanged.
+
+- **User administration/profile:** create/edit/team assignment/deactivate/reactivate/reset password, last-admin and team-leader protections, personal profile/password forms. Backend permissions drive navigation/routes and changed workflow controls. Refresh sessions are revoked on password changes; access tokens retain their documented expiry behavior.
+- **Sales acceptance:** separate sales executive/manager integration sessions complete customer → opportunity → service quote → rejection/resubmission/approval → sent/accepted → contract conversion/activation. Includes stale/immutable edits, denied privileged actions, totals, idempotency and audit access. Conversion now uses a date form. [Acceptance evidence and manual UAT](docs/SALES_ACCEPTANCE.md).
+- **Supporting controls:** service-catalog CRUD/active state; document history, original/current downloads, replacement upload, metadata and record link/unlink; reservation fulfillment with dispatch reason and warehouse reorder levels. Document-link search considers all pages before filtering.
+- **Checks:** 26 PostgreSQL integration scenario groups with race detector; 14 frontend tests; checked build and Go vet pass. Browser checked user/service editors, profile, dialog Escape, account-menu Space, mobile drawer and 390px page width. Independent review disposition: **ship** at this bounded code/screenshot scope; all named fixes resolved.
+- **Limits:** no production deployment or business-policy sign-off; full role/module browser mutation UAT remains. Parser chunk warning remains. Design detector launcher lacked execute permission; browser evidence and independent review used. No schema migration or production data changes in this batch.
+
+## Earlier API/frontend integration batch — 2026-09-16
+
+**Historical batch state: DONE for the implementation and checks below. Remaining-work statements here are superseded by the September 17 batch above. Overall modules remain PARTIAL.** The [coverage matrix](docs/API_COVERAGE.md) is the current source for implemented behavior versus unfinished UI and release work.
 
 - **Sales:** live opportunities/customer/user lookups; actual quotation list/catalog; atomic full builder saves, saved row order/false flags, authoritative rounded totals, stale-edit protection, revisions and lifecycle actions. Browser verified save/reload → submit → approve → sent → accepted. Submitted inputs are disabled. Accepted quotes convert once to a dated contract with amount/currency snapshot; activation, termination and renewal persist.
 - **Relationships/catalog:** typed writes for manufacturers/categories, products/vendors/history/files, service catalog, price-book headers/mixed entries, recurring component costing, teams/membership/users and project managers. Site/contact APIs enforce parent ownership and primary-contact consistency; their edit UI remains open.
@@ -112,7 +131,7 @@ Dependencies: T03/T04 protect all mutations. T05 enables repeatable environments
 
 ### Next active work
 
-Complete **T08/T23** customer sites/contacts and user/profile management UI, then finish **T06/T14/T16** separate-role sales acceptance, approval policy and exports. Follow the ordered remaining work in [API_COVERAGE.md](docs/API_COVERAGE.md). Server deployment (T24/T25) is still pending; server provider/domain and business rules have not been supplied. No milestone is marked complete based solely on route availability.
+Complete **T16** CSV accuracy and unsaved-change protection; quote PDF appendices are now implemented, then money/FX policy, scalable table pagination, remaining procurement/project exceptions and release gates. Contacts/sites stay deferred until resumed by owner. Use the [sales UAT checklist](docs/SALES_ACCEPTANCE.md). Deployment awaits server/provider/domain/access details. This batch is local and has not been pushed or deployed.
 
 ## Earlier foundation batch — historical evidence, 2026-09-16
 

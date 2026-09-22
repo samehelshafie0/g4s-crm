@@ -42,7 +42,7 @@ func (h *QuoteHandler) List(c *gin.Context) {
 
 func (h *QuoteHandler) Get(c *gin.Context) {
 	var quote models.Quote
-	if err := h.db.Preload("LineItems", func(db *gorm.DB) *gorm.DB { return db.Order("sort_order ASC") }).Preload("LineItems.Product").Preload("Customer").Preload("Opportunity").
+	if err := h.db.Preload("Appendices", func(db *gorm.DB) *gorm.DB { return db.Order("sort_order ASC") }).Preload("LineItems", func(db *gorm.DB) *gorm.DB { return db.Order("sort_order ASC") }).Preload("LineItems.Product").Preload("Customer").Preload("ApprovedBy").Preload("Opportunity").
 		First(&quote, "id = ?", c.Param("id")).Error; err != nil {
 		response.NotFound(c, "Quote not found")
 		return

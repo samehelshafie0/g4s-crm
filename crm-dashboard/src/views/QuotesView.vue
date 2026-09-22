@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useAuthStore } from '@/stores/auth'
+const auth = useAuthStore()
 import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import {
@@ -283,7 +285,7 @@ function openBuilder(quoteId: string) {
 onMounted(async () => {
   try {
     const [quoteRows, customerRows, opportunityRows, bookRows] = await Promise.all([
-      allPages(quotesService.list), allPages(customersService.list), allPages(opportunitiesService.list), allPages(priceBooksService.list),
+      allPages(quotesService.list), auth.can('customers:read') ? allPages(customersService.list) : [], auth.can('opportunities:read') ? allPages(opportunitiesService.list) : [], auth.can('price-books:read') ? allPages(priceBooksService.list) : [],
     ])
     quotes.value = quoteRows
     customers.value = customerRows.map(c => ({ id: c.id, name: c.companyName, storeId: c.id }))
@@ -296,7 +298,7 @@ onMounted(async () => {
 
 // ── Document Locking ─────────────────────────────────────────
 function isLocked(q: Quote): boolean {
-  return ['sent', 'accepted', 'declined', 'expired'].includes(q.status)
+  return q.status !== 'draft'
 }
 
 // ── Duplicate Quote ──────────────────────────────────────────
@@ -335,7 +337,7 @@ function formatTimestamp(ts: string): string {
           {{ filteredQuotes.length }} quote{{ filteredQuotes.length !== 1 ? 's' : '' }}
         </p>
       </div>
-      <button class="btn btn-primary" @click="showNewQuoteModal = true">
+      <button v-if="auth.can('quotes:create')" class="btn btn-primary" @click="showNewQuoteModal = true">
         <Plus :size="18" />
         New Quote
       </button>
@@ -472,16 +474,16 @@ function formatTimestamp(ts: string): string {
                 <button class="btn btn-ghost btn-icon btn-sm" title="View" @click="openViewModal(q)">
                   <Eye :size="14" />
                 </button>
-                <button class="btn btn-ghost btn-icon btn-sm" title="Edit" @click="openBuilder(q.id)" :disabled="isLocked(q)">
+                <button class="btn btn-ghost btn-icon btn-sm" v-if="auth.can('quotes:update')" title="Edit" @click="openBuilder(q.id)" :disabled="isLocked(q)">
                   <Pencil :size="14" />
                 </button>
-                <button class="btn btn-ghost btn-icon btn-sm" title="Duplicate" @click="duplicateQuote(q)">
+                <button class="btn btn-ghost btn-icon btn-sm" v-if="auth.can('quotes:create')" title="Duplicate" @click="duplicateQuote(q)">
                   <Copy :size="14" />
                 </button>
                 <button class="btn btn-ghost btn-icon btn-sm" title="Open Builder" @click="openBuilder(q.id)">
                   <ExternalLink :size="14" />
                 </button>
-                <button class="btn btn-ghost btn-icon btn-sm" title="Delete" @click="deleteQuote(q.id)" :disabled="isLocked(q)">
+                <button class="btn btn-ghost btn-icon btn-sm" v-if="auth.can('quotes:delete')" title="Delete" @click="deleteQuote(q.id)" :disabled="isLocked(q)">
                   <Trash2 :size="14" />
                 </button>
               </div>

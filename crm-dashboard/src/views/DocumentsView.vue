@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import DocumentDetails from '@/components/DocumentDetails.vue'
+import { useAuthStore } from '@/stores/auth'
 import { documentsService, customersService } from '@/services'
 import { allPages } from '@/services/collections'
 import { errorMessage } from '@/services/payload'
@@ -24,8 +26,13 @@ function uid(): string {
   return Math.random().toString(36).slice(2, 11)
 }
 
-const docsStore = useDocumentsStore()
-onMounted(async () => { try { documents.value = await allPages(documentsService.list); customerOptions.value = (await customersService.lookup()).data.map(c => ({id:c.id, name:c.companyName})) } catch (e) { window.alert(errorMessage(e)) } })
+const auth = useAuthStore()
+const detailId = ref('')
+const detailsOpen = ref(false)
+const loadError = ref('')
+async function reloadDocuments() { documents.value = await allPages(documentsService.list) }
+onMounted(async () => { try { await reloadDocuments(); if (auth.can('customers:read')) customerOptions.value = (await customersService.lookup()).data.map(c => ({id:c.id, name:c.companyName})) } catch(e) { loadError.value = errorMessage(e) } })
+function openDetails(id:string) { detailId.value = id; detailsOpen.value = true }
 
 const categoryLabels: Record<DocumentCategory, string> = {
   contract: 'Contract',
@@ -123,6 +130,7 @@ const defaultForm = (): DocForm => ({
 const form = ref<DocForm>(defaultForm())
 
 function openUploadModal() {
+  selectedFile.value = null
   form.value = defaultForm()
   showUploadModal.value = true
 }
@@ -137,7 +145,7 @@ async function uploadDocument() {
  try {
    const data = new FormData(); data.append('file', selectedFile.value); data.append('name', form.value.name); data.append('category', form.value.category); data.append('documentType', form.value.documentType); data.append('tags', form.value.tags)
    const result = await documentsService.upload(data)
-   if (form.value.linkedEntityName) await documentsService.addLink(result.data.id, 'customer', form.value.linkedEntityName)
+   if (auth.can('documents:update') && form.value.linkedEntityName) await documentsService.addLink(result.data.id, 'customer', form.value.linkedEntityName)
    documents.value = await allPages(documentsService.list); showUploadModal.value = false; selectedFile.value = null
  } catch (e) { window.alert(errorMessage(e)) } finally { uploading.value = false }
 }
@@ -149,12 +157,14 @@ async function downloadDocument(doc: Document) { try { await documentsService.do
 
 <template>
   <div class="documents-page">
+    <p v-if="loadError" class="form-error" role="alert">{{ loadError }}</p>
+    <DocumentDetails v-if="detailsOpen" :id="detailId" :key="detailId" v-model:open="detailsOpen" @changed="reloadDocuments().catch(e => loadError = errorMessage(e))" />
     <div class="page-header">
       <div>
         <h1 class="page-header-title">Documents</h1>
         <p class="page-header-subtitle">{{ filteredDocuments.length }} document{{ filteredDocuments.length !== 1 ? 's' : '' }}</p>
       </div>
-      <button class="btn btn-primary" @click="openUploadModal">
+      <button v-if="auth.can('documents:create')" class="btn btn-primary" @click="openUploadModal">
         <Upload :size="18" />
         Upload Document
       </button>
@@ -231,7 +241,8 @@ async function downloadDocument(doc: Document) { try { await documentsService.do
                 <button class="btn btn-ghost btn-icon btn-sm" title="Download" @click="downloadDocument(doc)">
                   <Download :size="14" />
                 </button>
-                <button class="btn btn-ghost btn-icon btn-sm" title="Delete" @click="deleteDocument(doc.id)">
+                <button class="btn btn-sm" @click="openDetails(doc.id)">Details & versions</button>
+                <button v-if="auth.can('documents:delete')" class="btn btn-ghost btn-icon btn-sm" title="Delete" @click="deleteDocument(doc.id)">
                   <Trash2 :size="14" />
                 </button>
               </div>
@@ -286,7 +297,7 @@ async function downloadDocument(doc: Document) { try { await documentsService.do
             </div>
 
             <label>File (up to 50 MB)<input type="file" class="file-input" @change="chooseFile" /></label>
-            <label>Link to customer<select v-model="form.linkedEntityName" class="select"><option value="">No customer link</option><option v-for="customer in customerOptions" :key="customer.id" :value="customer.id">{{ customer.name }}</option></select></label>
+            <label>Link to customer<select v-model="form.linkedEntityName" :disabled="!auth.can('documents:update')" class="select"><option value="">No customer link</option><option v-for="customer in customerOptions" :key="customer.id" :value="customer.id">{{ customer.name }}</option></select></label>
           </div>
           <div class="modal-footer">
             <button class="btn btn-secondary" @click="showUploadModal = false">Cancel</button>

@@ -42,7 +42,7 @@ async function handleLogout() {
 <template>
   <header class="app-header">
     <div class="header-left">
-      <button class="btn btn-ghost btn-icon" @click="$emit('toggleSidebar')">
+      <button class="btn btn-ghost btn-icon" aria-label="Toggle navigation" @click="$emit('toggleSidebar')">
         <Menu :size="20" />
       </button>
       <div class="header-title-section">
@@ -75,11 +75,11 @@ async function handleLogout() {
         <span class="notification-dot" />
       </button>
 
-      <button class="btn btn-ghost btn-icon">
+      <button class="btn btn-ghost btn-icon" aria-label="My profile settings" @click="router.push('/profile')">
         <Settings :size="20" />
       </button>
 
-      <div class="profile-menu" @click="showProfileMenu = !showProfileMenu">
+      <div class="profile-menu" role="button" tabindex="0" aria-label="Account menu" :aria-expanded="showProfileMenu" @keydown.enter.self="showProfileMenu = !showProfileMenu" @keydown.space.prevent.self="showProfileMenu = !showProfileMenu" @keydown.escape="showProfileMenu = false" @click="showProfileMenu = !showProfileMenu">
         <div class="profile-avatar">
           <span v-if="authStore.userInitials">{{ authStore.userInitials }}</span>
           <User v-else :size="18" />
@@ -91,8 +91,8 @@ async function handleLogout() {
         <ChevronDown :size="14" class="text-muted" />
 
         <div v-if="showProfileMenu" class="profile-dropdown" @click.stop>
-          <button class="dropdown-item">My Profile</button>
-          <button class="dropdown-item">Preferences</button>
+          <button class="dropdown-item" @click="showProfileMenu = false; router.push('/profile')">My Profile</button>
+
           <div class="dropdown-divider" />
           <button class="dropdown-item text-danger" @click="handleLogout">
             <LogOut :size="14" style="margin-right: 6px; vertical-align: middle" />
@@ -293,5 +293,14 @@ async function handleLogout() {
   height: 1px;
   background: var(--color-neutral-200);
   margin: var(--space-1) 0;
+}
+@media (max-width: 768px) {
+  .app-header { padding-inline: var(--space-3); gap: var(--space-2); }
+  .header-left { flex: 1; min-width: 0; gap: var(--space-2); }
+  .header-title-section { min-width: 0; }
+  .header-title { font-size: var(--text-base); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .header-center, .profile-info, .notification-btn, [aria-label="My profile settings"] { display: none; }
+  .profile-menu { padding-inline: var(--space-1); }
+  .header-right { gap: 0; }
 }
 </style>

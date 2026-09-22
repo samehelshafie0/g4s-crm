@@ -65,7 +65,10 @@ export const useAuthStore = defineStore('auth', () => {
     if (!res.success) throw new Error(res.error?.message ?? 'Failed to change password')
   }
 
+  function can(permission: string): boolean { return user.value?.permissions?.includes(permission) ?? false }
+
   return {
+    can,
     user,
     loading,
     error,

@@ -26,7 +26,7 @@ type registerRequest struct {
 	FirstName  string            `json:"firstName" validate:"required"`
 	LastName   string            `json:"lastName" validate:"required"`
 	Email      string            `json:"email" validate:"required,email"`
-	Password   string            `json:"password" validate:"required,min=8"`
+	Password   string            `json:"password" validate:"required,min=8,max=72"`
 	Role       models.UserRole   `json:"role" validate:"required,oneof=admin sales_manager sales_executive pre_sales procurement_manager procurement_officer warehouse_manager project_manager viewer"`
 	Department models.Department `json:"department"`
 }
@@ -37,7 +37,7 @@ type refreshRequest struct {
 
 type changePasswordRequest struct {
 	CurrentPassword string `json:"currentPassword" validate:"required"`
-	NewPassword     string `json:"newPassword" validate:"required,min=8"`
+	NewPassword     string `json:"newPassword" validate:"required,min=8,max=72"`
 }
 
 // Login godoc

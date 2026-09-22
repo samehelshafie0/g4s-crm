@@ -62,6 +62,13 @@ dev-api:
 dev-web:
 	cd crm-dashboard && npm run dev
 
+dev-pdf:
+	python3 -m venv crm-api/tmp/pdf-venv
+	crm-api/tmp/pdf-venv/bin/pip install -r crm-api/pdf-test-requirements.txt
+
+test-pdf:
+	crm-api/tmp/pdf-venv/bin/python scripts/test_quote_pdf.py
+
 test-integration:
 	./scripts/test-integration.sh
 

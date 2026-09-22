@@ -1,0 +1,4 @@
+# Runtime dependencies for quote PDF generation and appendices.
+reportlab==5.0.1
+pypdf==6.19.0
+pillow==12.3.0

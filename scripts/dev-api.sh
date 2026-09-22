@@ -12,4 +12,7 @@ fi
 if [[ ! -f "$JWT_PUBLIC_KEY_PATH" ]]; then
   openssl rsa -in "$JWT_PRIVATE_KEY_PATH" -pubout -out "$JWT_PUBLIC_KEY_PATH" 2>/dev/null
 fi
+if [[ -z "${PDF_PYTHON:-}" && -x "$PWD/tmp/pdf-venv/bin/python" ]]; then
+  export PDF_PYTHON="$PWD/tmp/pdf-venv/bin/python"
+fi
 go run ./cmd/server "$@"

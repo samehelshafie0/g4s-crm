@@ -4,6 +4,7 @@ import { http, type ApiResponse, type PaginationParams } from './http'
 import type { Quote } from '@/types'
 
 export const quotesService = {
+  pdf: (id: string, lockVersion: number) => http.get<Blob>(`/quotes/${id}/pdf`, {params:{lockVersion}, responseType:'blob', timeout:190_000}).then(r => r.data),
   activity: (id: string) => http.get<ApiResponse<Activity[]>>(`/quotes/${id}/activity`).then(r => r.data),
   builder: (id: string) => http.get<ApiResponse<BuilderQuote>>(`/quotes/${id}/builder`).then(r => r.data),
   saveBuilder: (id: string, data: BuilderInput) => http.put<ApiResponse<BuilderQuote>>(`/quotes/${id}/builder`, data).then(r => r.data),

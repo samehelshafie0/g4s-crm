@@ -42,5 +42,12 @@ jobs:
         with:
           go-version-file: crm-api/go.mod
           cache-dependency-path: crm-api/go.sum
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: sudo apt-get update && sudo apt-get install -y libreoffice-writer libreoffice-calc fonts-dejavu-core
+      - run: pip install -r pdf-test-requirements.txt
+      - run: echo "PDF_PYTHON=$(which python)" >> "$GITHUB_ENV"
+      - run: python ../scripts/test_quote_pdf.py
       - run: go test -race ./...
       - run: go vet ./...

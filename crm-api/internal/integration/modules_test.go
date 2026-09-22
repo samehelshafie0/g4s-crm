@@ -326,7 +326,33 @@ func testModuleAPIs(t *testing.T, db *gorm.DB, r *gin.Engine, token, customerID 
 			t.Fatal("Missing linked customer name")
 		}
 		call(t, "POST", path+"/links", m("entityType", "quote", "entityId", quoteID), 201)
-		call(t, "GET", path+"/versions", nil, 200)
+		history := call(t, "GET", path+"/versions", nil, 200)["data"].([]any)
+		if len(history) != 2 {
+			t.Fatal(history)
+		}
+		for _, entry := range history {
+			snapshot := entry.(map[string]any)
+			req := httptest.NewRequest("GET", "/api/v1"+path+"/versions/"+snapshot["id"].(string)+"/download", nil)
+			req.Header.Set("Authorization", "Bearer "+token)
+			w := httptest.NewRecorder()
+			r.ServeHTTP(w, req)
+			expected := "Version one"
+			if snapshot["version"] == "2" {
+				expected = "Version two"
+			}
+			if w.Code != 200 || w.Body.String() != expected {
+				t.Fatal(w.Code, w.Body.String(), snapshot)
+			}
+		}
+		updated := call(t, "PATCH", path, m("name", "Acceptance document", "tags", []string{"reviewed"}), 200)
+		if updated["name"] != "Acceptance document" {
+			t.Fatal(updated)
+		}
+		call(t, "DELETE", path+"/links/"+link["id"].(string), nil, 204)
+		linked := call(t, "GET", path, nil, 200)["links"].([]any)
+		if len(linked) != 1 || linked[0].(map[string]any)["entityType"] != "quote" {
+			t.Fatal(linked)
+		}
 		req := httptest.NewRequest("GET", "/api/v1"+path+"/download", nil)
 		req.Header.Set("Authorization", "Bearer "+token)
 		w := httptest.NewRecorder()
@@ -335,4 +361,16 @@ func testModuleAPIs(t *testing.T, db *gorm.DB, r *gin.Engine, token, customerID 
 			t.Fatal(w.Code, w.Body.String())
 		}
 	})
+	t.Run("catalog service administration persists active state and deletion", func(t *testing.T) {
+		service := call(t, "POST", "/services", m("sku", "ADMIN-SVC", "name", "Admin service", "unitCost", 10, "unitPrice", 25, "isActive", true), 201)
+		path := "/services/" + service["id"].(string)
+		call(t, "PATCH", path, m("name", "Updated service", "unitPrice", 35, "isActive", false), 200)
+		saved := call(t, "GET", path, nil, 200)
+		if saved["name"] != "Updated service" || saved["unitPrice"] != float64(35) || saved["isActive"] != false {
+			t.Fatal(saved)
+		}
+		call(t, "DELETE", path, nil, 204)
+		call(t, "GET", path, nil, 404)
+	})
+
 }

@@ -1,6 +1,6 @@
 # Backend endpoint inventory
 
-Updated 2026-09-16 from `crm-api/internal/router/router.go`. 179 registered routes. This is a route inventory, not a claim that every role or edge case is tested. See [API coverage](API_COVERAGE.md) for behavior and remaining gaps. Password email recovery routes return 501 until configured.
+Updated 2026-09-17 from `crm-api/internal/router/router.go`. 180 registered routes. This is a route inventory, not a claim that every role or edge case is tested. See [API coverage](API_COVERAGE.md) for behavior and remaining gaps. Password email recovery routes return 501 until configured.
 
 | Method | Path | Permission |
 |---|---|---|
@@ -148,6 +148,7 @@ Updated 2026-09-16 from `crm-api/internal/router/router.go`. 179 registered rout
 | GET | `/api/v1/quotes/:id/activity` | `quotes:read` |
 | PATCH | `/api/v1/quotes/:id/approve` | `quotes:approve` |
 | GET | `/api/v1/quotes/:id/builder` | `quotes:read` |
+| GET | `/api/v1/quotes/:id/pdf` | `quotes:read` |
 | PUT | `/api/v1/quotes/:id/builder` | `quotes:update` |
 | POST | `/api/v1/quotes/:id/convert-to-contract` | `contracts:create` |
 | PATCH | `/api/v1/quotes/:id/decline` | `quotes:update` |

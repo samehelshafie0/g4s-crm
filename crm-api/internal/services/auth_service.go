@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"os"
+	"strings"
 	"time"
 
 	"g4s-crm/api/internal/config"
@@ -44,7 +45,7 @@ type LoginResponse struct {
 
 func (s *AuthService) Login(email, password string) (*LoginResponse, error) {
 	var user models.User
-	if err := s.db.Where("email = ? AND is_active = true", email).First(&user).Error; err != nil {
+	if err := s.db.Where("email = ? AND is_active = true", strings.ToLower(strings.TrimSpace(email))).First(&user).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, errors.New("invalid email or password")
 		}
@@ -72,6 +73,7 @@ func (s *AuthService) Login(email, password string) (*LoginResponse, error) {
 	now := time.Now()
 	s.db.Model(&user).Update("last_login_at", now)
 
+	user.Permissions = middleware.Permissions(user.Role)
 	return &LoginResponse{
 		User:         &user,
 		AccessToken:  accessToken,
@@ -104,6 +106,7 @@ func (s *AuthService) Refresh(rawRefreshToken string) (*LoginResponse, error) {
 		if err := tx.Create(refresh).Error; err != nil {
 			return err
 		}
+		user.Permissions = middleware.Permissions(user.Role)
 		result = &LoginResponse{User: &user, AccessToken: access, RefreshToken: raw}
 		return nil
 	})

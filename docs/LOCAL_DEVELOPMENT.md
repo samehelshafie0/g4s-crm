@@ -64,3 +64,7 @@ The lockfile now resolves Axios 1.20.0 and Vite 7.3.6, along with compatible pat
 A local administrator `admin@crm.local` was created and browser-verified on 2026-09-16. Its password is provided to the owner and stored in the ignored, mode-0600 `.env.local-login` file; it is intentionally absent from tracked documentation. Do not rerun bootstrap to reset it. For an existing account use the authenticated password-change/admin-reset API.
 
 The frontend is available at `http://localhost:5174` while `make dev-web` runs. API routes are listed in [API_ENDPOINTS.md](API_ENDPOINTS.md); implemented workflows and remaining limitations are in [API_COVERAGE.md](API_COVERAGE.md). Migrations through 000004 are required. User-created records survive service restarts in the development volume. A fresh database starts with an empty business catalog; add your manufacturers/products and approved FX rates through the app/API.
+
+## Quote PDF and Office conversion
+
+Run `make dev-pdf` once to install the pinned PDF/test dependencies in an ignored virtual environment. Install LibreOffice (`brew install --cask libreoffice` on macOS, or `libreoffice-writer libreoffice-calc fonts-dejavu-core` on Debian/Ubuntu). Restart `make dev-api`; it detects this Python environment automatically. `make test-pdf` exercises actual PDF/image/Word/Excel conversion. `PDF_PYTHON` and `SOFFICE_PATH` can override the executables. API Docker runtime includes these tools; rebuild it before using the new export on a server. See [quote appendices](QUOTE_PDF_APPENDICES.md) for limits and verification.

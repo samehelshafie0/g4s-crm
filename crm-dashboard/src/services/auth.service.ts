@@ -12,6 +12,9 @@ export interface AuthUser {
   lastName: string
   role: string
   department: string
+  phone?: string
+  teamId?: string
+  permissions?: string[]
   isActive: boolean
   lastLoginAt?: string
 }

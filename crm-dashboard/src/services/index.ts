@@ -1,3 +1,4 @@
+import type { AuthUser } from './auth.service'
 import { editable } from './payload'
 import type { ServiceItem, DocumentVersion, UserLookup, WarehouseStock, StockReservation, InventoryMovement, Team, Project, CrmDocument } from './workflowDtos'
 import type { PurchaseOrderDto, SupplierQuoteDto, GoodsReceiptDto } from './procurementDtos'
@@ -204,17 +205,17 @@ export const dashboardService = {
 // ─── Users ──────────────────────────────────────────────────
 export const usersService = {
   resetPassword: (id: string, password: string) => http.patch(`/users/${id}/password`, { password }),
-  updateProfile: (data: { firstName?: string; lastName?: string; email?: string; phone?: string }) => http.patch('/auth/me', data).then(r => r.data),
+  updateProfile: (data: { firstName?: string; lastName?: string; email?: string; phone?: string }) => http.patch<ApiResponse<AuthUser>>('/auth/me', data).then(r => r.data),
   list: (params?: PaginationParams) =>
-    http.get<ApiResponse<unknown[]>>('/users', { params }).then((r) => r.data),
+    http.get<ApiResponse<AuthUser[]>>('/users', { params }).then((r) => r.data),
   lookup: (role?: string, department?: string) =>
     http.get<ApiResponse<UserLookup[]>>('/users/lookup', { params: { role, department } }).then((r) => r.data),
   get: (id: string) =>
-    http.get<ApiResponse<unknown>>(`/users/${id}`).then((r) => r.data),
+    http.get<ApiResponse<AuthUser>>(`/users/${id}`).then((r) => r.data),
   create: (data: Record<string, unknown>) =>
-    http.post<ApiResponse<unknown>>('/users', editable(data, ['firstName', 'lastName', 'email', 'password', 'role', 'department', 'phone'])).then((r) => r.data),
+    http.post<ApiResponse<AuthUser>>('/users', editable(data, ['firstName', 'lastName', 'email', 'password', 'role', 'department', 'phone', 'teamId'])).then((r) => r.data),
   update: (id: string, data: Record<string, unknown>) =>
-    http.patch<ApiResponse<unknown>>(`/users/${id}`, editable(data, ['firstName', 'lastName', 'email', 'role', 'department', 'phone', 'teamId', 'isActive'])).then((r) => r.data),
+    http.patch<ApiResponse<AuthUser>>(`/users/${id}`, editable(data, ['firstName', 'lastName', 'email', 'role', 'department', 'phone', 'teamId', 'isActive'])).then((r) => r.data),
   delete: (id: string) =>
     http.delete<ApiResponse<null>>(`/users/${id}`).then((r) => r.data),
 }

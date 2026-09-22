@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import AppDialog from '@/components/shared/AppDialog.vue'
+import { useAuthStore } from '@/stores/auth'
+const auth = useAuthStore()
 import { ref, computed, onMounted } from 'vue'
 import {
   Search, Package, Boxes, Lock, DollarSign, AlertTriangle, Eye,
@@ -32,7 +35,7 @@ const mfrStore = useManufacturersStore()
 const stockStore = useWarehouseStockStore()
 
 async function reloadStock() { const [stock, holds, moves] = await Promise.all([allPages(inventoryService.listStock),inventoryService.listReservations(),allPages(inventoryService.listMovements)]);stockItems.value=stock;reservations.value=holds.data;movements.value=moves }
-onMounted(async () => {try {await reloadStock();await Promise.all([procStore.fetchPurchaseOrders(),procStore.fetchSupplierQuotes(),procStore.fetchGoodsReceipts()]);quotesStore.quotes=await allPages(quotesService.list);mfrStore.manufacturers=await allPages(manufacturersService.list)}catch(e){window.alert(errorMessage(e))}})
+onMounted(async () => {try {await reloadStock();if (auth.can('procurement:read')) await Promise.all([procStore.fetchPurchaseOrders(),procStore.fetchSupplierQuotes(),procStore.fetchGoodsReceipts()]);if (auth.can('quotes:read')) quotesStore.quotes=await allPages(quotesService.list);if (auth.can('manufacturers:read')) mfrStore.manufacturers=await allPages(manufacturersService.list)}catch(e){window.alert(errorMessage(e))}})
 
 function formatSAR(v: number): string {
   return v.toLocaleString('en-SA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -422,6 +425,30 @@ async function confirmRelease() {
  try { await inventoryService.release(releasingReservation.value.id,releaseReason.value || 'Released manually');await reloadStock();showReleaseModal.value=false;releasingReservation.value=null }catch(e){window.alert(errorMessage(e))}
 }
 
+const fulfillOpen = ref(false)
+const fulfillTarget = ref<StockReservation | null>(null)
+const fulfillReason = ref('')
+const stockBusy = ref(false)
+const stockError = ref('')
+const stockSuccess = ref('')
+const reorderOpen = ref(false)
+const reorderTarget = ref<WarehouseStock | null>(null)
+const reorderValue = ref(0)
+function openFulfill(reservation: StockReservation) { fulfillTarget.value = reservation; fulfillReason.value = ''; stockError.value = ''; fulfillOpen.value = true }
+async function fulfill() {
+ if (!fulfillTarget.value || stockBusy.value || !fulfillReason.value.trim()) return
+ stockBusy.value = true; stockError.value = ''
+ try { await inventoryService.fulfill(fulfillTarget.value.id,fulfillReason.value.trim()); await reloadStock(); fulfillOpen.value = false; stockSuccess.value = 'Hold fulfilled. On-hand and reserved stock have been reduced.' }
+ catch(e) { stockError.value = errorMessage(e) } finally { stockBusy.value = false }
+}
+function editReorder(stock:WarehouseStock) { reorderTarget.value = stock; reorderValue.value = stock.reorderLevel ?? 0; stockError.value = ''; reorderOpen.value = true }
+async function saveReorder() {
+ if (!reorderTarget.value || stockBusy.value) return
+ stockBusy.value = true; stockError.value = ''
+ try { await inventoryService.setReorderLevel(reorderTarget.value.id,reorderValue.value); await reloadStock(); reorderOpen.value = false; stockSuccess.value = 'Reorder level updated.' }
+ catch(e) { stockError.value = errorMessage(e) } finally { stockBusy.value = false }
+}
+
 // ── Bulk Create Hold ─────────────────────────────────────────
 const showCreateHoldModal = ref(false)
 
@@ -769,8 +796,8 @@ function delayHideMoveDropdown() { window.setTimeout(() => { showMoveItemDropdow
         <p class="page-header-subtitle">Warehouse stock, price history &amp; reorder tracking</p>
       </div>
       <div class="page-header-actions">
-        <button class="btn btn-secondary btn-sm" @click="openBulkMove"><ArrowRightLeft :size="15" /> Bulk Movement</button>
-        <button class="btn btn-primary btn-sm" @click="openBulkHold"><Lock :size="15" /> Create Hold</button>
+        <button v-if="auth.can('inventory:update')" class="btn btn-secondary btn-sm" @click="openBulkMove"><ArrowRightLeft :size="15" /> Bulk Movement</button>
+        <button v-if="auth.can('inventory:update')" class="btn btn-primary btn-sm" @click="openBulkHold"><Lock :size="15" /> Create Hold</button>
       </div>
     </div>
 
@@ -1034,6 +1061,7 @@ function delayHideMoveDropdown() { window.setTimeout(() => { showMoveItemDropdow
                     </td>
                     <td class="text-right">
                       <span :class="ws.availableQty <= (ws.reorderLevel ?? 0) ? 'text-danger font-semibold' : 'text-muted'">{{ ws.reorderLevel ?? '—' }}</span>
+                      <button v-if="auth.can('inventory:update')" class="btn btn-sm" :aria-label="`Edit reorder level for ${warehouseLabels[ws.warehouseLocation]}`" @click="editReorder(ws)">Edit</button>
                     </td>
                     <td class="text-right whitespace-nowrap">SAR {{ formatSAR(ws.unitCost) }}</td>
                     <td class="text-right whitespace-nowrap font-medium">SAR {{ formatSAR(ws.totalValue) }}</td>
@@ -1085,7 +1113,7 @@ function delayHideMoveDropdown() { window.setTimeout(() => { showMoveItemDropdow
                   totalling <strong>{{ detailActiveReservations.reduce((s, r) => s + r.qty, 0) }}</strong> units
                 </span>
               </div>
-              <button class="btn btn-primary btn-sm" @click="openCreateHold(detailProduct!)">
+              <button v-if="auth.can('inventory:update')" class="btn btn-primary btn-sm" @click="openCreateHold(detailProduct!)">
                 <Plus :size="14" /> Create Hold
               </button>
             </div>
@@ -1123,10 +1151,11 @@ function delayHideMoveDropdown() { window.setTimeout(() => { showMoveItemDropdow
                     <td class="whitespace-nowrap text-muted" style="font-size:0.75rem">{{ formatDate(res.reservedAt) }}</td>
                     <td>
                       <div class="table-actions">
-                        <button v-if="res.status === 'active'" class="btn btn-ghost btn-sm" style="font-size:0.72rem; gap:4px" title="Release Hold" @click="openReleaseHold(res)">
+                        <button v-if="res.status === 'active' && auth.can('inventory:update')" class="btn btn-ghost btn-sm" style="font-size:0.72rem; gap:4px" title="Release Hold" @click="openReleaseHold(res)">
                           <Unlock :size="13" /> Release
                         </button>
-                        <span v-else-if="res.releaseDate" class="text-muted" style="font-size:0.68rem; display: flex; flex-direction: column; align-items:flex-end;">
+                        <button v-if="res.status === 'active' && auth.can('inventory:update')" class="btn btn-sm" @click="openFulfill(res)">Fulfill</button>
+                        <span v-if="res.releaseDate" class="text-muted" style="font-size:0.68rem; display: flex; flex-direction: column; align-items:flex-end;">
                           <span>{{ formatDate(res.releaseDate) }}</span>
                           <span style="font-size:0.62rem; max-width:120px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">{{ res.releaseReason }}</span>
                         </span>
@@ -1139,7 +1168,7 @@ function delayHideMoveDropdown() { window.setTimeout(() => { showMoveItemDropdow
             <div v-else class="inv-empty-tab">
               <Lock :size="36" class="text-muted" />
               <p class="text-muted">No holds or reservations for this item.</p>
-              <button class="btn btn-primary btn-sm" @click="openCreateHold(detailProduct!)"><Plus :size="14" /> Create Hold</button>
+              <button v-if="auth.can('inventory:update')" class="btn btn-primary btn-sm" @click="openCreateHold(detailProduct!)"><Plus :size="14" /> Create Hold</button>
             </div>
           </div>
 
@@ -1445,6 +1474,13 @@ function delayHideMoveDropdown() { window.setTimeout(() => { showMoveItemDropdow
       </div>
     </div>
 
+    <p v-if="stockSuccess" role="status">{{ stockSuccess }}</p>
+    <AppDialog v-model:open="fulfillOpen" title="Fulfill stock hold" :busy="stockBusy">
+      <p v-if="fulfillTarget">Issue all {{ fulfillTarget.qty }} units of {{ fulfillTarget.productName }} from {{ warehouseLabels[fulfillTarget.warehouseLocation] }}. This reduces on-hand and reserved quantities; it does not return them to available stock.</p>
+      <form id="fulfill-form" @submit.prevent="fulfill"><label class="form-label" for="fulfill-reason">Dispatch reference or reason</label><input id="fulfill-reason" v-model.trim="fulfillReason" class="input form-input" required maxlength="1000" /><p v-if="stockError" role="alert" class="form-error">{{ stockError }}</p></form>
+      <template #footer><button class="btn" :disabled="stockBusy" @click="fulfillOpen = false">Cancel</button><button class="btn btn-primary" form="fulfill-form" type="submit" :disabled="stockBusy || !fulfillReason">{{ stockBusy ? 'Fulfilling…' : 'Confirm fulfillment' }}</button></template>
+    </AppDialog>
+    <AppDialog v-model:open="reorderOpen" title="Edit reorder level" :busy="stockBusy"><form id="reorder-form" @submit.prevent="saveReorder"><label class="form-label" for="reorder-quantity">Reorder threshold (units)</label><input id="reorder-quantity" v-model.number="reorderValue" class="input form-input" type="number" min="0" max="100000000" step="1" required /><p v-if="stockError" role="alert" class="form-error">{{ stockError }}</p></form><template #footer><button class="btn" :disabled="stockBusy" @click="reorderOpen = false">Cancel</button><button class="btn btn-primary" form="reorder-form" type="submit" :disabled="stockBusy">Save reorder level</button></template></AppDialog>
     <!-- ═══════════════════════════════════════════════════════ -->
     <!-- Release Hold Modal                                     -->
     <!-- ═══════════════════════════════════════════════════════ -->

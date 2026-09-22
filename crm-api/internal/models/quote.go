@@ -25,6 +25,7 @@ const (
 )
 
 type Quote struct {
+	Appendices []QuoteAppendix `gorm:"foreignKey:QuoteID" json:"appendices"`
 	Base
 	LockVersion      int          `gorm:"default:1" json:"lockVersion"`
 	ParentQuoteID    *uuid.UUID   `gorm:"type:uuid" json:"parentQuoteId,omitempty"`
@@ -166,3 +167,20 @@ type CatalogService struct {
 	UnitPrice   float64    `json:"unitPrice"`
 	IsActive    bool       `json:"isActive"`
 }
+
+// QuoteAppendix references an immutable document version; labels and order belong to the quote.
+type QuoteAppendix struct {
+	Base
+	QuoteID           uuid.UUID `gorm:"type:uuid" json:"quoteId"`
+	DocumentID        uuid.UUID `gorm:"type:uuid" json:"documentId"`
+	DocumentVersionID uuid.UUID `gorm:"type:uuid" json:"documentVersionId"`
+	Label             string    `json:"label"`
+	DocumentName      string    `json:"documentName"`
+	Version           string    `json:"version"`
+	FileName          string    `json:"fileName"`
+	FileType          string    `json:"fileType"`
+	FileSize          int64     `json:"fileSize"`
+	SortOrder         int       `json:"sortOrder"`
+}
+
+func (QuoteAppendix) TableName() string { return "quote_appendices" }

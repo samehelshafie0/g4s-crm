@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useAuthStore } from '@/stores/auth'
+const auth = useAuthStore()
 import { contractsService, customersService } from '@/services'
 import { allPages } from '@/services/collections'
 import { errorMessage } from '@/services/payload'
@@ -210,7 +212,7 @@ function daysRemaining(endDate: string): number {
         <h1 class="page-header-title">Contracts</h1>
         <p class="page-header-subtitle">{{ filteredContracts.length }} contract{{ filteredContracts.length !== 1 ? 's' : '' }}</p>
       </div>
-      <button class="btn btn-primary" @click="openAddModal">
+      <button v-if="auth.can('contracts:create')" class="btn btn-primary" @click="openAddModal">
         <Plus :size="18" />
         Add Contract
       </button>
@@ -309,10 +311,10 @@ function daysRemaining(endDate: string): number {
                 <button class="btn btn-ghost btn-icon btn-sm" title="View" @click="openViewModal(c)">
                   <Eye :size="14" />
                 </button>
-                <button class="btn btn-ghost btn-icon btn-sm" title="Edit" @click="openEditModal(c)">
+                <button class="btn btn-ghost btn-icon btn-sm" v-if="c.status === 'draft' && auth.can('contracts:update')" title="Edit" @click="openEditModal(c)">
                   <Pencil :size="14" />
                 </button>
-                <button class="btn btn-ghost btn-icon btn-sm" title="Delete" @click="deleteContract(c.id)">
+                <button class="btn btn-ghost btn-icon btn-sm" v-if="c.status === 'draft' && auth.can('contracts:delete')" title="Delete" @click="deleteContract(c.id)">
                   <Trash2 :size="14" />
                 </button>
               </div>
@@ -490,10 +492,10 @@ function daysRemaining(endDate: string): number {
           </div>
           <div class="modal-footer">
             <button class="btn btn-secondary" @click="showViewModal = false">Close</button>
-            <button v-if="viewingContract.status === 'draft'" class="btn btn-primary" @click="showViewModal = false; openEditModal(viewingContract!)">Edit</button>
-            <button v-if="viewingContract.status === 'draft'" class="btn btn-primary" @click="contractAction('activate', viewingContract.id)">Activate</button>
-            <button v-if="viewingContract.status === 'active'" class="btn btn-secondary" @click="contractAction('terminate', viewingContract.id)">Terminate</button>
-            <button v-if="['active', 'expired'].includes(viewingContract.status)" class="btn btn-primary" @click="contractAction('renew', viewingContract.id)">Create renewal</button>
+            <button v-if="viewingContract.status === 'draft' && auth.can('contracts:update')" class="btn btn-primary" @click="showViewModal = false; openEditModal(viewingContract!)">Edit</button>
+            <button v-if="viewingContract.status === 'draft' && auth.can('contracts:approve')" class="btn btn-primary" @click="contractAction('activate', viewingContract.id)">Activate</button>
+            <button v-if="viewingContract.status === 'active' && auth.can('contracts:approve')" class="btn btn-secondary" @click="contractAction('terminate', viewingContract.id)">Terminate</button>
+            <button v-if="['active', 'expired'].includes(viewingContract.status) && auth.can('contracts:create')" class="btn btn-primary" @click="contractAction('renew', viewingContract.id)">Create renewal</button>
           </div>
         </div>
       </div>

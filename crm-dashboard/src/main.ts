@@ -11,10 +11,10 @@ const app = createApp(App)
 const pinia = createPinia()
 
 app.use(pinia)
-app.use(router)
 
 // Rehydrate user profile from stored token before first route renders
 const authStore = useAuthStore()
 authStore.fetchMe().finally(() => {
+  app.use(router)
   app.mount('#app')
 })

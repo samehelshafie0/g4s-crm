@@ -7,6 +7,7 @@ import (
 	"g4s-crm/api/pkg/response"
 	v "g4s-crm/api/pkg/validator"
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -41,8 +42,14 @@ func (h *UserHandler) List(c *gin.Context) {
 		query = query.Where("first_name ILIKE ? OR last_name ILIKE ? OR email ILIKE ?", "%"+q+"%", "%"+q+"%", "%"+q+"%")
 	}
 
-	query.Count(&total)
-	query.Order(params.Sort + " " + params.Order).Scopes(pagination.Paginate(params)).Find(&users)
+	if err := query.Count(&total).Error; err != nil {
+		apiError(c, err)
+		return
+	}
+	if err := query.Order(params.Sort + " " + params.Order).Scopes(pagination.Paginate(params)).Find(&users).Error; err != nil {
+		apiError(c, err)
+		return
+	}
 	response.OKWithMeta(c, users, pagination.BuildMeta(params, total))
 }
 
@@ -63,7 +70,8 @@ func (h *UserHandler) Create(c *gin.Context) {
 		Password   string            `json:"password" validate:"required,min=8,max=72"`
 		Role       models.UserRole   `json:"role" validate:"required,oneof=admin sales_manager sales_executive pre_sales procurement_manager procurement_officer warehouse_manager project_manager viewer"`
 		Department models.Department `json:"department" validate:"required,oneof=sales pre-sales technical support marketing management operations"`
-		Phone      string            `json:"phone"`
+		Phone      string            `json:"phone" validate:"max=100"`
+		TeamID     *uuid.UUID        `json:"teamId"`
 	}
 	if !v.BindStrict(c, &req) {
 		return
@@ -83,10 +91,19 @@ func (h *UserHandler) Create(c *gin.Context) {
 		Department:   req.Department,
 		Phone:        req.Phone,
 		IsActive:     true,
+		TeamID:       req.TeamID,
 	}
 
-	if err := h.db.Create(user).Error; err != nil {
-		response.Conflict(c, "Email already exists")
+	if err := h.db.Transaction(func(tx *gorm.DB) error {
+		if err := optionalExists(tx, &models.Team{}, req.TeamID); err != nil {
+			return err
+		}
+		if err := tx.Create(user).Error; err != nil {
+			return err
+		}
+		return recordActivity(tx, c, "user", user.ID, "created")
+	}); err != nil {
+		apiError(c, err)
 		return
 	}
 	response.Created(c, user)
@@ -112,6 +129,7 @@ func (h *UserHandler) saveUser(c *gin.Context, profile, deactivate bool) {
 			return err
 		}
 		wasAdmin := user.Role == models.RoleAdmin && user.IsActive
+		originalTeam := user.TeamID
 		if deactivate {
 			user.IsActive = false
 		} else {
@@ -129,6 +147,15 @@ func (h *UserHandler) saveUser(c *gin.Context, profile, deactivate bool) {
 		user.Email = strings.ToLower(strings.TrimSpace(user.Email))
 		if err := optionalExists(tx, &models.Team{}, user.TeamID); err != nil {
 			return err
+		}
+		if originalTeam != nil && (user.TeamID == nil || *originalTeam != *user.TeamID || !user.IsActive) {
+			var leaders int64
+			if err := tx.Model(&models.Team{}).Where("leader_id = ?", user.ID).Count(&leaders).Error; err != nil {
+				return err
+			}
+			if leaders > 0 {
+				return invalid("Choose another team leader before moving or deactivating this user")
+			}
 		}
 		if wasAdmin && (!user.IsActive || user.Role != models.RoleAdmin) {
 			var count int64
@@ -153,6 +180,7 @@ func (h *UserHandler) saveUser(c *gin.Context, profile, deactivate bool) {
 	if deactivate {
 		response.NoContent(c)
 	} else {
+		user.Permissions = middleware.Permissions(user.Role)
 		response.OK(c, user)
 	}
 }
@@ -176,7 +204,10 @@ func (h *UserHandler) ResetPassword(c *gin.Context) {
 		if err := tx.Model(&user).Update("password_hash", string(hash)).Error; err != nil {
 			return err
 		}
-		return tx.Where("user_id = ?", user.ID).Delete(&models.RefreshToken{}).Error
+		if err := tx.Where("user_id = ?", user.ID).Delete(&models.RefreshToken{}).Error; err != nil {
+			return err
+		}
+		return recordActivity(tx, c, "user", user.ID, "password reset")
 	})
 	if err != nil {
 		apiError(c, err)

@@ -1,12 +1,16 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
+import { useMediaQuery } from '@vueuse/core'
 import { useRoute } from 'vue-router'
 import AppSidebar from '@/components/AppSidebar.vue'
 import AppHeader from '@/components/AppHeader.vue'
 
-const sidebarCollapsed = ref(false)
+const mobile = useMediaQuery('(max-width: 768px)')
+const sidebarCollapsed = ref(mobile.value)
 const route = useRoute()
 
+watch(() => route.path, () => { if (mobile.value) sidebarCollapsed.value = true })
+watch(mobile, value => { sidebarCollapsed.value = value })
 const pageTitle = computed(() => (route.meta.title as string) || 'Dashboard')
 
 function toggleSidebar() {
@@ -16,6 +20,7 @@ function toggleSidebar() {
 
 <template>
   <div class="app-layout" :class="{ 'sidebar-collapsed': sidebarCollapsed }">
+    <button v-if="mobile && !sidebarCollapsed" class="nav-scrim" aria-label="Close navigation" @click="sidebarCollapsed = true" />
     <AppSidebar :collapsed="sidebarCollapsed" @toggle="toggleSidebar" />
     <div class="app-main">
       <AppHeader :title="pageTitle" :sidebar-collapsed="sidebarCollapsed" @toggle-sidebar="toggleSidebar" />
@@ -32,6 +37,8 @@ function toggleSidebar() {
 
 <style scoped>
 .app-layout {
+  width: 100%;
+  min-width: 0;
   display: flex;
   min-height: 100vh;
 }
@@ -67,5 +74,12 @@ function toggleSidebar() {
 
 .page-leave-to {
   opacity: 0;
+}
+.nav-scrim { position: fixed; inset: 0; background: rgb(0 0 0 / 40%); border: 0; z-index: 99; }
+@media (max-width: 768px) {
+  .app-main, .sidebar-collapsed .app-main { margin-left: 0; }
+  .app-content { padding: var(--space-4); }
+  :deep(.sidebar) { width: min(280px, 85vw); transition: transform var(--transition-normal); }
+  :deep(.sidebar.collapsed) { width: min(280px, 85vw); transform: translateX(-100%); visibility: hidden; }
 }
 </style>
