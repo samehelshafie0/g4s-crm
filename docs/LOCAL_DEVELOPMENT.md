@@ -99,6 +99,15 @@ A supplier quotation is raised to fulfil a customer quotation, usually inside a 
 
 The original vendor document is kept with the record rather than only as a file name. **Attached files** on a supplier quote, purchase order and quote uploads the file to the document library once and links it to that record; the same document can sit on both the supplier quote and the order it produced. Document links accept `supplier-quote` in addition to the existing entity types.
 
-### What automatic extraction can and cannot read
+### How a PDF is read
 
-Excel and CSV price lists parse reliably. PDF extraction depends on how the vendor laid the file out: a PDF built as a real table reads well, while quotation PDFs that position text freely often yield rows without usable prices. Every parsed row is editable before import, and files that cannot be read at all can be typed in or pasted. Scanned PDFs contain no text layer and cannot be parsed at all — attach them to the record and enter the lines by hand.
+Excel and CSV parse in the browser. A PDF is read **two ways at once**, because neither method wins on every vendor layout:
+
+- `POST /api/v1/extract/pdf-tables` uploads the PDF to the API, which runs MuPDF's table finder (`pymupdf`, a runtime dependency) in a private temporary directory and returns each table as a matrix of cleaned cells. The file is deleted immediately and never stored; attaching the document to a record stays a separate, deliberate step. Two extractions run at once, larger requests get HTTP 429, and the file is capped at 25 MB with a 60-second budget.
+- The browser's own text-grouping parser runs in parallel.
+
+Each reading is mapped with the same column detection used for spreadsheets, then scored by how many rows carry a usable price. The best is shown first and the rest are offered as buttons, so a wrong guess is one click to correct. Measured on the sample supplier quotations, server extraction recovers files the browser reads as empty (a Dell quotation goes from no rows to its three priced lines), while the browser still wins on some price lists — which is why both are kept.
+
+Tables are ranked by money-formatted cells rather than by any number, so an address or banking block does not outrank the real price table.
+
+Every parsed row stays editable before import, and a file that cannot be read at all can be pasted or typed. A scanned PDF holds no text layer and cannot be parsed by either method — attach it to the record and enter the lines by hand.

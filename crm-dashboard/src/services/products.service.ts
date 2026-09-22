@@ -22,6 +22,19 @@ export interface ProductImportRequest {
 export interface ProductImportOutcome { sku: string; status: string; reason?: string; landedCostSAR?: number; sellingPrice?: number; productId?: string }
 export interface ProductImportResult { created: number; updated: number; skipped: number; failed: number; rows: ProductImportOutcome[] }
 
+export interface ExtractedTable { page: number; lineItemRows: number; rows: string[][] }
+
+/** Reads tables out of a vendor PDF on the server; nothing is stored. */
+export const pdfExtractService = {
+  tables: (file: File) => {
+    const form = new FormData()
+    form.append('file', file)
+    return http
+      .post<ApiResponse<{ fileName: string; tables: ExtractedTable[] }>>('/extract/pdf-tables', form, { timeout: 90_000 })
+      .then(r => r.data)
+  },
+}
+
 export const productsService = {
   importProducts: (data: ProductImportRequest) =>
     http.post<ApiResponse<ProductImportResult>>('/products/import', data, { timeout: 120_000 }).then(r => r.data),

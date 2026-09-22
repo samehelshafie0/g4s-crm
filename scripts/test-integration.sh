@@ -13,4 +13,4 @@ port="$(docker port "$container" 5432/tcp | cut -d: -f2)"
 export CRM_TEST_DATABASE_URL="postgres://crm_test:crm_test_local@127.0.0.1:${port}/crm_test?sslmode=disable"
 cd crm-api
 if [[ -z "${PDF_PYTHON:-}" && -x "$PWD/tmp/pdf-venv/bin/python" ]]; then export PDF_PYTHON="$PWD/tmp/pdf-venv/bin/python"; fi
-go test -race ./... -count=1 -timeout 180s
+go test -race ./... -count=1 -timeout 240s

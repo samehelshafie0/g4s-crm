@@ -66,6 +66,7 @@ func Setup(db *gorm.DB, cfg *config.Config) *gin.Engine {
 	recurringH := handlers.NewRecurringServiceHandler(db)
 	procurementH := handlers.NewProcurementHandler(db)
 	docH := handlers.NewDocumentHandler(db, cfg.Storage.Root)
+	extractH := handlers.NewExtractHandler(db)
 	dashH := handlers.NewDashboardHandler(db)
 
 	api := r.Group("/api/v1")
@@ -358,6 +359,8 @@ func Setup(db *gorm.DB, cfg *config.Config) *gin.Engine {
 	}
 
 	protected.GET("/catalog", middleware.Authorize("products:read"), productH.Catalog)
+	// Reads an uploaded vendor PDF without storing it; used by both importers.
+	protected.POST("/extract/pdf-tables", middleware.AuthorizeAny("products:create", "procurement:create"), extractH.PDFTables)
 	catalog := protected.Group("/services")
 	catalog.GET("", middleware.Authorize("products:read"), catalogH.List)
 	catalog.GET("/:id", middleware.Authorize("products:read"), catalogH.Get)

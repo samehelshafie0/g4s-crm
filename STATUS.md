@@ -5,7 +5,7 @@
 **Release state:** not ready for production.
 **Primary objective:** make customers → opportunities → quotes → contracts work end to end, then finish remaining modules and deploy to the owner's server.
 **Detailed findings:** [docs/CRM_REVIEW.md](docs/CRM_REVIEW.md).
-**Current API coverage:** [docs/API_COVERAGE.md](docs/API_COVERAGE.md); [182-route inventory](docs/API_ENDPOINTS.md).
+**Current API coverage:** [docs/API_COVERAGE.md](docs/API_COVERAGE.md); [183-route inventory](docs/API_ENDPOINTS.md).
 
 ## Start here each work session
 

@@ -113,6 +113,27 @@ func Authorize(permission string) gin.HandlerFunc {
 	}
 }
 
+// AuthorizeAny allows a request holding at least one of the listed permissions,
+// for endpoints shared by more than one module.
+func AuthorizeAny(permissions ...string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		role := GetCurrentUserRole(c)
+		if role == "" {
+			response.Unauthorized(c, "Authentication required")
+			c.Abort()
+			return
+		}
+		for _, permission := range permissions {
+			if HasPermission(role, permission) {
+				c.Next()
+				return
+			}
+		}
+		response.Forbidden(c, "You do not have permission to perform this action")
+		c.Abort()
+	}
+}
+
 // HasPermission checks if a role has a given permission (for use in services).
 func HasPermission(role models.UserRole, permission string) bool {
 	perms, exists := rolePermissions[role]

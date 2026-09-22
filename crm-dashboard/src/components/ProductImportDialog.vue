@@ -3,11 +3,13 @@ import { computed, ref, watch } from 'vue'
 import { Upload, FileSpreadsheet, FileText, AlertTriangle, CheckCircle2, RotateCcw } from 'lucide-vue-next'
 import AppDialog from '@/components/shared/AppDialog.vue'
 import { productsService, manufacturersService, exchangeRatesService } from '@/services'
+import { pdfExtractService } from '@/services/products.service'
 import { allPages } from '@/services/collections'
 import { errorMessage } from '@/services/payload'
 import {
   parseFile,
   parseCSVText,
+  parseRowMatrix,
   downloadTemplate,
   getMappedValue,
   getMappedNumber,
@@ -60,18 +62,79 @@ function buildDrafts(result: ParseResult) {
   step.value = 'review'
 }
 
+/**
+ * A PDF can be read two ways and neither wins on every layout: the server's
+ * table finder recovers files the browser cannot see at all, while the browser's
+ * text grouping handles some price lists better. Both readings are offered and
+ * the one yielding the most priced rows is shown first.
+ */
+interface Reading { label: string; result: ParseResult; priced: number }
+
+const readings = ref<Reading[]>([])
+const activeReading = ref(0)
+
+function pricedRows(result: ParseResult): number {
+  return result.rows.filter(
+    row => getMappedNumber(row, 'unitCost', result.headers, result.mappedColumns) > 0,
+  ).length
+}
+
+function useReading(index: number) {
+  const reading = readings.value[index]
+  if (!reading) return
+  activeReading.value = index
+  buildDrafts(reading.result)
+}
+
 async function readFile(file?: File) {
   if (!file) return
   error.value = ''
   busy.value = true
   fileName.value = file.name
-  const out = await parseFile(file)
-  busy.value = false
-  if ('error' in out) {
-    error.value = `${out.error} If this is a scanned PDF, paste the rows below or use the Excel template.`
-    return
+  readings.value = []
+  activeReading.value = 0
+  try {
+    const candidates: Reading[] = []
+
+    if (/\.pdf$/i.test(file.name)) {
+      // Ask the server and the browser independently; a failure in either is not fatal.
+      const [server, browser] = await Promise.allSettled([pdfExtractService.tables(file), parseFile(file)])
+      if (server.status === 'fulfilled') {
+        server.value.data.tables.forEach(table => {
+          const result = parseRowMatrix(table.rows)
+          if (result.rows.length) {
+            candidates.push({ label: `Table on page ${table.page}`, result, priced: pricedRows(result) })
+          }
+        })
+      }
+      if (browser.status === 'fulfilled' && !('error' in browser.value) && browser.value.result.rows.length) {
+        const result = browser.value.result
+        candidates.push({ label: 'Whole-document text', result, priced: pricedRows(result) })
+      }
+      if (!candidates.length) {
+        error.value =
+          server.status === 'rejected'
+            ? `${errorMessage(server.reason)} A scanned PDF holds no text: attach it to the record and enter the lines by hand.`
+            : 'No priced table was found in this PDF. Paste the rows below, or use the Excel template.'
+        return
+      }
+    } else {
+      const out = await parseFile(file)
+      if ('error' in out) {
+        error.value = `${out.error} Paste the rows below, or use the Excel template.`
+        return
+      }
+      candidates.push({ label: file.name, result: out.result, priced: pricedRows(out.result) })
+    }
+
+    candidates.sort((a, b) => b.priced - a.priced)
+    readings.value = candidates
+    useReading(0)
+  } catch (e) {
+    error.value = errorMessage(e)
+  } finally {
+    busy.value = false
   }
-  buildDrafts(out.result)
 }
 
 function onFileChosen(event: Event) {
@@ -207,6 +270,8 @@ function reset() {
   pasteText.value = ''
   parsed.value = null
   drafts.value = []
+  readings.value = []
+  activeReading.value = 0
   result.value = null
 }
 
@@ -263,6 +328,22 @@ function close() {
         <span>{{ fileName }}</span>
         <span class="imp-source-meta">{{ drafts.length }} rows read</span>
         <button type="button" class="btn btn-ghost btn-sm" @click="reset"><RotateCcw :size="13" /> Choose another file</button>
+      </div>
+
+      <div v-if="readings.length > 1" class="imp-tables">
+        <span class="imp-alt-label">This file was read {{ readings.length }} ways — pick the one that looks right</span>
+        <div class="imp-table-picker">
+          <button
+            v-for="(reading, index) in readings"
+            :key="index"
+            type="button"
+            class="imp-table-btn"
+            :class="{ 'imp-table-btn--active': index === activeReading }"
+            @click="useReading(index)"
+          >
+            {{ reading.label }} · {{ reading.priced }} priced
+          </button>
+        </div>
       </div>
 
       <div class="imp-grid">
@@ -374,6 +455,10 @@ function close() {
 </template>
 
 <style scoped>
+.imp-tables { display: flex; flex-direction: column; gap: var(--space-2); }
+.imp-table-picker { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.imp-table-btn { font-size: var(--text-xs); padding: 4px var(--space-3); border: 1px solid var(--color-neutral-300); border-radius: var(--radius-full); background: var(--content-surface); color: var(--color-neutral-700); cursor: pointer; }
+.imp-table-btn--active { border-color: var(--color-primary); background: var(--color-primary-light); color: var(--color-primary-dark); }
 .imp-step { display: flex; flex-direction: column; gap: var(--space-4); min-width: min(78vw, 900px); }
 .imp-lead { font-size: var(--text-sm); color: var(--color-neutral-600); max-width: 62ch; line-height: var(--leading-relaxed); }
 .imp-error { display: flex; align-items: center; gap: var(--space-2); font-size: var(--text-sm); color: var(--color-danger-dark); background: var(--color-danger-light); padding: var(--space-2) var(--space-3); border-radius: var(--radius-md); margin-bottom: var(--space-3); }

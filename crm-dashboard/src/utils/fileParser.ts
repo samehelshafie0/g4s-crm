@@ -594,12 +594,32 @@ export async function parseExcelFile(
   const sheet = workbook.Sheets[sheetName]
   if (!sheet) return { headers: [], rows: [], mappedColumns: {}, rawRowCount: 0, detectionMethod: {} }
   const jsonData: (string | number)[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' })
+  return parseRowMatrix(jsonData, columnAliases)
+}
+
+/**
+ * Turn a grid of cells into mapped rows. Spreadsheets and server-extracted PDF
+ * tables arrive in the same shape, so header detection, column mapping and junk
+ * filtering are identical for both.
+ */
+export function parseRowMatrix(
+  jsonData: (string | number)[][],
+  columnAliases: ColumnMapping[] = DEFAULT_COLUMN_ALIASES,
+): ParseResult {
   if (jsonData.length < 1) return { headers: [], rows: [], mappedColumns: {}, rawRowCount: 0, detectionMethod: {} }
 
   const headerIdx = findHeaderRow(jsonData, columnAliases)
   const hRow = jsonData[headerIdx]
   if (!hRow) return { headers: [], rows: [], mappedColumns: {}, rawRowCount: 0, detectionMethod: {} }
-  const headerRow = hRow.map(h => String(h).trim())
+  // A PDF table can repeat a blank or duplicated heading; each column still
+  // needs a distinct key or its values overwrite a neighbour's.
+  const seen = new Map<string, number>()
+  const headerRow = hRow.map((h, index) => {
+    const label = String(h).trim() || `Column ${index + 1}`
+    const count = (seen.get(label) ?? 0) + 1
+    seen.set(label, count)
+    return count > 1 ? `${label} (${count})` : label
+  })
   const sourceColumns = headerRow.map((name, index) => ({ name, index })).filter(column => column.name.length > 0)
   const headers = sourceColumns.map(column => column.name)
 

@@ -136,6 +136,7 @@ Updated 2026-09-17 from `crm-api/internal/router/router.go`. 180 registered rout
 | PATCH | `/api/v1/products/:id/vendors/:vendorId` | `products:update` |
 | POST | `/api/v1/products/recalculate-costs` | `products:update` |
 | POST | `/api/v1/products/import` | `products:create` + `products:update` |
+| POST | `/api/v1/extract/pdf-tables` | `products:create` or `procurement:create` |
 | GET | `/api/v1/projects` | `projects:read` |
 | POST | `/api/v1/projects` | `projects:create` |
 | DELETE | `/api/v1/projects/:id` | `projects:delete` |
