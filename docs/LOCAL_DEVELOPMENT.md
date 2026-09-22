@@ -78,3 +78,13 @@ The seed is idempotent. Records are matched by manufacturer code, product SKU, s
 Rental packages are recurring services of type `rental` built from seeded products: each line charges the product's landed cost divided by the package's contract term, plus the target margin, so a rental line never charges the full purchase price monthly.
 
 `POST /api/v1/exchange-rates/refresh` (`exchange-rates:update`) pulls SAR rates from `https://open.er-api.com/v6/latest/SAR` and appends a history row per changed pair. Set `FX_PROVIDER_URL` to use a different provider with the same response shape. Rates are informational; quotes still store their own currency and totals.
+
+## Importing a vendor price list or quotation
+
+**Products → Import from vendor file** reads an Excel, CSV or text-based PDF sent by a vendor and turns its rows into catalog products. The browser parses the file and detects the part number, description, price, quantity and lead-time columns; `POST /api/v1/products/import` then owns validation, costing and the audit trail.
+
+Column detection handles what vendor files actually look like: a title row above the header, a leading spacer column, and category banners between product groups (dropped, not imported). When a sheet prices each line several times — MSRP, distributor and discounted — the payable price wins over the list price.
+
+The import form sets what the file cannot say: vendor name, manufacturer and category, source currency and its SAR rate, freight/customs/clearance percentages and the target margin. Landed cost and selling price are previewed per row before importing and recalculated server side on save, using the same formulas as the product editor. Rows with no price (a vendor's "Call Us") arrive unticked so they can be priced by hand or left out.
+
+Each imported row upserts the product by SKU, refreshes its vendor entry, and writes a price-history record carrying the file name, so any figure can be traced back to the vendor document. `updateExisting` decides whether a known SKU is repriced or reported as skipped. The whole import runs in one transaction and returns per-row outcomes.

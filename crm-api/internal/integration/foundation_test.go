@@ -247,6 +247,7 @@ func TestFoundation(t *testing.T) {
 	testRoleWorkflows(t, db, r, adminToken)
 	testQuoteAppendices(t, db, r, adminToken, customerID, dir)
 	testSeedCatalog(t, db, r, adminToken)
+	testProductImport(t, db, r, adminToken)
 	t.Run("current role and deactivation take effect for existing access token", func(t *testing.T) {
 		must(t, db.Model(&sales).Update("role", models.RoleViewer).Error)
 		code, res := call("POST", "/api/v1/customers", `{}`, salesToken)

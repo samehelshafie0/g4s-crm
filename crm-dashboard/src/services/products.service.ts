@@ -2,7 +2,29 @@ import { editable } from './payload'
 import { http, type ApiResponse, type PaginationParams } from './http'
 import type { Product, ProductVendorEntry, ProductPriceRecord, ProductDocument } from '@/types'
 
+export interface ProductImportRow { sku: string; name: string; description?: string; unitCost: number; qty?: number; leadTimeDays?: number; vendorSku?: string }
+export interface ProductImportRequest {
+  vendorName: string
+  manufacturerId?: string
+  categoryId?: string
+  sourceRef?: string
+  source: 'vendor-catalog' | 'supplier-quote' | 'manual'
+  productType: 'import' | 'local'
+  originCurrency: string
+  fxRate: number
+  freightPercent: number
+  customsPercent: number
+  clearancePercent: number
+  targetMarginPercent: number
+  updateExisting: boolean
+  rows: ProductImportRow[]
+}
+export interface ProductImportOutcome { sku: string; status: string; reason?: string; landedCostSAR?: number; sellingPrice?: number; productId?: string }
+export interface ProductImportResult { created: number; updated: number; skipped: number; failed: number; rows: ProductImportOutcome[] }
+
 export const productsService = {
+  importProducts: (data: ProductImportRequest) =>
+    http.post<ApiResponse<ProductImportResult>>('/products/import', data, { timeout: 120_000 }).then(r => r.data),
   documents: (id: string) => http.get<ApiResponse<ProductDocument[]>>(`/products/${id}/documents`).then(r => r.data),
   addDocument: (id: string, data: {documentId:string;name:string;docType:string;notes?:string}) => http.post<ApiResponse<ProductDocument>>(`/products/${id}/documents`, data).then(r => r.data),
   deleteDocument: (id: string, documentId: string) => http.delete(`/products/${id}/documents/${documentId}`),

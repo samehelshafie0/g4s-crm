@@ -10,6 +10,8 @@ import {
   Table2, FileSpreadsheet, RefreshCw,
 } from 'lucide-vue-next'
 import { parseFile, parseCSVText, downloadTemplate, getMappedValue, getMappedNumber, getMappedInt, type FileType, type ParseResult } from '@/utils/fileParser'
+import ProductImportDialog from '@/components/ProductImportDialog.vue'
+import { useAuthStore } from '@/stores/auth'
 import { useProcurementStore } from '@/stores/procurement'
 import { useProductsStore } from '@/stores/products'
 import { useManufacturersStore } from '@/stores/manufacturers'
@@ -22,6 +24,9 @@ import type {
 const procStore = useProcurementStore()
 const productsStore = useProductsStore()
 const mfrStore = useManufacturersStore()
+const auth = useAuthStore()
+const showImportDialog = ref(false)
+async function onImported() { products.value = await allPages(productsService.list) }
 
 onMounted(async () => { try { const [items, manufacturers] = await Promise.all([allPages(productsService.list), allPages(manufacturersService.list)]); products.value = items; mfrList.push(...manufacturers) } catch (e) { window.alert(errorMessage(e)) } })
 
@@ -311,7 +316,10 @@ async function savePrice() {
         <h1 class="page-header-title">Products</h1>
         <p class="page-header-subtitle">{{ filteredProducts.length }} product{{ filteredProducts.length !== 1 ? 's' : '' }} in catalog</p>
       </div>
-      <button class="btn btn-primary" @click="openAddModal"><Plus :size="18" /> Add Product</button>
+      <div class="page-header-actions">
+        <button v-if="auth.can('products:create')" class="btn" @click="showImportDialog = true"><FileUp :size="16" /> Import from vendor file</button>
+        <button class="btn btn-primary" @click="openAddModal"><Plus :size="18" /> Add Product</button>
+      </div>
     </div>
 
     <div class="card mb-6">
@@ -659,9 +667,13 @@ async function savePrice() {
       </div>
     </Teleport>
   </div>
+
+    <ProductImportDialog v-model:open="showImportDialog" @imported="onImported" />
 </template>
 
 <style scoped>
+.page-header-actions { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+
 .products-page { padding: var(--space-6); }
 .toolbar { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-4) var(--space-5); flex-wrap: wrap; }
 .toolbar-search { flex: 1; min-width: 220px; }

@@ -11,6 +11,9 @@ export interface ColumnMapping {
   keywords: string[]
   /** Negative keywords — if header contains these, skip it for this field */
   antiKeywords?: string[]
+  /** Nudges the choice between equally-named columns, e.g. a net price over a list price */
+  preferKeywords?: string[]
+  demoteKeywords?: string[]
   contentDetectable?: boolean
   contentPattern?: (values: string[]) => number
 }
@@ -197,6 +200,8 @@ const DEFAULT_COLUMN_ALIASES: ColumnMapping[] = [
       'msrp', 'dealer', 'discounted',
     ],
     antiKeywords: ['total', 'extended', 'subtotal', 'الإجمالي'],
+    preferKeywords: ['discounted', 'distributor', 'dealer', 'net', 'your price', 'buy', 'trade'],
+    demoteKeywords: ['msrp', 'list price', 'rrp', 'retail', 'srp', 'recommended'],
     contentDetectable: true,
     contentPattern: pricePattern,
   },
@@ -364,7 +369,12 @@ function detectColumns(
         }
       }
 
-      if (bestScore > 0) scores.push({ colIdx: i, score: bestScore, method })
+      if (bestScore > 0) {
+        // Keep the tiers intact; only separate columns that would otherwise tie.
+        if (mapping.preferKeywords?.some(k => h.includes(k.toLowerCase()))) bestScore += 0.05
+        if (mapping.demoteKeywords?.some(k => h.includes(k.toLowerCase()))) bestScore -= 0.05
+        scores.push({ colIdx: i, score: bestScore, method })
+      }
     }
 
     candidates[mapping.field] = scores
@@ -454,15 +464,20 @@ function isJunkRow(row: ParsedRow, headers: string[], mappedColumns: Record<stri
   const skuVal = skuHeader ? (row[skuHeader] || '').trim() : ''
   const nameVal = nameHeader ? (row[nameHeader] || '').trim() : ''
 
+  const priceIdx = mappedColumns['unitCost']
+  const qtyIdx = mappedColumns['qty']
+  const priceHeader = priceIdx !== undefined ? headers[priceIdx] : undefined
+  const qtyHeader = qtyIdx !== undefined ? headers[qtyIdx] : undefined
+  const hasPrice = priceHeader ? parseFloat(cleanCurrencyValue(row[priceHeader] || '')) : 0
+  const hasQty = qtyHeader ? parseInt((row[qtyHeader] || '').replace(/[^0-9]/g, ''), 10) : 0
+
   if (skuHeader && nameHeader && !skuVal && !nameVal) {
-    const priceIdx = mappedColumns['unitCost']
-    const qtyIdx = mappedColumns['qty']
-    const priceHeader = priceIdx !== undefined ? headers[priceIdx] : undefined
-    const qtyHeader = qtyIdx !== undefined ? headers[qtyIdx] : undefined
-    const hasPrice = priceHeader ? parseFloat((row[priceHeader] || '').replace(/[^0-9.-]/g, '')) : 0
-    const hasQty = qtyHeader ? parseInt((row[qtyHeader] || '').replace(/[^0-9]/g, ''), 10) : 0
     if (!hasPrice && !hasQty) return true
   }
+
+  // A category banner inside a price list fills one of the text columns and
+  // leaves the rest of the row empty; it is a label, not a product.
+  if (priceHeader && !hasPrice && !hasQty && (!skuVal || !nameVal) && nonEmpty.length <= 2) return true
 
   return false
 }
@@ -648,7 +663,9 @@ export async function parsePDFFile(
   columnAliases: ColumnMapping[] = DEFAULT_COLUMN_ALIASES,
 ): Promise<ParseResult> {
   const { getDocument, GlobalWorkerOptions } = await import('pdfjs-dist')
-  GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString()
+  if (!GlobalWorkerOptions.workerSrc) {
+    GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString()
+  }
   const buffer = await file.arrayBuffer()
   const pdf = await getDocument({ data: new Uint8Array(buffer) }).promise
   const allItems: TextItem[] = []
