@@ -237,10 +237,10 @@ function linePayloads(data: Record<string, unknown>, fields: string[]) {
  return Array.isArray(data.items) ? data.items.map(item => editable(item, fields)) : []
 }
 export function poPayload(data: Record<string, unknown>) {
- return { ...editable(data, ['supplierId', 'supplierName', 'currency', 'shippingCost', 'customsDuty', 'expectedDelivery', 'sourceQuoteId', 'notes']), items: linePayloads(data, ['productId', 'quantity', 'unitCost', 'leadTimeDays']) }
+ return { ...editable(data, ['supplierId', 'supplierName', 'currency', 'shippingCost', 'customsDuty', 'expectedDelivery', 'sourceQuoteId', 'projectId', 'notes']), items: linePayloads(data, ['productId', 'quantity', 'unitCost', 'leadTimeDays']) }
 }
 export function sqPayload(data: Record<string, unknown>) {
- return { ...editable(data, ['supplierId', 'supplierName', 'supplierRef', 'currency', 'validFrom', 'validUntil', 'contactName', 'contactEmail', 'paymentTerms', 'deliveryTerms', 'notes']), items: linePayloads(data, ['productId', 'productSku', 'productName', 'manufacturerName', 'quantity', 'unitCost', 'leadTimeDays', 'moq', 'validUntil', 'notes']) }
+ return { ...editable(data, ['supplierId', 'supplierName', 'supplierRef', 'sourceQuoteId', 'projectId', 'currency', 'validFrom', 'validUntil', 'contactName', 'contactEmail', 'paymentTerms', 'deliveryTerms', 'notes']), items: linePayloads(data, ['productId', 'productSku', 'productName', 'manufacturerName', 'quantity', 'unitCost', 'leadTimeDays', 'moq', 'validUntil', 'notes']) }
 }
 export function grPayload(data: Record<string, unknown>) {
  return { ...editable(data, ['poId', 'receiveDate', 'notes']), items: linePayloads(data, ['poItemId', 'productId', 'receivedQty', 'storageLocation', 'condition', 'notes']) }

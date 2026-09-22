@@ -26,7 +26,7 @@ func (h *ProcurementHandler) ListPOs(c *gin.Context) {
 	params := pagination.GetParams(c)
 	var items []models.PurchaseOrder
 	var total int64
-	query := h.db.Model(&models.PurchaseOrder{}).Preload("Items.Product.Manufacturer").Preload("ApprovedBy")
+	query := h.db.Model(&models.PurchaseOrder{}).Preload("Items.Product.Manufacturer").Preload("ApprovedBy").Preload("SourceQuote").Preload("Project")
 	if status := c.Query("status"); status != "" {
 		query = query.Where("status = ?", status)
 	}
@@ -37,7 +37,7 @@ func (h *ProcurementHandler) ListPOs(c *gin.Context) {
 
 func (h *ProcurementHandler) GetPO(c *gin.Context) {
 	var item models.PurchaseOrder
-	if err := h.db.Preload("Items.Product.Manufacturer").Preload("ApprovedBy").First(&item, "id = ?", c.Param("id")).Error; err != nil {
+	if err := h.db.Preload("Items.Product.Manufacturer").Preload("ApprovedBy").Preload("SourceQuote").Preload("Project").First(&item, "id = ?", c.Param("id")).Error; err != nil {
 		response.NotFound(c, "Purchase order not found")
 		return
 	}
@@ -58,6 +58,7 @@ type poInput struct {
 	CustomsDuty      float64         `json:"customsDuty" validate:"gte=0,lte=100000000"`
 	ExpectedDelivery *string         `json:"expectedDelivery"`
 	SourceQuoteID    *uuid.UUID      `json:"sourceQuoteId"`
+	ProjectID        *uuid.UUID      `json:"projectId"`
 	Notes            string          `json:"notes" validate:"max=20000"`
 	Items            []poLineInput   `json:"items" validate:"max=1000,dive"`
 }
@@ -92,6 +93,9 @@ func (h *ProcurementHandler) savePO(c *gin.Context, create bool) {
 		if err := optionalExists(tx, &models.Quote{}, req.SourceQuoteID); err != nil {
 			return err
 		}
+		if err := optionalExists(tx, &models.Project{}, req.ProjectID); err != nil {
+			return err
+		}
 		if create {
 			number, err := seqgen.NextNumber(tx, "purchase_order")
 			if err != nil {
@@ -109,6 +113,7 @@ func (h *ProcurementHandler) savePO(c *gin.Context, create bool) {
 		po.CustomsDuty = req.CustomsDuty
 		po.ExpectedDelivery = date
 		po.SourceQuoteID = req.SourceQuoteID
+		po.ProjectID = req.ProjectID
 		po.Notes = req.Notes
 		po.Subtotal = 0
 		po.Items = nil
@@ -142,7 +147,7 @@ func (h *ProcurementHandler) savePO(c *gin.Context, create bool) {
 		apiError(c, err)
 		return
 	}
-	if err := h.db.Preload("Items.Product.Manufacturer").Preload("ApprovedBy").First(&po, "id = ?", po.ID).Error; err != nil {
+	if err := h.db.Preload("Items.Product.Manufacturer").Preload("ApprovedBy").Preload("SourceQuote").Preload("Project").First(&po, "id = ?", po.ID).Error; err != nil {
 		apiError(c, err)
 		return
 	}
@@ -225,7 +230,7 @@ func (h *ProcurementHandler) ListSQs(c *gin.Context) {
 	params := pagination.GetParams(c)
 	var items []models.SupplierQuote
 	var total int64
-	query := h.db.Model(&models.SupplierQuote{}).Preload("Items")
+	query := h.db.Model(&models.SupplierQuote{}).Preload("Items").Preload("SourceQuote").Preload("Project")
 	if status := c.Query("status"); status != "" {
 		query = query.Where("status = ?", status)
 	}
@@ -236,7 +241,7 @@ func (h *ProcurementHandler) ListSQs(c *gin.Context) {
 
 func (h *ProcurementHandler) GetSQ(c *gin.Context) {
 	var item models.SupplierQuote
-	if err := h.db.Preload("Items.Product").First(&item, "id = ?", c.Param("id")).Error; err != nil {
+	if err := h.db.Preload("Items.Product").Preload("SourceQuote").Preload("Project").First(&item, "id = ?", c.Param("id")).Error; err != nil {
 		response.NotFound(c, "Supplier quote not found")
 		return
 	}
@@ -263,6 +268,8 @@ func (h *ProcurementHandler) saveSQ(c *gin.Context, create bool) {
 		SupplierID    *uuid.UUID      `json:"supplierId"`
 		SupplierName  string          `json:"supplierName" validate:"required,max=255"`
 		SupplierRef   string          `json:"supplierRef" validate:"max=255"`
+		SourceQuoteID *uuid.UUID      `json:"sourceQuoteId"`
+		ProjectID     *uuid.UUID      `json:"projectId"`
 		Currency      models.Currency `json:"currency" validate:"required,oneof=SAR USD EUR GBP AED CNY"`
 		ValidFrom     *string         `json:"validFrom"`
 		ValidUntil    *string         `json:"validUntil"`
@@ -304,6 +311,12 @@ func (h *ProcurementHandler) saveSQ(c *gin.Context, create bool) {
 		if err := optionalExists(tx, &models.Manufacturer{}, req.SupplierID); err != nil {
 			return err
 		}
+		if err := optionalExists(tx, &models.Quote{}, req.SourceQuoteID); err != nil {
+			return err
+		}
+		if err := optionalExists(tx, &models.Project{}, req.ProjectID); err != nil {
+			return err
+		}
 		if create {
 			number, err := seqgen.NextNumber(tx, "supplier_quote")
 			if err != nil {
@@ -315,6 +328,8 @@ func (h *ProcurementHandler) saveSQ(c *gin.Context, create bool) {
 		sq.SupplierID = req.SupplierID
 		sq.SupplierName = req.SupplierName
 		sq.SupplierRef = req.SupplierRef
+		sq.SourceQuoteID = req.SourceQuoteID
+		sq.ProjectID = req.ProjectID
 		sq.Currency = req.Currency
 		sq.ValidFrom = from
 		sq.ValidUntil = until
@@ -437,7 +452,7 @@ func (h *ProcurementHandler) ConvertToPO(c *gin.Context) {
 			return err
 		}
 		user := middleware.GetCurrentUserID(c)
-		po = models.PurchaseOrder{PONumber: number, SupplierQuoteID: &sq.ID, SupplierID: sq.SupplierID, SupplierName: sq.SupplierName, Currency: sq.Currency, CreatedByID: &user, Status: models.POStatusDraft, Subtotal: sq.Subtotal, Total: sq.Subtotal}
+		po = models.PurchaseOrder{PONumber: number, SupplierQuoteID: &sq.ID, SupplierID: sq.SupplierID, SupplierName: sq.SupplierName, Currency: sq.Currency, CreatedByID: &user, Status: models.POStatusDraft, Subtotal: sq.Subtotal, Total: sq.Subtotal, SourceQuoteID: sq.SourceQuoteID, ProjectID: sq.ProjectID}
 		for _, line := range sq.Items {
 			if line.ProductID == nil {
 				return invalid("Link every supplier quote item to a catalog product before conversion")
@@ -457,7 +472,7 @@ func (h *ProcurementHandler) ConvertToPO(c *gin.Context) {
 		apiError(c, err)
 		return
 	}
-	if err := h.db.Preload("Items.Product.Manufacturer").Preload("ApprovedBy").First(&po, "id = ?", po.ID).Error; err != nil {
+	if err := h.db.Preload("Items.Product.Manufacturer").Preload("ApprovedBy").Preload("SourceQuote").Preload("Project").First(&po, "id = ?", po.ID).Error; err != nil {
 		apiError(c, err)
 		return
 	}

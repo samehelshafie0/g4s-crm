@@ -152,11 +152,26 @@ func (d Document) MarshalJSON() ([]byte, error) {
 }
 func (p PurchaseOrder) MarshalJSON() ([]byte, error) {
 	type plain PurchaseOrder
-	return withFields(plain(p), map[string]any{"items": rows(p.Items)})
+	return withFields(plain(p), map[string]any{"items": rows(p.Items), "sourceQuoteNumber": quoteNumber(p.SourceQuote), "projectName": projectName(p.Project)})
 }
 func (s SupplierQuote) MarshalJSON() ([]byte, error) {
 	type plain SupplierQuote
-	return withFields(plain(s), map[string]any{"items": rows(s.Items)})
+	return withFields(plain(s), map[string]any{"items": rows(s.Items), "sourceQuoteNumber": quoteNumber(s.SourceQuote), "projectName": projectName(s.Project)})
+}
+
+// The linked records are shown by their human reference, not their ID.
+func quoteNumber(q *Quote) string {
+	if q == nil {
+		return ""
+	}
+	return q.QuoteNumber
+}
+
+func projectName(p *Project) string {
+	if p == nil {
+		return ""
+	}
+	return p.Name
 }
 func (g GoodsReceipt) MarshalJSON() ([]byte, error) {
 	type plain GoodsReceipt

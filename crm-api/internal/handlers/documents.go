@@ -238,13 +238,13 @@ func (h *DocumentHandler) Download(c *gin.Context) {
 func (h *DocumentHandler) Delete(c *gin.Context) { deleteRecord(c, h.db, &models.Document{}) }
 func (h *DocumentHandler) AddLink(c *gin.Context) {
 	var req struct {
-		EntityType string    `json:"entityType" validate:"required,oneof=customer opportunity quote contract project product purchase-order"`
+		EntityType string    `json:"entityType" validate:"required,oneof=customer opportunity quote contract project product purchase-order supplier-quote"`
 		EntityID   uuid.UUID `json:"entityId" validate:"required"`
 	}
 	if !v.BindStrict(c, &req) {
 		return
 	}
-	resource := map[string]string{"customer": "customers", "opportunity": "opportunities", "quote": "quotes", "contract": "contracts", "project": "projects", "product": "products", "purchase-order": "procurement"}[req.EntityType]
+	resource := map[string]string{"customer": "customers", "opportunity": "opportunities", "quote": "quotes", "contract": "contracts", "project": "projects", "product": "products", "purchase-order": "procurement", "supplier-quote": "procurement"}[req.EntityType]
 	if !middleware.HasPermission(middleware.GetCurrentUserRole(c), resource+":read") {
 		response.Forbidden(c, "Cannot link records you cannot read")
 		return
@@ -255,11 +255,11 @@ func (h *DocumentHandler) AddLink(c *gin.Context) {
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&doc, "id = ?", c.Param("id")).Error; err != nil {
 			return err
 		}
-		model := map[string]any{"customer": &models.Customer{}, "opportunity": &models.Opportunity{}, "quote": &models.Quote{}, "contract": &models.Contract{}, "project": &models.Project{}, "product": &models.Product{}, "purchase-order": &models.PurchaseOrder{}}[req.EntityType]
+		model := map[string]any{"customer": &models.Customer{}, "opportunity": &models.Opportunity{}, "quote": &models.Quote{}, "contract": &models.Contract{}, "project": &models.Project{}, "product": &models.Product{}, "purchase-order": &models.PurchaseOrder{}, "supplier-quote": &models.SupplierQuote{}}[req.EntityType]
 		if err := exists(tx, model, req.EntityID); err != nil {
 			return err
 		}
-		column := map[string]string{"customer": "company_name", "opportunity": "title", "quote": "quote_number", "contract": "title", "project": "name", "product": "name", "purchase-order": "po_number"}[req.EntityType]
+		column := map[string]string{"customer": "company_name", "opportunity": "title", "quote": "quote_number", "contract": "title", "project": "name", "product": "name", "purchase-order": "po_number", "supplier-quote": "sq_number"}[req.EntityType]
 		var name string
 		if err := tx.Model(model).Select(column).Where("id = ?", req.EntityID).Scan(&name).Error; err != nil {
 			return err

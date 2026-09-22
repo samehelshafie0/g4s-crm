@@ -447,6 +447,7 @@ export interface Document extends BaseEntity {
   fileSize: string
   fileType: string
   linkedEntities: { type: string; id: string; name: string }[]
+  links?: { id: string; documentId: string; entityType: string; entityId: string; entityName: string }[]
   uploadedBy: string
 }
 
@@ -488,6 +489,8 @@ export interface PurchaseOrder extends BaseEntity {
   actualDelivery?: string
   sourceQuoteId?: string
   sourceQuoteNumber?: string
+  projectId?: string
+  projectName?: string
   notes: string
   approvedBy?: string
   approvedAt?: string
@@ -516,6 +519,10 @@ export interface SupplierQuote extends BaseEntity {
   supplierName: string
   supplierId?: string
   supplierRef?: string
+  sourceQuoteId?: string
+  sourceQuoteNumber?: string
+  projectId?: string
+  projectName?: string
   status: SupplierQuoteStatus
   items: SupplierQuoteLineItem[]
   subtotal: number

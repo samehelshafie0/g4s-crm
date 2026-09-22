@@ -88,3 +88,17 @@ Column detection handles what vendor files actually look like: a title row above
 The import form sets what the file cannot say: vendor name, manufacturer and category, source currency and its SAR rate, freight/customs/clearance percentages and the target margin. Landed cost and selling price are previewed per row before importing and recalculated server side on save, using the same formulas as the product editor. Rows with no price (a vendor's "Call Us") arrive unticked so they can be priced by hand or left out.
 
 Each imported row upserts the product by SKU, refreshes its vendor entry, and writes a price-history record carrying the file name, so any figure can be traced back to the vendor document. `updateExisting` decides whether a known SKU is repriced or reported as skipped. The whole import runs in one transaction and returns per-row outcomes.
+
+## Following a vendor file through to the customer
+
+A supplier quotation is raised to fulfil a customer quotation, usually inside a project. The chain is recorded on both procurement records:
+
+- **Procurement → Supplier Quotes → new quote** has *Requested for customer quote* and *Project* selectors. Both are optional and validated against existing records.
+- **Convert to PO** carries those links onto the purchase order, so the order knows which customer quote and project it serves. The purchase-order form keeps its own selectors for orders raised directly.
+- Purchase orders and supplier quotes return `sourceQuoteNumber` and `projectName` alongside their IDs, and both are shown on the detail views.
+
+The original vendor document is kept with the record rather than only as a file name. **Attached files** on a supplier quote, purchase order and quote uploads the file to the document library once and links it to that record; the same document can sit on both the supplier quote and the order it produced. Document links accept `supplier-quote` in addition to the existing entity types.
+
+### What automatic extraction can and cannot read
+
+Excel and CSV price lists parse reliably. PDF extraction depends on how the vendor laid the file out: a PDF built as a real table reads well, while quotation PDFs that position text freely often yield rows without usable prices. Every parsed row is editable before import, and files that cannot be read at all can be typed in or pasted. Scanned PDFs contain no text layer and cannot be parsed at all — attach them to the record and enter the lines by hand.

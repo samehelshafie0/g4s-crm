@@ -123,6 +123,40 @@ func testModuleAPIs(t *testing.T, db *gorm.DB, r *gin.Engine, token, customerID 
 			t.Fatal(again)
 		}
 	})
+	t.Run("supplier quote carries its customer quote and project into the purchase order", func(t *testing.T) {
+		project := call(t, "POST", "/projects", m("name", "Link chain project", "customerId", customerID, "quoteId", quoteID), 201)
+		projectID := project["id"].(string)
+
+		sq := call(t, "POST", "/procurement/supplier-quotes", m(
+			"supplierId", mfrID, "supplierName", "Integration Manufacturer", "currency", "SAR",
+			"sourceQuoteId", quoteID, "projectId", projectID,
+			"items", []any{m("productId", productID, "productName", "Camera", "quantity", 4, "unitCost", 30)}), 201)
+		if sq["sourceQuoteId"] != quoteID || sq["projectId"] != projectID {
+			t.Fatalf("supplier quote did not keep its customer links: %v", sq)
+		}
+		sqPath := "/procurement/supplier-quotes/" + sq["id"].(string)
+		call(t, "PATCH", sqPath+"/status", m("status", "accepted"), 200)
+
+		po := call(t, "POST", sqPath+"/convert-to-po", m(), 201)
+		if po["sourceQuoteId"] != quoteID || po["projectId"] != projectID {
+			t.Fatalf("conversion dropped the customer quote or project: %v", po)
+		}
+		reloaded := call(t, "GET", "/procurement/purchase-orders/"+po["id"].(string), nil, 200)
+		if reloaded["sourceQuoteNumber"] == "" || reloaded["projectName"] != "Link chain project" {
+			t.Fatalf("purchase order does not report its links by name: %v", reloaded)
+		}
+
+		// The supplier's own paperwork must be attachable to both ends of the chain.
+		doc := models.Document{Name: "Supplier quotation", Category: "general", DocumentType: "terms", Version: "1", FileName: "vendor-quote.pdf", FilePath: "vendor-quote.pdf", FileType: "application/pdf", FileSize: 1024}
+		must(t, db.Create(&doc).Error)
+		docPath := "/documents/" + doc.ID.String() + "/links"
+		call(t, "POST", docPath, m("entityType", "supplier-quote", "entityId", sq["id"]), 201)
+		call(t, "POST", docPath, m("entityType", "purchase-order", "entityId", po["id"]), 201)
+		listed := call(t, "GET", "/documents?entityId="+po["id"].(string), nil, 200)
+		if listed["data"] == nil {
+			t.Fatalf("documents could not be listed by linked record: %v", listed)
+		}
+	})
 	t.Run("procurement lines conversion partial receipts and stock", func(t *testing.T) {
 		sq := call(t, "POST", "/procurement/supplier-quotes", m("supplierId", mfrID, "supplierName", "Integration Manufacturer", "currency", "SAR", "items", []any{m("productId", productID, "productName", "Camera", "quantity", 10, "unitCost", 25)}), 201)
 		sqPath := "/procurement/supplier-quotes/" + sq["id"].(string)

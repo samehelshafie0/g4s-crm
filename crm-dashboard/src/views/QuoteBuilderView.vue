@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import AppDialog from '@/components/shared/AppDialog.vue'
 import QuoteAppendices from '@/components/QuoteAppendices.vue'
+import RecordAttachments from '@/components/RecordAttachments.vue'
 import { ref, computed, watch, reactive, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import {
@@ -1215,7 +1216,11 @@ function exportExcel() {
     </div>
 
     <!-- Tab: Sold To / Ship To -->
-    <div v-show="builderTab === 'documents'" class="tab-content-panel"><QuoteAppendices v-if="loadedQuote" v-model="appendices" :customer-id="customerId" :disabled="locked || exportingPdf" @busy="appendixBusy = $event" /></div>
+    <div v-show="builderTab === 'documents'" class="tab-content-panel">
+      <QuoteAppendices v-if="loadedQuote" v-model="appendices" :customer-id="customerId" :disabled="locked || exportingPdf" @busy="appendixBusy = $event" />
+      <!-- Supplier paperwork behind this quote: kept with the record, not printed into the PDF. -->
+      <RecordAttachments v-if="loadedQuote" class="quote-attachments" entity-type="quote" :entity-id="loadedQuote.id" :entity-label="quoteNumber" />
+    </div>
 
     <div v-show="builderTab === 'addresses'" class="tab-content-panel">
       <div class="addresses-grid">
@@ -1579,6 +1584,8 @@ function exportExcel() {
 </template>
 
 <style scoped>
+.quote-attachments { margin-top: var(--space-6); padding-top: var(--space-5); border-top: 1px solid var(--color-neutral-200); }
+
 .catalog-count { display: inline-flex; align-items: center; gap: 4px; font-size: var(--text-xs); color: var(--color-neutral-500); white-space: nowrap; background: none; border: 0; cursor: pointer; padding: 2px 4px; }
 .catalog-count:hover { color: var(--color-neutral-700); }
 .catalog-list { margin-top: var(--space-2); background: var(--content-surface); border: 1px solid var(--color-neutral-200); border-radius: var(--radius-lg); max-height: 300px; overflow-y: auto; }

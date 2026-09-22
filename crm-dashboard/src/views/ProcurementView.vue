@@ -9,6 +9,7 @@ import {
   Upload, Pencil, Check, Copy, FileUp, Table2, FileSpreadsheet,
 } from 'lucide-vue-next'
 import { parseFile, parseCSVText, downloadTemplate, getMappedValue, getMappedNumber, getMappedInt, type FileType, type ParseResult } from '@/utils/fileParser'
+import RecordAttachments from '@/components/RecordAttachments.vue'
 import { useProcurementStore } from '@/stores/procurement'
 import { useManufacturersStore } from '@/stores/manufacturers'
 import { useQuotesStore } from '@/stores/quotes'
@@ -19,7 +20,7 @@ import type {
   Quote, Project, QuoteLineItem,
 } from '@/types'
 
-import { procurementService, productsService, manufacturersService, quotesService, inventoryService } from '@/services'
+import { procurementService, productsService, manufacturersService, quotesService, inventoryService, projectsService } from '@/services'
 import { allPages } from '@/services/collections'
 import { errorMessage } from '@/services/payload'
 import type { Product } from '@/types'
@@ -29,9 +30,10 @@ const availableStock = ref<Record<string,number>>({})
 const store = useProcurementStore()
 const mfrStore = useManufacturersStore()
 const quotesStore = useQuotesStore()
+const projectList = ref<{ id: string; projectNumber: string; name: string }[]>([])
 
 async function reloadProcurement() {await Promise.all([store.fetchPurchaseOrders({limit:100}),store.fetchSupplierQuotes({limit:100}),store.fetchGoodsReceipts({limit:100})]);store.supplierItems=(await procurementService.supplierItems()).data}
-onMounted(async()=>{try{await reloadProcurement();catalogProducts.value=await allPages(productsService.list);mfrStore.manufacturers=await allPages(manufacturersService.list);quotesStore.quotes=await allPages(quotesService.list);const stock=await allPages(inventoryService.listStock);for(const row of stock) availableStock.value[row.productId]=(availableStock.value[row.productId]??0)+row.availableQty}catch(e){window.alert(errorMessage(e))}})
+onMounted(async()=>{try{await reloadProcurement();catalogProducts.value=await allPages(productsService.list);mfrStore.manufacturers=await allPages(manufacturersService.list);quotesStore.quotes=await allPages(quotesService.list);projectList.value=await allPages(projectsService.list);const stock=await allPages(inventoryService.listStock);for(const row of stock) availableStock.value[row.productId]=(availableStock.value[row.productId]??0)+row.availableQty}catch(e){window.alert(errorMessage(e))}})
 
 function uid(): string { return Math.random().toString(36).slice(2, 11) }
 
@@ -669,6 +671,8 @@ interface SQFormItem {
 const sqForm = ref({
   supplierName: '',
   supplierRef: '',
+  sourceQuoteId: '',
+  projectId: '',
   contactName: '',
   contactEmail: '',
   validFrom: '',
@@ -682,7 +686,7 @@ const sqForm = ref({
 function resetSQForm() {
   editingSQId.value = null
   sqForm.value = {
-    supplierName: '', supplierRef: '', contactName: '', contactEmail: '',
+    supplierName: '', supplierRef: '', sourceQuoteId: '', projectId: '', contactName: '', contactEmail: '',
     validFrom: new Date().toISOString().slice(0, 10),
     validUntil: new Date(Date.now() + 90 * 86400000).toISOString().slice(0, 10),
     paymentTerms: '', deliveryTerms: '', notes: '', items: [],
@@ -703,6 +707,8 @@ function openEditSQ(sq: SupplierQuote) {
   sqForm.value = {
     supplierName: sq.supplierName,
     supplierRef: sq.supplierRef || '',
+    sourceQuoteId: sq.sourceQuoteId || '',
+    projectId: sq.projectId || '',
     contactName: sq.contactName || '',
     contactEmail: sq.contactEmail || '',
     validFrom: sq.validFrom?.slice(0, 10) ?? '',
@@ -738,7 +744,7 @@ function selectSQSupplier(mfr: Manufacturer) {
 function resolveProduct(sku: string): string {const product=catalogProducts.value.find(p=>p.sku.toLowerCase()===sku.trim().toLowerCase());if(!product)throw new Error(`Add SKU ${sku || '(empty)'} to Products before creating a purchase order.`);return product.id}
 async function saveSQ() {
  if(!sqForm.value.supplierName||sqForm.value.items.length===0)return
- try {const items=sqForm.value.items.map(i=>({productId:catalogProducts.value.find(p=>p.sku.toLowerCase()===i.sku.toLowerCase())?.id,productSku:i.sku,productName:i.name,manufacturerName:i.manufacturer,quantity:i.qty,unitCost:i.unitCost,leadTimeDays:i.leadTimeDays,moq:i.moq}));const data={...sqForm.value,items,currency:store.supplierQuotes.find(s => s.id === editingSQId.value)?.currency ?? 'SAR'}
+ try {const items=sqForm.value.items.map(i=>({productId:catalogProducts.value.find(p=>p.sku.toLowerCase()===i.sku.toLowerCase())?.id,productSku:i.sku,productName:i.name,manufacturerName:i.manufacturer,quantity:i.qty,unitCost:i.unitCost,leadTimeDays:i.leadTimeDays,moq:i.moq}));const data={...sqForm.value,items,sourceQuoteId:sqForm.value.sourceQuoteId||null,projectId:sqForm.value.projectId||null,currency:store.supplierQuotes.find(s => s.id === editingSQId.value)?.currency ?? 'SAR'}
  if(editingSQId.value)await store.updateSupplierQuote(editingSQId.value,data);else await store.addSupplierQuote(data)
  showCreateSQModal.value=false;resetSQForm()
  }catch(e){window.alert(errorMessage(e))}
@@ -1248,6 +1254,10 @@ function delayHideSQDropdown() { window.setTimeout(() => { showSQItemDropdown.va
                 <span class="view-info-label">Source Quote</span>
                 <span class="view-info-value source-quote-link"><FileText :size="12" /> {{ viewingPO.sourceQuoteNumber }}</span>
               </div>
+              <div class="view-info-item" v-if="viewingPO.projectName">
+                <span class="view-info-label">Project</span>
+                <span class="view-info-value">{{ viewingPO.projectName }}</span>
+              </div>
             </div>
             <div v-if="viewingPO.notes" class="view-notes"><p>{{ viewingPO.notes }}</p></div>
             <div class="table-container table-container--embedded">
@@ -1290,6 +1300,12 @@ function delayHideSQDropdown() { window.setTimeout(() => { showSQItemDropdown.va
               <span>Approved by <strong>{{ viewingPO.approvedBy }}</strong></span>
               <span v-if="viewingPO.approvedAt" class="text-muted"> on {{ formatDate(viewingPO.approvedAt) }}</span>
             </div>
+            <RecordAttachments
+              class="view-attachments"
+              entity-type="purchase-order"
+              :entity-id="viewingPO.id"
+              :entity-label="viewingPO.poNumber"
+            />
           </div>
           <div class="modal-footer">
             <button v-if="viewingPO.status === 'draft'" class="btn btn-sm" @click="poAction(viewingPO,'pending-approval')">Submit for approval</button>
@@ -1320,6 +1336,14 @@ function delayHideSQDropdown() { window.setTimeout(() => { showSQItemDropdown.va
               <div class="view-info-item">
                 <span class="view-info-label">Supplier Ref</span>
                 <span class="view-info-value text-mono">{{ viewingSQ.supplierRef || '—' }}</span>
+              </div>
+              <div class="view-info-item" v-if="viewingSQ.sourceQuoteNumber">
+                <span class="view-info-label">Customer Quote</span>
+                <span class="view-info-value source-quote-link"><FileText :size="12" /> {{ viewingSQ.sourceQuoteNumber }}</span>
+              </div>
+              <div class="view-info-item" v-if="viewingSQ.projectName">
+                <span class="view-info-label">Project</span>
+                <span class="view-info-value">{{ viewingSQ.projectName }}</span>
               </div>
               <div class="view-info-item">
                 <span class="view-info-label">Contact</span>
@@ -1380,6 +1404,12 @@ function delayHideSQDropdown() { window.setTimeout(() => { showSQItemDropdown.va
                 <span class="font-bold text-mono view-grand-total">SAR {{ formatSAR(viewingSQ.subtotal) }}</span>
               </div>
             </div>
+            <RecordAttachments
+              class="view-attachments"
+              entity-type="supplier-quote"
+              :entity-id="viewingSQ.id"
+              :entity-label="viewingSQ.sqNumber"
+            />
           </div>
           <div class="modal-footer">
             <button v-if="['received','under-review'].includes(viewingSQ.status)" class="btn btn-sm" @click="acceptSQ(viewingSQ)">Accept supplier quote</button><button class="btn btn-secondary" @click="showViewSQModal = false">Close</button>
@@ -1594,6 +1624,22 @@ function delayHideSQDropdown() { window.setTimeout(() => { showSQItemDropdown.va
                 <div class="form-group" style="flex:1">
                   <label class="form-label">Supplier Ref / Quote #</label>
                   <input v-model="sqForm.supplierRef" type="text" class="form-input" placeholder="e.g. HIK-QT-2026..." />
+                </div>
+              </div>
+              <div class="create-form-row">
+                <div class="form-group" style="flex:1">
+                  <label class="form-label" for="sq-source-quote">Requested for customer quote</label>
+                  <select id="sq-source-quote" v-model="sqForm.sourceQuoteId" class="form-input">
+                    <option value="">Not linked</option>
+                    <option v-for="qt in quotesStore.quotes" :key="qt.id" :value="qt.id">{{ qt.quoteNumber }} — {{ qt.customerName }}</option>
+                  </select>
+                </div>
+                <div class="form-group" style="flex:1">
+                  <label class="form-label" for="sq-project">Project</label>
+                  <select id="sq-project" v-model="sqForm.projectId" class="form-input">
+                    <option value="">Not linked</option>
+                    <option v-for="pr in projectList" :key="pr.id" :value="pr.id">{{ pr.projectNumber }} — {{ pr.name }}</option>
+                  </select>
                 </div>
               </div>
               <div class="create-form-row">
@@ -2168,6 +2214,8 @@ function delayHideSQDropdown() { window.setTimeout(() => { showSQItemDropdown.va
 </template>
 
 <style scoped>
+.view-attachments { margin-top: var(--space-4); padding-top: var(--space-4); border-top: 1px solid var(--color-neutral-200); }
+
 .procurement-page { padding: var(--space-6); }
 .page-header-actions { display: flex; gap: var(--space-2); }
 

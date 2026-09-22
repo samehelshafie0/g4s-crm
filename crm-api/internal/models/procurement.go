@@ -47,6 +47,9 @@ type PurchaseOrder struct {
 	ActualDelivery   *time.Time          `json:"actualDelivery,omitempty"`
 	SupplierQuoteID  *uuid.UUID          `gorm:"type:uuid" json:"supplierQuoteId,omitempty"`
 	SourceQuoteID    *uuid.UUID          `gorm:"type:uuid" json:"sourceQuoteId,omitempty"`
+	SourceQuote      *Quote              `gorm:"foreignKey:SourceQuoteID" json:"sourceQuote,omitempty"`
+	ProjectID        *uuid.UUID          `gorm:"type:uuid" json:"projectId,omitempty"`
+	Project          *Project            `gorm:"foreignKey:ProjectID" json:"project,omitempty"`
 	Notes            string              `json:"notes"`
 	ApprovedByID     *uuid.UUID          `gorm:"type:uuid" json:"approvedById,omitempty"`
 	ApprovedBy       *User               `gorm:"foreignKey:ApprovedByID" json:"approvedBy,omitempty"`
@@ -73,6 +76,10 @@ type SupplierQuote struct {
 	Supplier      *Manufacturer       `gorm:"foreignKey:SupplierID" json:"supplier,omitempty"`
 	SupplierName  string              `gorm:"not null" json:"supplierName"`
 	SupplierRef   string              `json:"supplierRef"`
+	SourceQuoteID *uuid.UUID          `gorm:"type:uuid" json:"sourceQuoteId,omitempty"`
+	SourceQuote   *Quote              `gorm:"foreignKey:SourceQuoteID" json:"sourceQuote,omitempty"`
+	ProjectID     *uuid.UUID          `gorm:"type:uuid" json:"projectId,omitempty"`
+	Project       *Project            `gorm:"foreignKey:ProjectID" json:"project,omitempty"`
 	Status        SupplierQuoteStatus `gorm:"default:'received'" json:"status"`
 	Items         []SupplierQuoteItem `gorm:"foreignKey:SupplierQuoteID" json:"items,omitempty"`
 	Subtotal      float64             `json:"subtotal"`
