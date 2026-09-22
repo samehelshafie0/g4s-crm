@@ -92,23 +92,20 @@ const saveMessage = ref('')
 
 // ── Builder: Search & Filter ────────────────────────────────
 const searchQuery = ref('')
-const showDropdown = ref(false)
+const catalogOpen = ref(true)
 const kindFilter = ref<CatalogItemKind | 'all'>('all')
 const entryKindFilter = ref<CatalogItemKind | 'all'>('all')
 
-function delayHideDropdown() {
-  window.setTimeout(() => { showDropdown.value = false }, 200)
-}
-
 const searchResults = computed(() => {
-  if (!searchQuery.value.trim() || !activeBook.value) return []
-  const q = searchQuery.value.toLowerCase()
+  // An empty query browses the catalog; typing narrows it.
+  if (!activeBook.value) return []
+  const q = searchQuery.value.toLowerCase().trim()
   const existingIds = new Set(activeBook.value.entries.map(e => e.productId))
   return catalogItems.filter(item => {
     if (existingIds.has(item.id)) return false
     if (kindFilter.value !== 'all' && item.kind !== kindFilter.value) return false
-    return item.sku.toLowerCase().includes(q) || item.name.toLowerCase().includes(q) || (item.manufacturer?.toLowerCase().includes(q) ?? false)
-  }).slice(0, 12)
+    return !q || item.sku.toLowerCase().includes(q) || item.name.toLowerCase().includes(q) || (item.manufacturer?.toLowerCase().includes(q) ?? false)
+  }).slice(0, 25)
 })
 
 const filteredEntries = computed(() => {
@@ -142,7 +139,6 @@ function addCatalogItem(item: CatalogItem) {
     kind: item.kind,
   })
   searchQuery.value = ''
-  showDropdown.value = false
 }
 
 function removeEntry(entryId: string) {
@@ -232,8 +228,8 @@ function onCustomerChange() {
   if (c) activeBook.value.customerName = c.name
 }
 
-watch(searchQuery, (val) => {
-  showDropdown.value = val.trim().length > 0
+watch(searchQuery, () => {
+  catalogOpen.value = true
 })
 </script>
 
@@ -410,18 +406,18 @@ watch(searchQuery, (val) => {
                       type="text"
                       class="form-input"
                       placeholder="Search by SKU, name, or manufacturer..."
-                      @focus="showDropdown = searchQuery.trim().length > 0"
-                      @blur="delayHideDropdown"
                     />
                   </div>
 
                   <!-- Search Dropdown -->
-                  <div v-if="showDropdown && searchResults.length" class="product-dropdown">
+                  <p class="catalog-count">{{ catalogItems.length }} catalog items available</p>
+                  <div v-if="catalogOpen && searchResults.length" class="product-dropdown product-dropdown--inline">
                     <button
                       v-for="item in searchResults"
                       :key="item.id"
+                      type="button"
                       class="product-dropdown-item"
-                      @mousedown.prevent="addCatalogItem(item)"
+                      @click="addCatalogItem(item)"
                     >
                       <div class="dropdown-item-main">
                         <span :class="['kind-badge', kindBadge[item.kind]]">{{ kindLabels[item.kind] }}</span>
@@ -433,10 +429,11 @@ watch(searchQuery, (val) => {
                     </button>
                   </div>
 
-                  <div v-if="showDropdown && searchQuery.trim() && !searchResults.length" class="product-dropdown product-dropdown--empty">
+                  <div v-if="catalogOpen && !searchResults.length" class="product-dropdown product-dropdown--inline product-dropdown--empty">
                     <div class="dropdown-empty">
                       <Search :size="16" />
-                      No items found for "{{ searchQuery }}"
+                      <span v-if="searchQuery.trim()">No items found for "{{ searchQuery }}"</span>
+                      <span v-else>No catalog items left to add. Run the catalog seed, or every item is already in this book.</span>
                     </div>
                   </div>
                 </div>
@@ -913,6 +910,8 @@ watch(searchQuery, (val) => {
 }
 
 /* Product Dropdown */
+.catalog-count { font-size: var(--text-xs); color: var(--color-neutral-500); margin-top: var(--space-2); }
+.product-dropdown--inline { position: static; margin-top: var(--space-2); box-shadow: none; max-height: 300px; }
 .product-dropdown {
   position: absolute;
   top: 100%;

@@ -5,7 +5,7 @@ import { ref, computed, watch, reactive, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import {
   Save, Send, CheckCircle2, Printer, FileSpreadsheet, Search, X, Trash2,
-  Plus, GripVertical, Package, Users, Wrench, ChevronDown, Calendar,
+  Plus, GripVertical, Package, Users, Wrench, ChevronDown, ChevronRight, Calendar,
   Building2, AlertCircle, CircleDot, ArrowLeft, RefreshCw, Eye, EyeOff,
   MessageSquare, Minus, Hash, Zap, FileText, Settings, Copy, MapPin, Clipboard,
   ShoppingCart, Truck, AlertTriangle, PackageCheck, History, DollarSign, TrendingDown, TrendingUp, Check,
@@ -463,18 +463,19 @@ const tabCounts = computed(() => ({
 // ── Add Items: Search ────────────────────────────────────────
 const addSource = ref<ItemSource>('product')
 const searchQuery = ref('')
-const showDropdown = ref(false)
+const catalogOpen = ref(true)
 
-function delayHideDropdown() { window.setTimeout(() => { showDropdown.value = false }, 200) }
 
-watch(searchQuery, (val) => { showDropdown.value = val.trim().length > 0 })
+watch(searchQuery, () => { catalogOpen.value = true })
+
+const catalogCounts = computed(() => ({ product: productCatalog.length, service: serviceCatalog.length, recurring: recurringCatalog.length }))
 
 const searchResults = computed<{ id: string; sku: string; name: string; meta: string; price: string; stockLabel?: string; inStock?: boolean }[]>(() => {
+  // An empty query browses the catalog; typing narrows it.
   const q = searchQuery.value.toLowerCase().trim()
-  if (!q) return [] as { id: string; sku: string; name: string; meta: string; price: string; stockLabel?: string; inStock?: boolean }[]
 
   if (addSource.value === 'product') {
-    return productCatalog.filter(p => p.sku.toLowerCase().includes(q) || p.name.toLowerCase().includes(q) || p.manufacturer.toLowerCase().includes(q)).slice(0, 10).map(p => ({
+    return productCatalog.filter(p => !q || p.sku.toLowerCase().includes(q) || p.name.toLowerCase().includes(q) || p.manufacturer.toLowerCase().includes(q)).slice(0, 25).map(p => ({
       id: p.id, sku: p.sku, name: p.name, meta: p.manufacturer,
       price: `SAR ${formatSAR(p.unitPrice)}`,
       stockLabel: p.stockAvailable > 0 ? `${p.stockAvailable} in stock` : `${p.leadTimeDays}d lead`,
@@ -482,13 +483,13 @@ const searchResults = computed<{ id: string; sku: string; name: string; meta: st
     }))
   }
   if (addSource.value === 'service') {
-    return serviceCatalog.filter(s => s.sku.toLowerCase().includes(q) || s.name.toLowerCase().includes(q) || s.department.toLowerCase().includes(q)).slice(0, 10).map(s => ({
+    return serviceCatalog.filter(s => !q || s.sku.toLowerCase().includes(q) || s.name.toLowerCase().includes(q) || s.department.toLowerCase().includes(q)).slice(0, 25).map(s => ({
       id: s.id, sku: s.sku, name: s.name, meta: `${s.department} · ${s.rateType}`,
       price: `SAR ${formatSAR(s.unitPrice)}/${s.rateType}`,
     }))
   }
   if (addSource.value === 'recurring') {
-    return recurringCatalog.filter(r => r.sku.toLowerCase().includes(q) || r.name.toLowerCase().includes(q)).slice(0, 10).map(r => ({
+    return recurringCatalog.filter(r => !q || r.sku.toLowerCase().includes(q) || r.name.toLowerCase().includes(q)).slice(0, 25).map(r => ({
       id: r.id, sku: r.sku, name: r.name, meta: r.billingCycle,
       price: `SAR ${formatSAR(r.monthlyPrice)}/mo`,
     }))
@@ -512,7 +513,6 @@ function selectSearchItem(item: { id: string }) {
     rows.value.push(row)
   }
   searchQuery.value = ''
-  showDropdown.value = false
 }
 
 // ── Quick Add Bar ────────────────────────────────────────────
@@ -609,16 +609,27 @@ function applyQuote(q: BuilderQuote) {
   if (!soldTo.value.company) soldTo.value.company = q.customerName
   rows.value = q.lineItems.map(line => ({ ...line, sku: line.sku ?? '', productId: line.productId || line.serviceId || line.recurringServiceId, manufacturer: line.manufacturerName }))
 }
+const catalogError = ref('')
+
 onMounted(async () => {
+  const [quoteResult, catalogResult] = await Promise.allSettled([
+    quotesService.builder(String(route.params.id)),
+    http.get<ApiResponse<{ products: CatalogProduct[]; services: CatalogService[]; recurring: CatalogRecurring[] }>>('/catalog'),
+  ])
+  if (catalogResult.status === 'fulfilled') {
+    productCatalog.push(...catalogResult.value.data.data.products)
+    serviceCatalog.push(...catalogResult.value.data.data.services)
+    recurringCatalog.push(...catalogResult.value.data.data.recurring)
+  } else {
+    catalogError.value = 'The product and service catalog could not be loaded: ' + errorMessage(catalogResult.reason)
+  }
+  if (quoteResult.status === 'rejected') {
+    window.alert(errorMessage(quoteResult.reason))
+    return
+  }
   try {
-    const [quote, catalog] = await Promise.all([
-      quotesService.builder(String(route.params.id)),
-      http.get<ApiResponse<{ products: CatalogProduct[]; services: CatalogService[]; recurring: CatalogRecurring[] }>>('/catalog'),
-    ])
+    const quote = quoteResult.value
     applyQuote(quote.data)
-    productCatalog.push(...catalog.data.data.products)
-    serviceCatalog.push(...catalog.data.data.services)
-    recurringCatalog.push(...catalog.data.data.recurring)
     if (quote.data.priceBookId) {
       const book = (await priceBooksService.get(quote.data.priceBookId)).data
       for (const entry of book.entries) {
@@ -866,6 +877,7 @@ function exportExcel() {
         <!-- Add Items Panel -->
         <div v-if="!locked" class="card add-panel">
           <div class="add-panel-body">
+            <p v-if="catalogError" class="catalog-error" role="alert">{{ catalogError }}</p>
             <!-- Source Tabs + Search -->
             <div class="add-top-row">
               <div class="source-tabs">
@@ -873,6 +885,10 @@ function exportExcel() {
                   <component :is="sourceIcons[src]" :size="14" /> {{ sourceLabels[src] }}
                 </button>
               </div>
+              <button type="button" class="catalog-count" :aria-expanded="catalogOpen" @click="catalogOpen = !catalogOpen">
+                <component :is="catalogOpen ? ChevronDown : ChevronRight" :size="13" />
+                {{ catalogCounts[addSource as 'product' | 'service' | 'recurring'] }} in catalog
+              </button>
               <div class="add-special-btns">
                 <button :disabled="locked" class="btn btn-ghost btn-sm" @click="addWriteInRow" title="Write-in (external item)"><FileText :size="14" /> Write-in</button>
                 <button :disabled="locked" class="btn btn-ghost btn-sm" @click="addHeading" title="Section heading"><Hash :size="14" /> Heading</button>
@@ -886,12 +902,12 @@ function exportExcel() {
               <div class="add-search-wrapper">
                 <div class="search-input">
                   <Search :size="16" class="search-icon" />
-                  <input v-model="searchQuery" type="text" class="form-input" :placeholder="`Search ${sourceLabels[addSource].toLowerCase()}s by SKU or name...`" @focus="showDropdown = searchQuery.trim().length > 0" @blur="delayHideDropdown" />
+                  <input v-model="searchQuery" type="text" class="form-input" :placeholder="`Search ${sourceLabels[addSource].toLowerCase()}s by SKU or name...`" />
                 </div>
 
-                <div v-if="showDropdown && searchResults.length" class="product-dropdown">
+                <div v-if="catalogOpen && searchResults.length" class="catalog-list">
                   <div v-for="item in searchResults" :key="item.id" class="dd-item-wrap">
-                    <button class="dd-item" @mousedown.prevent="selectSearchItem(item)">
+                    <button type="button" class="dd-item" @click="selectSearchItem(item)">
                       <div class="dd-main">
                         <span class="dd-sku">{{ item.sku }}</span>
                         <span class="dd-name">{{ item.name }}</span>
@@ -904,14 +920,15 @@ function exportExcel() {
                         </span>
                       </div>
                     </button>
-                    <button v-if="addSource === 'product'" class="dd-history-btn" title="View price history & batches" @mousedown.prevent="openPriceHistory(item.id)">
+                    <button v-if="addSource === 'product'" type="button" class="dd-history-btn" title="View price history & batches" @click="openPriceHistory(item.id)">
                       <History :size="13" />
                     </button>
                   </div>
                 </div>
 
-                <div v-if="showDropdown && searchQuery.trim() && !searchResults.length" class="product-dropdown dd-empty">
-                  <div class="dd-empty-inner"><Search :size="16" /> No results for "{{ searchQuery }}"</div>
+                <div v-if="catalogOpen && !searchResults.length" class="catalog-list dd-empty">
+                  <div v-if="searchQuery.trim()" class="dd-empty-inner"><Search :size="16" /> No results for "{{ searchQuery }}"</div>
+                  <div v-else class="dd-empty-inner"><Search :size="16" /> No {{ sourceLabels[addSource].toLowerCase() }}s in the catalog yet. Run the catalog seed or add them under {{ addSource === 'product' ? 'Products' : addSource === 'service' ? 'Services' : 'Recurring Services' }}.</div>
                 </div>
               </div>
 
@@ -1562,6 +1579,11 @@ function exportExcel() {
 </template>
 
 <style scoped>
+.catalog-count { display: inline-flex; align-items: center; gap: 4px; font-size: var(--text-xs); color: var(--color-neutral-500); white-space: nowrap; background: none; border: 0; cursor: pointer; padding: 2px 4px; }
+.catalog-count:hover { color: var(--color-neutral-700); }
+.catalog-list { margin-top: var(--space-2); background: var(--content-surface); border: 1px solid var(--color-neutral-200); border-radius: var(--radius-lg); max-height: 300px; overflow-y: auto; }
+.catalog-error { font-size: var(--text-sm); color: var(--color-danger-dark); background: var(--color-danger-light); padding: var(--space-2) var(--space-3); border-radius: var(--radius-md); margin-bottom: var(--space-3); }
+
 .builder-page { padding: var(--space-6); position: relative; }
 
 /* Toast */
