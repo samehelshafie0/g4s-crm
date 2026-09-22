@@ -17,7 +17,32 @@ function formatRate(v: number): string {
   return v.toFixed(4)
 }
 
-onMounted(async () => { try { rates.value = (await exchangeRatesService.list()).data } catch (e) { window.alert(errorMessage(e)) } })
+async function loadRates() {
+  try { rates.value = (await exchangeRatesService.list()).data } catch (e) { window.alert(errorMessage(e)) }
+}
+
+onMounted(loadRates)
+
+const refreshing = ref(false)
+const refreshNote = ref('')
+
+async function refreshLiveRates() {
+  if (refreshing.value) return
+  refreshing.value = true
+  refreshNote.value = ''
+  try {
+    const result = await exchangeRatesService.refresh()
+    await loadRates()
+    const count = result.data.updated.length
+    refreshNote.value = count
+      ? `Updated ${count} ${count === 1 ? 'rate' : 'rates'} for ${result.data.effectiveDate} from ${result.data.provider}.`
+      : `Rates were already current for ${result.data.effectiveDate}.`
+  } catch (e) {
+    refreshNote.value = errorMessage(e)
+  } finally {
+    refreshing.value = false
+  }
+}
 
 const rates = ref<ExchangeRate[]>([])
 const currencySymbols: Record<string, string> = {
@@ -91,9 +116,16 @@ async function saveRate() {
         <h1 class="page-header-title">Exchange Rates</h1>
         <p class="page-header-subtitle">Currency rates against SAR</p>
       </div>
+      <div class="fx-actions">
+        <button class="btn btn-sm" :disabled="refreshing" @click="refreshLiveRates">
+          <RefreshCw :size="14" :class="{ 'fx-spin': refreshing }" />
+          {{ refreshing ? 'Fetching…' : 'Fetch live rates' }}
+        </button>
+        <button class="btn btn-primary btn-sm" @click="openCreateModal">Add exchange rate</button>
+      </div>
     </div>
 
-    <button class="btn btn-primary btn-sm" @click="openCreateModal">Add exchange rate</button>
+    <p v-if="refreshNote" class="fx-note" role="status">{{ refreshNote }}</p>
     <p v-if="!rates.length">Add your approved exchange rates to start recording their history.</p>
 
     <!-- Currency Cards Grid -->
@@ -194,6 +226,12 @@ async function saveRate() {
 </template>
 
 <style scoped>
+.fx-actions { display: flex; gap: var(--space-2); align-items: center; }
+.fx-note { font-size: var(--text-sm); color: var(--color-neutral-600); margin-bottom: var(--space-3); }
+.fx-spin { animation: fx-spin 1s linear infinite; }
+@keyframes fx-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .fx-spin { animation: none; } }
+
 .exchange-page {
   padding: var(--space-6);
 }

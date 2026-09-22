@@ -14,6 +14,7 @@ import (
 	"g4s-crm/api/internal/database"
 	"g4s-crm/api/internal/middleware"
 	"g4s-crm/api/internal/router"
+	"g4s-crm/api/internal/seed"
 	"g4s-crm/api/migrations"
 	pkgvalidator "g4s-crm/api/pkg/validator"
 	"github.com/rs/zerolog"
@@ -58,8 +59,14 @@ func main() {
 			err = migrations.Up(context.Background(), sqlDB)
 		case "bootstrap-admin":
 			err = bootstrap.Admin(db, os.Getenv("ADMIN_EMAIL"), os.Getenv("ADMIN_PASSWORD"), os.Getenv("ADMIN_FIRST_NAME"), os.Getenv("ADMIN_LAST_NAME"))
+		case "seed-catalog":
+			var summary seed.Summary
+			summary, err = seed.Catalog(db)
+			if err == nil {
+				log.Info().Int("exchangeRatesCreated", summary.ExchangeRates).Int("manufacturers", summary.Manufacturers).Int("categoriesCreated", summary.Categories).Int("products", summary.Products).Int("services", summary.Services).Int("recurring", summary.Recurring).Int("rentals", summary.Rentals).Msg("Catalog seeded")
+			}
 		default:
-			log.Fatal().Msg("Unknown command; use migrate or bootstrap-admin")
+			log.Fatal().Msg("Unknown command; use migrate, bootstrap-admin or seed-catalog")
 		}
 		if err != nil {
 			log.Fatal().Err(err).Msg("Command failed")

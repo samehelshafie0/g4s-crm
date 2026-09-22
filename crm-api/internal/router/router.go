@@ -262,6 +262,7 @@ func Setup(db *gorm.DB, cfg *config.Config) *gin.Engine {
 		fx.GET("", middleware.Authorize("exchange-rates:read"), fxH.List)
 		fx.GET("/:id", middleware.Authorize("exchange-rates:read"), fxH.Get)
 		fx.PATCH("/:id", middleware.Authorize("exchange-rates:update"), fxH.Update)
+		fx.POST("/refresh", middleware.Authorize("exchange-rates:update"), fxH.Refresh)
 	}
 
 	// ─── Contracts ───────────────────────────────────────────

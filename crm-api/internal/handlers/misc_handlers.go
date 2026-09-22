@@ -240,7 +240,7 @@ func (h *RecurringServiceHandler) save(c *gin.Context, create bool) {
 			return
 		}
 	}
-	if !bindFields(c, &item, map[string]string{"name": "required,max=200", "serviceType": "required,oneof=guarding maintenance monitoring patrol facility-management", "description": "max=5000", "lineItems": "max=1000,dive", "monthlyCost": moneyRule, "monthlyPrice": moneyRule, "targetMarginPercent": percentRule, "billingFrequency": "required,oneof=monthly quarterly annually", "isActive": ""}) {
+	if !bindFields(c, &item, map[string]string{"name": "required,max=200", "serviceType": "required,oneof=guarding maintenance monitoring patrol facility-management rental", "description": "max=5000", "lineItems": "max=1000,dive", "monthlyCost": moneyRule, "monthlyPrice": moneyRule, "targetMarginPercent": percentRule, "billingFrequency": "required,oneof=monthly quarterly annually", "isActive": ""}) {
 		return
 	}
 	active := item.IsActive

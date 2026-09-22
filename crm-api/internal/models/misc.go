@@ -77,6 +77,7 @@ const (
 	RecurringMonitoring         RecurringServiceType = "monitoring"
 	RecurringPatrol             RecurringServiceType = "patrol"
 	RecurringFacilityManagement RecurringServiceType = "facility-management"
+	RecurringRental             RecurringServiceType = "rental"
 
 	BillingMonthly   BillingFrequency = "monthly"
 	BillingQuarterly BillingFrequency = "quarterly"

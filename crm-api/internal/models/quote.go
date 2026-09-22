@@ -69,6 +69,9 @@ type Quote struct {
 }
 
 func RoundMoney(value float64) float64 { return math.Round(value*100) / 100 }
+
+// RoundRate matches the exchange_rates.current_rate NUMERIC(12,6) column.
+func RoundRate(value float64) float64 { return math.Round(value*1e6) / 1e6 }
 func (q *Quote) Recalculate() {
 	q.Subtotal = 0
 	q.TotalCost = 0

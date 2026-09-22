@@ -33,16 +33,16 @@ function fmtCompact(v: number): string {
 
 const serviceTypeLabels: Record<RecurringServiceType, string> = {
   guarding: 'Guarding', maintenance: 'Maintenance', monitoring: 'Monitoring',
-  patrol: 'Patrol', 'facility-management': 'Facility Mgmt',
+  patrol: 'Patrol', 'facility-management': 'Facility Mgmt', rental: 'Equipment Rental',
 }
 
 const serviceTypeColors: Record<RecurringServiceType, string> = {
   guarding: 'type-guarding', maintenance: 'type-maintenance', monitoring: 'type-monitoring',
-  patrol: 'type-patrol', 'facility-management': 'type-fm',
+  patrol: 'type-patrol', 'facility-management': 'type-fm', rental: 'type-rental',
 }
 
 const serviceTypeIcons: Record<RecurringServiceType, typeof Shield> = {
-  guarding: Shield, maintenance: Wrench, monitoring: Monitor, patrol: Car, 'facility-management': Building,
+  guarding: Shield, maintenance: Wrench, monitoring: Monitor, patrol: Car, 'facility-management': Building, rental: Package,
 }
 
 const billingLabels: Record<BillingFrequency, string> = { monthly: 'Monthly', quarterly: 'Quarterly', annually: 'Annually' }
@@ -887,6 +887,7 @@ const sourceColors: Record<ItemSource, string> = { product: 'src-product', servi
 .badge-type-monitoring { background: #dbeafe; color: #1e40af; }
 .badge-type-patrol { background: #d1fae5; color: #065f46; }
 .badge-type-fm { background: var(--color-neutral-100); color: var(--color-neutral-600); }
+.badge-type-rental { background: #ede9fe; color: #5b21b6; }
 
 .name-cell { display: flex; flex-direction: column; gap: 1px; }
 .name-main { font-weight: 500; color: var(--color-neutral-800); }

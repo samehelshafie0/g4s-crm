@@ -371,6 +371,7 @@ export type RecurringServiceType =
   | 'monitoring'
   | 'patrol'
   | 'facility-management'
+  | 'rental'
 
 export type BillingFrequency = 'monthly' | 'quarterly' | 'annually'
 

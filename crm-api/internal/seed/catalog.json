@@ -1,0 +1,1793 @@
+{
+  "exchangeRates": [
+    {
+      "currency": "USD",
+      "rate": 3.75
+    },
+    {
+      "currency": "EUR",
+      "rate": 4.08
+    },
+    {
+      "currency": "GBP",
+      "rate": 4.78
+    },
+    {
+      "currency": "AED",
+      "rate": 1.021
+    },
+    {
+      "currency": "CNY",
+      "rate": 0.52
+    }
+  ],
+  "manufacturers": [
+    {
+      "code": "HIK",
+      "name": "Hikvision",
+      "country": "China",
+      "website": "https://www.hikvision.com",
+      "vendorType": "manufacturer",
+      "categories": [
+        "IP Cameras",
+        "Recorders & Storage",
+        "Access Control",
+        "Thermal & Perimeter"
+      ]
+    },
+    {
+      "code": "DAHUA",
+      "name": "Dahua Technology",
+      "country": "China",
+      "website": "https://www.dahuasecurity.com",
+      "vendorType": "manufacturer",
+      "categories": [
+        "IP Cameras",
+        "Recorders & Storage",
+        "Thermal & Perimeter"
+      ]
+    },
+    {
+      "code": "AXIS",
+      "name": "Axis Communications",
+      "country": "Sweden",
+      "website": "https://www.axis.com",
+      "vendorType": "manufacturer",
+      "categories": [
+        "IP Cameras",
+        "Network Audio",
+        "Access Control"
+      ]
+    },
+    {
+      "code": "HANWHA",
+      "name": "Hanwha Vision",
+      "country": "South Korea",
+      "website": "https://www.hanwhavision.com",
+      "vendorType": "manufacturer",
+      "categories": [
+        "IP Cameras",
+        "Recorders & Storage"
+      ]
+    },
+    {
+      "code": "BOSCH",
+      "name": "Bosch Security Systems",
+      "country": "Germany",
+      "website": "https://www.boschsecurity.com",
+      "vendorType": "manufacturer",
+      "categories": [
+        "IP Cameras",
+        "Intrusion Detection",
+        "Public Address & Voice Alarm"
+      ]
+    },
+    {
+      "code": "HONEYWELL",
+      "name": "Honeywell Security",
+      "country": "United States",
+      "website": "https://www.security.honeywell.com",
+      "vendorType": "manufacturer",
+      "categories": [
+        "Intrusion Detection",
+        "Access Control"
+      ]
+    },
+    {
+      "code": "NOTIFIER",
+      "name": "Notifier by Honeywell",
+      "country": "United States",
+      "website": "https://www.notifier.com",
+      "vendorType": "manufacturer",
+      "categories": [
+        "Fire Detection"
+      ]
+    },
+    {
+      "code": "HID",
+      "name": "HID Global",
+      "country": "United States",
+      "website": "https://www.hidglobal.com",
+      "vendorType": "manufacturer",
+      "categories": [
+        "Credentials & Readers"
+      ]
+    },
+    {
+      "code": "SUPREMA",
+      "name": "Suprema",
+      "country": "South Korea",
+      "website": "https://www.supremainc.com",
+      "vendorType": "manufacturer",
+      "categories": [
+        "Biometrics",
+        "Access Control"
+      ]
+    },
+    {
+      "code": "GENETEC",
+      "name": "Genetec",
+      "country": "Canada",
+      "website": "https://www.genetec.com",
+      "vendorType": "manufacturer",
+      "categories": [
+        "Software Licences"
+      ]
+    },
+    {
+      "code": "MILESTONE",
+      "name": "Milestone Systems",
+      "country": "Denmark",
+      "website": "https://www.milestonesys.com",
+      "vendorType": "manufacturer",
+      "categories": [
+        "Software Licences"
+      ]
+    },
+    {
+      "code": "RAPISCAN",
+      "name": "Rapiscan Systems",
+      "country": "United States",
+      "website": "https://www.rapiscansystems.com",
+      "vendorType": "manufacturer",
+      "categories": [
+        "X-ray Screening",
+        "Metal Detection"
+      ]
+    },
+    {
+      "code": "GARRETT",
+      "name": "Garrett Metal Detectors",
+      "country": "United States",
+      "website": "https://www.garrett.com",
+      "vendorType": "manufacturer",
+      "categories": [
+        "Metal Detection"
+      ]
+    },
+    {
+      "code": "FAAC",
+      "name": "FAAC",
+      "country": "Italy",
+      "website": "https://www.faac.com",
+      "vendorType": "manufacturer",
+      "categories": [
+        "Vehicle Barriers & Gates"
+      ]
+    },
+    {
+      "code": "ATG",
+      "name": "ATG Access",
+      "country": "United Kingdom",
+      "website": "https://www.atgaccess.com",
+      "vendorType": "manufacturer",
+      "categories": [
+        "Hostile Vehicle Mitigation"
+      ]
+    },
+    {
+      "code": "GUNNEBO",
+      "name": "Gunnebo Entrance Control",
+      "country": "Sweden",
+      "website": "https://www.gunneboentrancecontrol.com",
+      "vendorType": "manufacturer",
+      "categories": [
+        "Turnstiles & Speed Gates"
+      ]
+    },
+    {
+      "code": "SENSTAR",
+      "name": "Senstar",
+      "country": "Canada",
+      "website": "https://senstar.com",
+      "vendorType": "manufacturer",
+      "categories": [
+        "Thermal & Perimeter"
+      ]
+    },
+    {
+      "code": "MOTOROLA",
+      "name": "Motorola Solutions",
+      "country": "United States",
+      "website": "https://www.motorolasolutions.com",
+      "vendorType": "manufacturer",
+      "categories": [
+        "Two-way Radio"
+      ]
+    },
+    {
+      "code": "HYTERA",
+      "name": "Hytera",
+      "country": "China",
+      "website": "https://www.hytera.com",
+      "vendorType": "manufacturer",
+      "categories": [
+        "Two-way Radio"
+      ]
+    },
+    {
+      "code": "CISCO",
+      "name": "Cisco Systems",
+      "country": "United States",
+      "website": "https://www.cisco.com",
+      "vendorType": "manufacturer",
+      "categories": [
+        "Network Switching"
+      ]
+    },
+    {
+      "code": "UBNT",
+      "name": "Ubiquiti",
+      "country": "United States",
+      "website": "https://www.ui.com",
+      "vendorType": "manufacturer",
+      "categories": [
+        "Network Switching",
+        "Wireless Links"
+      ]
+    },
+    {
+      "code": "APC",
+      "name": "APC by Schneider Electric",
+      "country": "France",
+      "website": "https://www.apc.com",
+      "vendorType": "manufacturer",
+      "categories": [
+        "Power & UPS"
+      ]
+    },
+    {
+      "code": "SEAGATE",
+      "name": "Seagate Technology",
+      "country": "United States",
+      "website": "https://www.seagate.com",
+      "vendorType": "manufacturer",
+      "categories": [
+        "Recorders & Storage"
+      ]
+    },
+    {
+      "code": "COMMSCOPE",
+      "name": "CommScope",
+      "country": "United States",
+      "website": "https://www.commscope.com",
+      "vendorType": "manufacturer",
+      "categories": [
+        "Structured Cabling"
+      ]
+    },
+    {
+      "code": "RCC",
+      "name": "Riyadh Cables Group",
+      "country": "Saudi Arabia",
+      "website": "https://www.riyadh-cables.com",
+      "vendorType": "both",
+      "categories": [
+        "Structured Cabling",
+        "Power Cables"
+      ]
+    },
+    {
+      "code": "AKMI",
+      "name": "Al Kuhaimi Metal Industries",
+      "country": "Saudi Arabia",
+      "website": "https://www.kuhaimi.com",
+      "vendorType": "both",
+      "categories": [
+        "Doors & Enclosures",
+        "Vehicle Barriers & Gates"
+      ]
+    },
+    {
+      "code": "ALFANAR",
+      "name": "alfanar Electric",
+      "country": "Saudi Arabia",
+      "website": "https://www.alfanar.com",
+      "vendorType": "both",
+      "categories": [
+        "Power & UPS",
+        "Doors & Enclosures"
+      ]
+    }
+  ],
+  "products": [
+    {
+      "sku": "HIK-DS-2CD2143G2-I",
+      "name": "Hikvision 4 MP AcuSense Fixed Dome, 2.8 mm, IR 30 m",
+      "description": "DS-2CD2143G2-I. IP67 / IK10, WDR 120 dB, H.265+, PoE. Standard indoor/outdoor dome for corridors, lobbies and car parks.",
+      "manufacturer": "HIK",
+      "category": "IP Cameras",
+      "productType": "import",
+      "originCurrency": "USD",
+      "unitCostOrigin": 78,
+      "freightPercent": 4,
+      "customsPercent": 5,
+      "clearancePercent": 1.5,
+      "targetMarginPercent": 32,
+      "leadTimeDays": 21,
+      "supplierName": "Hikvision MENA (Dubai)"
+    },
+    {
+      "sku": "HIK-DS-2CD2T87G2-L",
+      "name": "Hikvision 8 MP ColorVu Bullet, 2.8 mm, white light 60 m",
+      "description": "DS-2CD2T87G2-L. 24/7 colour imaging, IP67, built-in mic, H.265+. Perimeter and yard coverage at night.",
+      "manufacturer": "HIK",
+      "category": "IP Cameras",
+      "productType": "import",
+      "originCurrency": "USD",
+      "unitCostOrigin": 142,
+      "freightPercent": 4,
+      "customsPercent": 5,
+      "clearancePercent": 1.5,
+      "targetMarginPercent": 32,
+      "leadTimeDays": 21,
+      "supplierName": "Hikvision MENA (Dubai)"
+    },
+    {
+      "sku": "HIK-DS-2DE4425IW-DE",
+      "name": "Hikvision 4 MP 25x IR PTZ Dome",
+      "description": "DS-2DE4425IW-DE(T5). 25x optical zoom, IR 100 m, DarkFighter, auto tracking. Compounds, parking and open yards.",
+      "manufacturer": "HIK",
+      "category": "IP Cameras",
+      "productType": "import",
+      "originCurrency": "USD",
+      "unitCostOrigin": 486,
+      "freightPercent": 4,
+      "customsPercent": 5,
+      "clearancePercent": 1.5,
+      "targetMarginPercent": 30,
+      "leadTimeDays": 28,
+      "supplierName": "Hikvision MENA (Dubai)"
+    },
+    {
+      "sku": "HIK-DS-2CD6D82G0-IHS",
+      "name": "Hikvision 2 x 8 MP ANPR/LPR Camera Kit",
+      "description": "DS-2CD6D82G0-IHS. Dual-lens number-plate capture with barrier trigger I/O. Gate lanes up to 16 m.",
+      "manufacturer": "HIK",
+      "category": "IP Cameras",
+      "productType": "import",
+      "originCurrency": "USD",
+      "unitCostOrigin": 890,
+      "freightPercent": 4,
+      "customsPercent": 5,
+      "clearancePercent": 1.5,
+      "targetMarginPercent": 30,
+      "leadTimeDays": 35,
+      "supplierName": "Hikvision MENA (Dubai)"
+    },
+    {
+      "sku": "HIK-DS-7732NXI-I4-16P",
+      "name": "Hikvision 32-ch AcuSense NVR, 16 PoE, 4 HDD bays",
+      "description": "DS-7732NXI-I4/16P/S. 256 Mbps incoming, 4K output, RAID-less, 16 PoE ports. Fits 64 TB of surveillance disk.",
+      "manufacturer": "HIK",
+      "category": "Recorders & Storage",
+      "productType": "import",
+      "originCurrency": "USD",
+      "unitCostOrigin": 620,
+      "freightPercent": 4,
+      "customsPercent": 5,
+      "clearancePercent": 1.5,
+      "targetMarginPercent": 28,
+      "leadTimeDays": 21,
+      "supplierName": "Hikvision MENA (Dubai)"
+    },
+    {
+      "sku": "HIK-DS-K1T343MFWX",
+      "name": "Hikvision Face Recognition Terminal, 4.3 in",
+      "description": "DS-K1T343MFWX. Face + Mifare + PIN, 3,000 faces, Wiegand/RS-485, IP65. Staff entrances and site offices.",
+      "manufacturer": "HIK",
+      "category": "Access Control",
+      "productType": "import",
+      "originCurrency": "USD",
+      "unitCostOrigin": 265,
+      "freightPercent": 4,
+      "customsPercent": 5,
+      "clearancePercent": 1.5,
+      "targetMarginPercent": 32,
+      "leadTimeDays": 21,
+      "supplierName": "Hikvision MENA (Dubai)"
+    },
+    {
+      "sku": "HIK-DS-2TD2628-10",
+      "name": "Hikvision HeatPro Bi-spectrum Thermal Bullet, 10 mm",
+      "description": "DS-2TD2628-10/QA. 256 x 192 thermal + 4 MP optical, line-crossing and fire detection. Fence-line intrusion up to 100 m.",
+      "manufacturer": "HIK",
+      "category": "Thermal & Perimeter",
+      "productType": "import",
+      "originCurrency": "USD",
+      "unitCostOrigin": 1180,
+      "freightPercent": 4,
+      "customsPercent": 5,
+      "clearancePercent": 1.5,
+      "targetMarginPercent": 30,
+      "leadTimeDays": 35,
+      "supplierName": "Hikvision MENA (Dubai)"
+    },
+    {
+      "sku": "DAH-IPC-HDBW5442E-ZE",
+      "name": "Dahua 4 MP WizMind Vari-focal Dome, 2.7-12 mm",
+      "description": "IPC-HDBW5442E-ZE. Motorised zoom, ePoE, IK10, AI people/vehicle classification.",
+      "manufacturer": "DAHUA",
+      "category": "IP Cameras",
+      "productType": "import",
+      "originCurrency": "USD",
+      "unitCostOrigin": 168,
+      "freightPercent": 4,
+      "customsPercent": 5,
+      "clearancePercent": 1.5,
+      "targetMarginPercent": 32,
+      "leadTimeDays": 21,
+      "supplierName": "Dahua Middle East (Dubai)"
+    },
+    {
+      "sku": "DAH-IPC-PFW5849-A180",
+      "name": "Dahua 4 x 2 MP Multi-sensor Panoramic, 180°",
+      "description": "IPC-PFW5849-A180-E2-ASTE. Four sensors stitched to 180°, full-colour night imaging. Replaces 3-4 fixed cameras on a wide frontage.",
+      "manufacturer": "DAHUA",
+      "category": "IP Cameras",
+      "productType": "import",
+      "originCurrency": "USD",
+      "unitCostOrigin": 540,
+      "freightPercent": 4,
+      "customsPercent": 5,
+      "clearancePercent": 1.5,
+      "targetMarginPercent": 30,
+      "leadTimeDays": 28,
+      "supplierName": "Dahua Middle East (Dubai)"
+    },
+    {
+      "sku": "DAH-NVR5464-EI",
+      "name": "Dahua 64-ch WizSense NVR, 4 HDD, 2U",
+      "description": "NVR5464-EI. 384 Mbps, dual NIC, AI search. Central recording for mid-size sites.",
+      "manufacturer": "DAHUA",
+      "category": "Recorders & Storage",
+      "productType": "import",
+      "originCurrency": "USD",
+      "unitCostOrigin": 585,
+      "freightPercent": 4,
+      "customsPercent": 5,
+      "clearancePercent": 1.5,
+      "targetMarginPercent": 28,
+      "leadTimeDays": 21,
+      "supplierName": "Dahua Middle East (Dubai)"
+    },
+    {
+      "sku": "DAH-TPC-BF5421-T",
+      "name": "Dahua Thermal Bullet 400 x 300, 25 mm",
+      "description": "TPC-BF5421-T. Thermal + visible, fire detection, IP67. Perimeter and tank-farm monitoring.",
+      "manufacturer": "DAHUA",
+      "category": "Thermal & Perimeter",
+      "productType": "import",
+      "originCurrency": "USD",
+      "unitCostOrigin": 2150,
+      "freightPercent": 4,
+      "customsPercent": 5,
+      "clearancePercent": 1.5,
+      "targetMarginPercent": 28,
+      "leadTimeDays": 42,
+      "supplierName": "Dahua Middle East (Dubai)"
+    },
+    {
+      "sku": "AXIS-P3268-LVE",
+      "name": "Axis P3268-LVE 8 MP Outdoor Dome",
+      "description": "02332-001. 4K, Lightfinder 2.0, Forensic WDR, Zipstream, IK10, -40 °C to 60 °C. Enterprise-grade for government and banking.",
+      "manufacturer": "AXIS",
+      "category": "IP Cameras",
+      "productType": "import",
+      "originCurrency": "EUR",
+      "unitCostOrigin": 610,
+      "freightPercent": 3.5,
+      "customsPercent": 5,
+      "clearancePercent": 1.5,
+      "targetMarginPercent": 28,
+      "leadTimeDays": 42,
+      "supplierName": "Axis Middle East (Dubai)"
+    },
+    {
+      "sku": "AXIS-Q6135-LE",
+      "name": "Axis Q6135-LE 2 MP 32x PTZ with IR 250 m",
+      "description": "01958-002. Sharpdome, 32x zoom, OptimizedIR 250 m, Zipstream. Airports, ports and critical infrastructure perimeters.",
+      "manufacturer": "AXIS",
+      "category": "IP Cameras",
+      "productType": "import",
+      "originCurrency": "EUR",
+      "unitCostOrigin": 3120,
+      "freightPercent": 3.5,
+      "customsPercent": 5,
+      "clearancePercent": 1.5,
+      "targetMarginPercent": 26,
+      "leadTimeDays": 56,
+      "supplierName": "Axis Middle East (Dubai)"
+    },
+    {
+      "sku": "AXIS-C1310-E",
+      "name": "Axis C1310-E Network Horn Speaker",
+      "description": "01796-001. IP-addressed horn for live or scheduled announcements, SIP, outdoor rated. Perimeter warn-off.",
+      "manufacturer": "AXIS",
+      "category": "Network Audio",
+      "productType": "import",
+      "originCurrency": "EUR",
+      "unitCostOrigin": 445,
+      "freightPercent": 3.5,
+      "customsPercent": 5,
+      "clearancePercent": 1.5,
+      "targetMarginPercent": 30,
+      "leadTimeDays": 35,
+      "supplierName": "Axis Middle East (Dubai)"
+    },
+    {
+      "sku": "AXIS-A1610-B",
+      "name": "Axis A1610-B Network Door Controller",
+      "description": "02629-001. Two-door controller, OSDP, PoE, open API for Genetec/Milestone.",
+      "manufacturer": "AXIS",
+      "category": "Access Control",
+      "productType": "import",
+      "originCurrency": "EUR",
+      "unitCostOrigin": 690,
+      "freightPercent": 3.5,
+      "customsPercent": 5,
+      "clearancePercent": 1.5,
+      "targetMarginPercent": 30,
+      "leadTimeDays": 35,
+      "supplierName": "Axis Middle East (Dubai)"
+    },
+    {
+      "sku": "HAN-XNV-8081Z",
+      "name": "Hanwha XNV-8081Z 5 MP Vandal Dome, 2.6x zoom",
+      "description": "Wisenet X. Extreme WDR 150 dB, WiseStream II, IK10, IP67. Banks and retail.",
+      "manufacturer": "HANWHA",
+      "category": "IP Cameras",
+      "productType": "import",
+      "originCurrency": "USD",
+      "unitCostOrigin": 395,
+      "freightPercent": 4,
+      "customsPercent": 5,
+      "clearancePercent": 1.5,
+      "targetMarginPercent": 30,
+      "leadTimeDays": 35,
+      "supplierName": "Hanwha Vision Middle East (Dubai)"
+    },
+    {
+      "sku": "HAN-PNM-9085RQZ",
+      "name": "Hanwha PNM-9085RQZ 4 x 5 MP Multi-directional",
+      "description": "Wisenet P. Four independently aimed sensors, IR 30 m, single PoE. Intersections and lobbies.",
+      "manufacturer": "HANWHA",
+      "category": "IP Cameras",
+      "productType": "import",
+      "originCurrency": "USD",
+      "unitCostOrigin": 1140,
+      "freightPercent": 4,
+      "customsPercent": 5,
+      "clearancePercent": 1.5,
+      "targetMarginPercent": 28,
+      "leadTimeDays": 42,
+      "supplierName": "Hanwha Vision Middle East (Dubai)"
+    },
+    {
+      "sku": "BOSCH-NBE-5703-AL",
+      "name": "Bosch DINION 5100i IR 4 MP Bullet",
+      "description": "NBE-5703-AL. Built-in Video Analytics, starlight, IR 60 m, IP66/IK10. Petrochemical and utility sites.",
+      "manufacturer": "BOSCH",
+      "category": "IP Cameras",
+      "productType": "import",
+      "originCurrency": "EUR",
+      "unitCostOrigin": 520,
+      "freightPercent": 3.5,
+      "customsPercent": 5,
+      "clearancePercent": 1.5,
+      "targetMarginPercent": 28,
+      "leadTimeDays": 42,
+      "supplierName": "Bosch Security Middle East (Dubai)"
+    },
+    {
+      "sku": "BOSCH-B9512G",
+      "name": "Bosch B9512G Intrusion Control Panel, 599 points",
+      "description": "B9512G. 32 areas, IP/cellular reporting, integrates with Bosch cameras. Head-end for large intrusion systems.",
+      "manufacturer": "BOSCH",
+      "category": "Intrusion Detection",
+      "productType": "import",
+      "originCurrency": "USD",
+      "unitCostOrigin": 890,
+      "freightPercent": 4,
+      "customsPercent": 5,
+      "clearancePercent": 1.5,
+      "targetMarginPercent": 30,
+      "leadTimeDays": 42,
+      "supplierName": "Bosch Security Middle East (Dubai)"
+    },
+    {
+      "sku": "BOSCH-ISC-BDL2-WP12G",
+      "name": "Bosch Blue Line Gen2 TriTech Motion Detector, 12 m",
+      "description": "ISC-BDL2-WP12G. PIR + microwave, pet-friendly, self-locking enclosure.",
+      "manufacturer": "BOSCH",
+      "category": "Intrusion Detection",
+      "productType": "import",
+      "originCurrency": "USD",
+      "unitCostOrigin": 34,
+      "freightPercent": 4,
+      "customsPercent": 5,
+      "clearancePercent": 1.5,
+      "targetMarginPercent": 35,
+      "leadTimeDays": 28,
+      "supplierName": "Bosch Security Middle East (Dubai)"
+    },
+    {
+      "sku": "BOSCH-PRA-SCL",
+      "name": "Bosch PRAESENSA System Controller, Large",
+      "description": "PRA-SCL. EN 54-16 certified PA/VA controller, OMNEO IP audio, up to 500 zones. Malls, airports, hospitals.",
+      "manufacturer": "BOSCH",
+      "category": "Public Address & Voice Alarm",
+      "productType": "import",
+      "originCurrency": "EUR",
+      "unitCostOrigin": 3400,
+      "freightPercent": 3.5,
+      "customsPercent": 5,
+      "clearancePercent": 1.5,
+      "targetMarginPercent": 26,
+      "leadTimeDays": 56,
+      "supplierName": "Bosch Security Middle East (Dubai)"
+    },
+    {
+      "sku": "BOSCH-PRA-AD604",
+      "name": "Bosch PRAESENSA 4-ch Amplifier, 600 W",
+      "description": "PRA-AD604. Multichannel class-D, flexible load allocation per channel, EN 54-16.",
+      "manufacturer": "BOSCH",
+      "category": "Public Address & Voice Alarm",
+      "productType": "import",
+      "originCurrency": "EUR",
+      "unitCostOrigin": 1650,
+      "freightPercent": 3.5,
+      "customsPercent": 5,
+      "clearancePercent": 1.5,
+      "targetMarginPercent": 26,
+      "leadTimeDays": 56,
+      "supplierName": "Bosch Security Middle East (Dubai)"
+    },
+    {
+      "sku": "HW-PROA7PLUS",
+      "name": "Honeywell ProSeries 7 in Touchscreen Panel with Cellular",
+      "description": "PROA7PLUS. Wireless and wired zones, LTE/Wi-Fi reporting, Total Connect. Branch offices and villas.",
+      "manufacturer": "HONEYWELL",
+      "category": "Intrusion Detection",
+      "productType": "import",
+      "originCurrency": "USD",
+      "unitCostOrigin": 285,
+      "freightPercent": 4,
+      "customsPercent": 5,
+      "clearancePercent": 1.5,
+      "targetMarginPercent": 32,
+      "leadTimeDays": 35,
+      "supplierName": "Honeywell Middle East (Dubai)"
+    },
+    {
+      "sku": "HW-PRO32ACC",
+      "name": "Honeywell Pro-Watch Intelligent Controller, 32 readers",
+      "description": "PW-7000 PRO32. Enterprise access head-end, OSDP, redundant comms. Corporate headquarters and data centres.",
+      "manufacturer": "HONEYWELL",
+      "category": "Access Control",
+      "productType": "import",
+      "originCurrency": "USD",
+      "unitCostOrigin": 2380,
+      "freightPercent": 4,
+      "customsPercent": 5,
+      "clearancePercent": 1.5,
+      "targetMarginPercent": 28,
+      "leadTimeDays": 42,
+      "supplierName": "Honeywell Middle East (Dubai)"
+    },
+    {
+      "sku": "NOT-NFS2-3030",
+      "name": "Notifier NFS2-3030 Intelligent Fire Alarm Panel",
+      "description": "NFS2-3030. Up to 10 SLC loops (3,180 points), networkable, UL/EN listed. Large commercial and industrial buildings.",
+      "manufacturer": "NOTIFIER",
+      "category": "Fire Detection",
+      "productType": "import",
+      "originCurrency": "USD",
+      "unitCostOrigin": 4650,
+      "freightPercent": 4,
+      "customsPercent": 5,
+      "clearancePercent": 1.5,
+      "targetMarginPercent": 26,
+      "leadTimeDays": 56,
+      "supplierName": "Honeywell Fire Middle East (Dubai)"
+    },
+    {
+      "sku": "NOT-FSP-951",
+      "name": "Notifier FSP-951 Intelligent Photoelectric Smoke Detector",
+      "description": "FSP-951. Addressable, drift compensation, with B710LP base.",
+      "manufacturer": "NOTIFIER",
+      "category": "Fire Detection",
+      "productType": "import",
+      "originCurrency": "USD",
+      "unitCostOrigin": 52,
+      "freightPercent": 4,
+      "customsPercent": 5,
+      "clearancePercent": 1.5,
+      "targetMarginPercent": 35,
+      "leadTimeDays": 35,
+      "supplierName": "Honeywell Fire Middle East (Dubai)"
+    },
+    {
+      "sku": "NOT-NBG-12LX",
+      "name": "Notifier NBG-12LX Addressable Manual Call Point",
+      "description": "NBG-12LX. Dual-action pull station, key reset, addressable on SLC.",
+      "manufacturer": "NOTIFIER",
+      "category": "Fire Detection",
+      "productType": "import",
+      "originCurrency": "USD",
+      "unitCostOrigin": 78,
+      "freightPercent": 4,
+      "customsPercent": 5,
+      "clearancePercent": 1.5,
+      "targetMarginPercent": 35,
+      "leadTimeDays": 35,
+      "supplierName": "Honeywell Fire Middle East (Dubai)"
+    },
+    {
+      "sku": "HID-920PTNNEK00000",
+      "name": "HID Signo 20 Reader, Mullion, OSDP",
+      "description": "920PTNNEK00000. Seos, iCLASS, Mifare DESFire, mobile credentials, IP65. Standard door reader.",
+      "manufacturer": "HID",
+      "category": "Credentials & Readers",
+      "productType": "import",
+      "originCurrency": "USD",
+      "unitCostOrigin": 168,
+      "freightPercent": 3.5,
+      "customsPercent": 5,
+      "clearancePercent": 1.5,
+      "targetMarginPercent": 32,
+      "leadTimeDays": 35,
+      "supplierName": "HID Global Middle East (Dubai)"
+    },
+    {
+      "sku": "HID-940NTNNEK00000",
+      "name": "HID Signo 40 Reader with Keypad, OSDP",
+      "description": "940NTNNEK00000. Card + PIN wall-switch reader, IP65, OSDP secure channel. Server rooms and cash areas.",
+      "manufacturer": "HID",
+      "category": "Credentials & Readers",
+      "productType": "import",
+      "originCurrency": "USD",
+      "unitCostOrigin": 245,
+      "freightPercent": 3.5,
+      "customsPercent": 5,
+      "clearancePercent": 1.5,
+      "targetMarginPercent": 32,
+      "leadTimeDays": 35,
+      "supplierName": "HID Global Middle East (Dubai)"
+    },
+    {
+      "sku": "HID-5006PGGMN",
+      "name": "HID Seos Smart Card, 8 KB, printable (pack of 100)",
+      "description": "5006PGGMN. Seos 8K, glossy PVC, custom programmed, sequential numbering.",
+      "manufacturer": "HID",
+      "category": "Credentials & Readers",
+      "productType": "import",
+      "originCurrency": "USD",
+      "unitCostOrigin": 420,
+      "freightPercent": 3.5,
+      "customsPercent": 5,
+      "clearancePercent": 1.5,
+      "targetMarginPercent": 35,
+      "leadTimeDays": 28,
+      "supplierName": "HID Global Middle East (Dubai)"
+    },
+    {
+      "sku": "SUP-BS3-APWB",
+      "name": "Suprema BioStation 3 Face Recognition Terminal",
+      "description": "BS3-APWB. Contactless face, mobile access, QR, Mifare/DESFire, IP65, 6 in display.",
+      "manufacturer": "SUPREMA",
+      "category": "Biometrics",
+      "productType": "import",
+      "originCurrency": "USD",
+      "unitCostOrigin": 980,
+      "freightPercent": 4,
+      "customsPercent": 5,
+      "clearancePercent": 1.5,
+      "targetMarginPercent": 30,
+      "leadTimeDays": 42,
+      "supplierName": "Suprema Middle East (Dubai)"
+    },
+    {
+      "sku": "SUP-XPD2-MDPB",
+      "name": "Suprema XPass D2 Mullion Reader, OSDP",
+      "description": "XPD2-MDPB. Dual-frequency RFID, mobile credentials, IP67/IK08.",
+      "manufacturer": "SUPREMA",
+      "category": "Access Control",
+      "productType": "import",
+      "originCurrency": "USD",
+      "unitCostOrigin": 128,
+      "freightPercent": 4,
+      "customsPercent": 5,
+      "clearancePercent": 1.5,
+      "targetMarginPercent": 32,
+      "leadTimeDays": 35,
+      "supplierName": "Suprema Middle East (Dubai)"
+    },
+    {
+      "sku": "GEN-SC-OMNI-1C",
+      "name": "Genetec Security Center Omnicast Enterprise Camera Connection",
+      "description": "GSC-Om-E-1C. Per-camera licence for Omnicast Enterprise, includes first year SMA.",
+      "manufacturer": "GENETEC",
+      "category": "Software Licences",
+      "productType": "import",
+      "originCurrency": "USD",
+      "unitCostOrigin": 195,
+      "freightPercent": 0,
+      "customsPercent": 0,
+      "clearancePercent": 0,
+      "targetMarginPercent": 25,
+      "leadTimeDays": 7,
+      "supplierName": "Genetec Middle East (Dubai)"
+    },
+    {
+      "sku": "GEN-SC-SYN-1R",
+      "name": "Genetec Synergis Enterprise Reader Connection",
+      "description": "GSC-Sy-E-1R. Per-reader access-control licence, includes first year SMA.",
+      "manufacturer": "GENETEC",
+      "category": "Software Licences",
+      "productType": "import",
+      "originCurrency": "USD",
+      "unitCostOrigin": 240,
+      "freightPercent": 0,
+      "customsPercent": 0,
+      "clearancePercent": 0,
+      "targetMarginPercent": 25,
+      "leadTimeDays": 7,
+      "supplierName": "Genetec Middle East (Dubai)"
+    },
+    {
+      "sku": "MIL-XPCOBL",
+      "name": "Milestone XProtect Corporate Base Licence",
+      "description": "XPCOBL. Base server licence for XProtect Corporate, includes Care Plus year one.",
+      "manufacturer": "MILESTONE",
+      "category": "Software Licences",
+      "productType": "import",
+      "originCurrency": "EUR",
+      "unitCostOrigin": 2400,
+      "freightPercent": 0,
+      "customsPercent": 0,
+      "clearancePercent": 0,
+      "targetMarginPercent": 25,
+      "leadTimeDays": 7,
+      "supplierName": "Milestone Systems Middle East (Dubai)"
+    },
+    {
+      "sku": "MIL-XPCODL",
+      "name": "Milestone XProtect Corporate Device Licence",
+      "description": "XPCODL. Per-camera/device licence for XProtect Corporate.",
+      "manufacturer": "MILESTONE",
+      "category": "Software Licences",
+      "productType": "import",
+      "originCurrency": "EUR",
+      "unitCostOrigin": 168,
+      "freightPercent": 0,
+      "customsPercent": 0,
+      "clearancePercent": 0,
+      "targetMarginPercent": 25,
+      "leadTimeDays": 7,
+      "supplierName": "Milestone Systems Middle East (Dubai)"
+    },
+    {
+      "sku": "RAP-618XR",
+      "name": "Rapiscan 618XR Hi-Energy X-ray Baggage Screener",
+      "description": "618XR. 620 x 420 mm tunnel, 160 kV, dual-energy material discrimination, ECAC-compliant. Lobby and mailroom screening.",
+      "manufacturer": "RAPISCAN",
+      "category": "X-ray Screening",
+      "productType": "import",
+      "originCurrency": "USD",
+      "unitCostOrigin": 38500,
+      "freightPercent": 6,
+      "customsPercent": 5,
+      "clearancePercent": 2,
+      "targetMarginPercent": 22,
+      "leadTimeDays": 90,
+      "supplierName": "Rapiscan Systems Middle East (Dubai)"
+    },
+    {
+      "sku": "RAP-620DV",
+      "name": "Rapiscan 620DV Dual-view X-ray Screener",
+      "description": "620DV. 620 x 420 mm tunnel, two perpendicular views, TIP-ready. Airports, ministries, courts.",
+      "manufacturer": "RAPISCAN",
+      "category": "X-ray Screening",
+      "productType": "import",
+      "originCurrency": "USD",
+      "unitCostOrigin": 62000,
+      "freightPercent": 6,
+      "customsPercent": 5,
+      "clearancePercent": 2,
+      "targetMarginPercent": 22,
+      "leadTimeDays": 90,
+      "supplierName": "Rapiscan Systems Middle East (Dubai)"
+    },
+    {
+      "sku": "RAP-METOR-6M",
+      "name": "Rapiscan Metor 6M Walk-through Metal Detector",
+      "description": "Metor 6M. Multi-zone, 33 zones, weatherproof option, 2,000+ sensitivity programmes.",
+      "manufacturer": "RAPISCAN",
+      "category": "Metal Detection",
+      "productType": "import",
+      "originCurrency": "USD",
+      "unitCostOrigin": 5900,
+      "freightPercent": 6,
+      "customsPercent": 5,
+      "clearancePercent": 2,
+      "targetMarginPercent": 26,
+      "leadTimeDays": 60,
+      "supplierName": "Rapiscan Systems Middle East (Dubai)"
+    },
+    {
+      "sku": "GAR-PD6500I",
+      "name": "Garrett PD 6500i Walk-through Metal Detector",
+      "description": "PD 6500i. 33 pinpoint zones, 20 programmes, NIJ 0601.02 compliant. Stadiums, courts and event entrances.",
+      "manufacturer": "GARRETT",
+      "category": "Metal Detection",
+      "productType": "import",
+      "originCurrency": "USD",
+      "unitCostOrigin": 4650,
+      "freightPercent": 6,
+      "customsPercent": 5,
+      "clearancePercent": 2,
+      "targetMarginPercent": 28,
+      "leadTimeDays": 45,
+      "supplierName": "Garrett Electronics (Garland, TX)"
+    },
+    {
+      "sku": "GAR-1165190",
+      "name": "Garrett SuperWand Hand-held Metal Detector",
+      "description": "1165190. 360° detection, audible/vibrate alert, 9 V battery.",
+      "manufacturer": "GARRETT",
+      "category": "Metal Detection",
+      "productType": "import",
+      "originCurrency": "USD",
+      "unitCostOrigin": 118,
+      "freightPercent": 6,
+      "customsPercent": 5,
+      "clearancePercent": 2,
+      "targetMarginPercent": 35,
+      "leadTimeDays": 30,
+      "supplierName": "Garrett Electronics (Garland, TX)"
+    },
+    {
+      "sku": "FAAC-B680H",
+      "name": "FAAC B680H Automatic Barrier, up to 8 m",
+      "description": "B680H. 24 V brushless hydraulic, high-traffic duty, integrated loop detector, 4-8 m round or S-beams. Compound and car-park gates.",
+      "manufacturer": "FAAC",
+      "category": "Vehicle Barriers & Gates",
+      "productType": "import",
+      "originCurrency": "EUR",
+      "unitCostOrigin": 1980,
+      "freightPercent": 5,
+      "customsPercent": 5,
+      "clearancePercent": 1.5,
+      "targetMarginPercent": 28,
+      "leadTimeDays": 60,
+      "supplierName": "FAAC Middle East (Dubai)"
+    },
+    {
+      "sku": "FAAC-J355-HA-M30",
+      "name": "FAAC J355 HA M30-P1 Automatic Bollard",
+      "description": "J355 HA M30. ASTM F2656 M30/P1 crash-rated, 355 mm, hydraulic, 1,200 cycles/day. Ministry and embassy entrances.",
+      "manufacturer": "FAAC",
+      "category": "Vehicle Barriers & Gates",
+      "productType": "import",
+      "originCurrency": "EUR",
+      "unitCostOrigin": 11800,
+      "freightPercent": 6,
+      "customsPercent": 5,
+      "clearancePercent": 2,
+      "targetMarginPercent": 24,
+      "leadTimeDays": 90,
+      "supplierName": "FAAC Middle East (Dubai)"
+    },
+    {
+      "sku": "ATG-SP1000-M50",
+      "name": "ATG Access SP1000 Shallow-mount Road Blocker, M50",
+      "description": "SP1000. PAS 68 / ASTM M50 rated, 500 mm foundation depth, 4 m clear opening. Critical national infrastructure gates.",
+      "manufacturer": "ATG",
+      "category": "Hostile Vehicle Mitigation",
+      "productType": "import",
+      "originCurrency": "GBP",
+      "unitCostOrigin": 46500,
+      "freightPercent": 7,
+      "customsPercent": 5,
+      "clearancePercent": 2,
+      "targetMarginPercent": 22,
+      "leadTimeDays": 120,
+      "supplierName": "ATG Access Ltd (Haydock, UK)"
+    },
+    {
+      "sku": "ATG-SUREFACE-FIXED",
+      "name": "ATG Access Surface-mount Fixed Bollard, M30 (set of 3)",
+      "description": "Surface Guard fixed bollards, ASTM M30 (7.5 t at 48 km/h), 100 mm foundation, PU sleeve.",
+      "manufacturer": "ATG",
+      "category": "Hostile Vehicle Mitigation",
+      "productType": "import",
+      "originCurrency": "GBP",
+      "unitCostOrigin": 12400,
+      "freightPercent": 7,
+      "customsPercent": 5,
+      "clearancePercent": 2,
+      "targetMarginPercent": 24,
+      "leadTimeDays": 90,
+      "supplierName": "ATG Access Ltd (Haydock, UK)"
+    },
+    {
+      "sku": "GUN-SPEEDSTILE-FP",
+      "name": "Gunnebo SpeedStile FP Glass Speed Gate, single lane",
+      "description": "SpeedStile FP DS. Swing-glass barriers, 600 mm lane, 60 persons/min, reader-ready. Corporate lobbies and towers.",
+      "manufacturer": "GUNNEBO",
+      "category": "Turnstiles & Speed Gates",
+      "productType": "import",
+      "originCurrency": "EUR",
+      "unitCostOrigin": 6900,
+      "freightPercent": 6,
+      "customsPercent": 5,
+      "clearancePercent": 2,
+      "targetMarginPercent": 26,
+      "leadTimeDays": 75,
+      "supplierName": "Gunnebo Middle East (Dubai)"
+    },
+    {
+      "sku": "GUN-TRISTILE-RO",
+      "name": "Gunnebo TriStile RO Full-height Turnstile, outdoor",
+      "description": "TriStile RO. Stainless steel, bi-directional, hot-dip galvanised, IP54. Labour camps, plants and stadium gates.",
+      "manufacturer": "GUNNEBO",
+      "category": "Turnstiles & Speed Gates",
+      "productType": "import",
+      "originCurrency": "EUR",
+      "unitCostOrigin": 4200,
+      "freightPercent": 6,
+      "customsPercent": 5,
+      "clearancePercent": 2,
+      "targetMarginPercent": 26,
+      "leadTimeDays": 75,
+      "supplierName": "Gunnebo Middle East (Dubai)"
+    },
+    {
+      "sku": "SEN-FLEXZONE-60",
+      "name": "Senstar FlexZone Fence-mounted Intrusion Detection, 600 m kit",
+      "description": "FlexZone-60. Ranging sensor cable, two 300 m zones per processor, cut/climb detection, IP67. Pipelines, substations and airport fences.",
+      "manufacturer": "SENSTAR",
+      "category": "Thermal & Perimeter",
+      "productType": "import",
+      "originCurrency": "USD",
+      "unitCostOrigin": 9800,
+      "freightPercent": 5,
+      "customsPercent": 5,
+      "clearancePercent": 1.5,
+      "targetMarginPercent": 26,
+      "leadTimeDays": 60,
+      "supplierName": "Senstar Corporation (Ottawa)"
+    },
+    {
+      "sku": "SEN-LM100",
+      "name": "Senstar LM100 Hybrid Perimeter Sensor + Lighting Luminaire",
+      "description": "LM100. Accelerometer-based fence detection with integrated LED deterrent lighting, per luminaire.",
+      "manufacturer": "SENSTAR",
+      "category": "Thermal & Perimeter",
+      "productType": "import",
+      "originCurrency": "USD",
+      "unitCostOrigin": 690,
+      "freightPercent": 5,
+      "customsPercent": 5,
+      "clearancePercent": 1.5,
+      "targetMarginPercent": 28,
+      "leadTimeDays": 60,
+      "supplierName": "Senstar Corporation (Ottawa)"
+    },
+    {
+      "sku": "MOT-R7-UHF",
+      "name": "Motorola MOTOTRBO R7 Portable Radio, UHF, full keypad",
+      "description": "R7. Advanced noise cancelling, IP68, Bluetooth, Wi-Fi, 1,000 channels, CITC type-approved.",
+      "manufacturer": "MOTOROLA",
+      "category": "Two-way Radio",
+      "productType": "import",
+      "originCurrency": "USD",
+      "unitCostOrigin": 620,
+      "freightPercent": 4,
+      "customsPercent": 5,
+      "clearancePercent": 1.5,
+      "targetMarginPercent": 28,
+      "leadTimeDays": 42,
+      "supplierName": "Motorola Solutions Middle East (Dubai)"
+    },
+    {
+      "sku": "MOT-SLR5500",
+      "name": "Motorola SLR 5500 DMR Repeater, UHF, 50 W",
+      "description": "SLR 5500. Single-site or IP Site Connect, 1U, 100% duty cycle. Site-wide guard-force coverage.",
+      "manufacturer": "MOTOROLA",
+      "category": "Two-way Radio",
+      "productType": "import",
+      "originCurrency": "USD",
+      "unitCostOrigin": 3600,
+      "freightPercent": 4,
+      "customsPercent": 5,
+      "clearancePercent": 1.5,
+      "targetMarginPercent": 26,
+      "leadTimeDays": 56,
+      "supplierName": "Motorola Solutions Middle East (Dubai)"
+    },
+    {
+      "sku": "HYT-HP685-UHF",
+      "name": "Hytera HP685 DMR Portable Radio, UHF",
+      "description": "HP685. IP68, 2.4 in display, Bluetooth 5, GPS, 4,000 mAh. Cost-effective guard radio.",
+      "manufacturer": "HYTERA",
+      "category": "Two-way Radio",
+      "productType": "import",
+      "originCurrency": "USD",
+      "unitCostOrigin": 265,
+      "freightPercent": 4,
+      "customsPercent": 5,
+      "clearancePercent": 1.5,
+      "targetMarginPercent": 32,
+      "leadTimeDays": 35,
+      "supplierName": "Hytera Middle East (Dubai)"
+    },
+    {
+      "sku": "CIS-C9200L-48P-4G",
+      "name": "Cisco Catalyst 9200L 48-port PoE+ Switch, 4 x 1G uplinks",
+      "description": "C9200L-48P-4G-E. 740 W PoE budget, stackable, Network Essentials. Camera and access-control edge switching.",
+      "manufacturer": "CISCO",
+      "category": "Network Switching",
+      "productType": "import",
+      "originCurrency": "USD",
+      "unitCostOrigin": 3150,
+      "freightPercent": 3,
+      "customsPercent": 5,
+      "clearancePercent": 1.5,
+      "targetMarginPercent": 22,
+      "leadTimeDays": 45,
+      "supplierName": "Ingram Micro Saudi Arabia (Riyadh)"
+    },
+    {
+      "sku": "CIS-C9300-24T",
+      "name": "Cisco Catalyst 9300 24-port Data Switch",
+      "description": "C9300-24T-E. Core/aggregation for security VLAN, StackWise-480, Network Essentials.",
+      "manufacturer": "CISCO",
+      "category": "Network Switching",
+      "productType": "import",
+      "originCurrency": "USD",
+      "unitCostOrigin": 4850,
+      "freightPercent": 3,
+      "customsPercent": 5,
+      "clearancePercent": 1.5,
+      "targetMarginPercent": 22,
+      "leadTimeDays": 45,
+      "supplierName": "Ingram Micro Saudi Arabia (Riyadh)"
+    },
+    {
+      "sku": "UBNT-USW-PRO-48-POE",
+      "name": "Ubiquiti UniFi Switch Pro 48 PoE, 600 W",
+      "description": "USW-Pro-48-PoE. 40 x PoE+, 8 x PoE++, 4 x SFP+, Layer 3. Budget camera edge switching.",
+      "manufacturer": "UBNT",
+      "category": "Network Switching",
+      "productType": "import",
+      "originCurrency": "USD",
+      "unitCostOrigin": 1099,
+      "freightPercent": 3,
+      "customsPercent": 5,
+      "clearancePercent": 1.5,
+      "targetMarginPercent": 26,
+      "leadTimeDays": 28,
+      "supplierName": "Ubiquiti Distributor (Dubai)"
+    },
+    {
+      "sku": "UBNT-AF60-LR",
+      "name": "Ubiquiti airFiber 60 LR 60 GHz Wireless Bridge (pair)",
+      "description": "AF60-LR x 2. 1+ Gbps, up to 12 km line-of-sight, 5 GHz failover. Camera backhaul across compounds and yards.",
+      "manufacturer": "UBNT",
+      "category": "Wireless Links",
+      "productType": "import",
+      "originCurrency": "USD",
+      "unitCostOrigin": 1198,
+      "freightPercent": 3,
+      "customsPercent": 5,
+      "clearancePercent": 1.5,
+      "targetMarginPercent": 28,
+      "leadTimeDays": 28,
+      "supplierName": "Ubiquiti Distributor (Dubai)"
+    },
+    {
+      "sku": "APC-SRT3000RMXLI",
+      "name": "APC Smart-UPS SRT 3000 VA Online, rack 2U",
+      "description": "SRT3000RMXLI. Double-conversion, 2.7 kW, network card slot, extended-run capable. Recorder and head-end protection.",
+      "manufacturer": "APC",
+      "category": "Power & UPS",
+      "productType": "import",
+      "originCurrency": "USD",
+      "unitCostOrigin": 1850,
+      "freightPercent": 5,
+      "customsPercent": 5,
+      "clearancePercent": 1.5,
+      "targetMarginPercent": 24,
+      "leadTimeDays": 28,
+      "supplierName": "Schneider Electric Saudi Arabia (Riyadh)"
+    },
+    {
+      "sku": "APC-AR3100",
+      "name": "APC NetShelter SX 42U Server Rack, 600 x 1,070 mm",
+      "description": "AR3100. Perforated doors, split rear doors, castors, 1,020 kg static load. Security equipment room.",
+      "manufacturer": "APC",
+      "category": "Power & UPS",
+      "productType": "import",
+      "originCurrency": "USD",
+      "unitCostOrigin": 1420,
+      "freightPercent": 8,
+      "customsPercent": 5,
+      "clearancePercent": 1.5,
+      "targetMarginPercent": 24,
+      "leadTimeDays": 35,
+      "supplierName": "Schneider Electric Saudi Arabia (Riyadh)"
+    },
+    {
+      "sku": "SEA-ST16000VE002",
+      "name": "Seagate SkyHawk AI 16 TB Surveillance HDD",
+      "description": "ST16000VE002. 550 TB/yr workload, 64-camera streams, 3-year Rescue data recovery.",
+      "manufacturer": "SEAGATE",
+      "category": "Recorders & Storage",
+      "productType": "import",
+      "originCurrency": "USD",
+      "unitCostOrigin": 335,
+      "freightPercent": 3,
+      "customsPercent": 5,
+      "clearancePercent": 1.5,
+      "targetMarginPercent": 22,
+      "leadTimeDays": 14,
+      "supplierName": "Ingram Micro Saudi Arabia (Riyadh)"
+    },
+    {
+      "sku": "CS-CAT6-U-UTP-305",
+      "name": "CommScope SYSTIMAX GigaSPEED XL Cat 6 U/UTP, 305 m LSZH, blue",
+      "description": "1071E GS8E. LSZH jacket, 25-year system warranty when terminated with SYSTIMAX jacks. Camera and reader cabling.",
+      "manufacturer": "COMMSCOPE",
+      "category": "Structured Cabling",
+      "productType": "import",
+      "originCurrency": "USD",
+      "unitCostOrigin": 168,
+      "freightPercent": 6,
+      "customsPercent": 5,
+      "clearancePercent": 1.5,
+      "targetMarginPercent": 30,
+      "leadTimeDays": 21,
+      "supplierName": "CommScope Distributor (Riyadh)"
+    },
+    {
+      "sku": "CS-OM4-12F-1000",
+      "name": "CommScope 12-fibre OM4 Indoor/Outdoor Armoured Cable, 1,000 m",
+      "description": "12-core multimode OM4, LSZH, rodent-protected. Perimeter camera backbone.",
+      "manufacturer": "COMMSCOPE",
+      "category": "Structured Cabling",
+      "productType": "import",
+      "originCurrency": "USD",
+      "unitCostOrigin": 2650,
+      "freightPercent": 6,
+      "customsPercent": 5,
+      "clearancePercent": 1.5,
+      "targetMarginPercent": 28,
+      "leadTimeDays": 35,
+      "supplierName": "CommScope Distributor (Riyadh)"
+    },
+    {
+      "sku": "RCC-CAT6-UTP-305",
+      "name": "Riyadh Cables Cat 6 U/UTP LSZH, 305 m box",
+      "description": "SASO-certified, made in Riyadh, 23 AWG solid copper. Local alternative for camera and reader runs.",
+      "manufacturer": "RCC",
+      "category": "Structured Cabling",
+      "productType": "local",
+      "originCurrency": "SAR",
+      "unitCostOrigin": 395,
+      "freightPercent": 1,
+      "customsPercent": 0,
+      "clearancePercent": 0,
+      "targetMarginPercent": 30,
+      "leadTimeDays": 5,
+      "supplierName": "Riyadh Cables Group (Riyadh)"
+    },
+    {
+      "sku": "RCC-CU-XLPE-4X16",
+      "name": "Riyadh Cables 4 x 16 mm² Cu/XLPE/SWA/PVC Power Cable, per metre",
+      "description": "0.6/1 kV armoured, SASO/IEC 60502-1. Barrier, bollard and gate power feeds.",
+      "manufacturer": "RCC",
+      "category": "Power Cables",
+      "productType": "local",
+      "originCurrency": "SAR",
+      "unitCostOrigin": 62,
+      "freightPercent": 1,
+      "customsPercent": 0,
+      "clearancePercent": 0,
+      "targetMarginPercent": 25,
+      "leadTimeDays": 7,
+      "supplierName": "Riyadh Cables Group (Riyadh)"
+    },
+    {
+      "sku": "AKMI-SD-FR90-SL",
+      "name": "Al Kuhaimi 90-min Fire-rated Steel Door, single leaf, 1,000 x 2,100 mm",
+      "description": "Civil Defence approved, UL 10C listed, with panic bar and closer. Equipment rooms and escape routes.",
+      "manufacturer": "AKMI",
+      "category": "Doors & Enclosures",
+      "productType": "local",
+      "originCurrency": "SAR",
+      "unitCostOrigin": 2650,
+      "freightPercent": 3,
+      "customsPercent": 0,
+      "clearancePercent": 0,
+      "targetMarginPercent": 25,
+      "leadTimeDays": 21,
+      "supplierName": "Al Kuhaimi Metal Industries (Dammam)"
+    },
+    {
+      "sku": "AKMI-GUARD-CABIN-3X3",
+      "name": "Al Kuhaimi Prefabricated Guard House, 3 x 3 m, insulated",
+      "description": "Sandwich-panel cabin with A/C, tinted windows, lighting and power points. Gatehouse for compounds and sites.",
+      "manufacturer": "AKMI",
+      "category": "Doors & Enclosures",
+      "productType": "local",
+      "originCurrency": "SAR",
+      "unitCostOrigin": 28500,
+      "freightPercent": 4,
+      "customsPercent": 0,
+      "clearancePercent": 0,
+      "targetMarginPercent": 22,
+      "leadTimeDays": 30,
+      "supplierName": "Al Kuhaimi Metal Industries (Dammam)"
+    },
+    {
+      "sku": "AKMI-SLIDE-GATE-8M",
+      "name": "Al Kuhaimi Cantilever Sliding Gate, 8 m, motorised",
+      "description": "Hot-dip galvanised steel, FAAC operator, photocells and safety edges, painted RAL of choice.",
+      "manufacturer": "AKMI",
+      "category": "Vehicle Barriers & Gates",
+      "productType": "local",
+      "originCurrency": "SAR",
+      "unitCostOrigin": 46000,
+      "freightPercent": 3,
+      "customsPercent": 0,
+      "clearancePercent": 0,
+      "targetMarginPercent": 22,
+      "leadTimeDays": 45,
+      "supplierName": "Al Kuhaimi Metal Industries (Dammam)"
+    },
+    {
+      "sku": "ALF-DB-SEC-12W",
+      "name": "alfanar 12-way Security Distribution Board, IP54 outdoor",
+      "description": "SASO-certified enclosure with RCBOs, surge protection and DIN-rail space for PSUs. Barrier and camera pole power.",
+      "manufacturer": "ALFANAR",
+      "category": "Power & UPS",
+      "productType": "local",
+      "originCurrency": "SAR",
+      "unitCostOrigin": 1450,
+      "freightPercent": 2,
+      "customsPercent": 0,
+      "clearancePercent": 0,
+      "targetMarginPercent": 28,
+      "leadTimeDays": 10,
+      "supplierName": "alfanar Electric (Riyadh)"
+    },
+    {
+      "sku": "ALF-POLE-6M-HDG",
+      "name": "alfanar 6 m Hot-dip Galvanised Camera Pole with base plate",
+      "description": "Octagonal, 3 mm, with camera bracket, junction box and anchor bolts. Car parks and perimeters.",
+      "manufacturer": "ALFANAR",
+      "category": "Doors & Enclosures",
+      "productType": "local",
+      "originCurrency": "SAR",
+      "unitCostOrigin": 1850,
+      "freightPercent": 4,
+      "customsPercent": 0,
+      "clearancePercent": 0,
+      "targetMarginPercent": 28,
+      "leadTimeDays": 14,
+      "supplierName": "alfanar Electric (Riyadh)"
+    }
+  ],
+  "services": [
+    {
+      "sku": "SVC-SURVEY",
+      "name": "Site survey and security risk assessment",
+      "description": "Senior consultant on site, threat and vulnerability assessment, marked-up drawings and recommendation report.",
+      "department": "pre-sales",
+      "rateType": "day",
+      "unitCost": 1600,
+      "unitPrice": 2800
+    },
+    {
+      "sku": "SVC-DESIGN",
+      "name": "System design and shop drawings",
+      "description": "CAD layouts, riser diagrams, bill of materials and Civil Defence / HCIS submission pack.",
+      "department": "pre-sales",
+      "rateType": "day",
+      "unitCost": 1400,
+      "unitPrice": 2400
+    },
+    {
+      "sku": "SVC-PM",
+      "name": "Project management",
+      "description": "PMP-certified project manager, weekly reporting, subcontractor coordination and site HSE.",
+      "department": "operations",
+      "rateType": "day",
+      "unitCost": 1500,
+      "unitPrice": 2600
+    },
+    {
+      "sku": "SVC-INST-CAM",
+      "name": "Camera installation and termination",
+      "description": "Mount, cable termination, focus, labelling and test sheet per camera. Excludes lifts above 6 m.",
+      "department": "technical",
+      "rateType": "unit",
+      "unitCost": 220,
+      "unitPrice": 450
+    },
+    {
+      "sku": "SVC-INST-DOOR",
+      "name": "Access-controlled door installation",
+      "description": "Reader, lock, REX, door contact and controller termination per door, including door hardware adjustment.",
+      "department": "technical",
+      "rateType": "unit",
+      "unitCost": 650,
+      "unitPrice": 1250
+    },
+    {
+      "sku": "SVC-INST-BARRIER",
+      "name": "Barrier / bollard civil works and installation",
+      "description": "Excavation, foundation, conduit, mechanical installation and commissioning per barrier or bollard set.",
+      "department": "technical",
+      "rateType": "unit",
+      "unitCost": 6500,
+      "unitPrice": 11500
+    },
+    {
+      "sku": "SVC-CABLE-M",
+      "name": "Cable pulling and containment, per metre",
+      "description": "Labour for cable pulling in tray, trunking or conduit including fixings; containment material excluded.",
+      "department": "technical",
+      "rateType": "metre",
+      "unitCost": 6,
+      "unitPrice": 14
+    },
+    {
+      "sku": "SVC-TRAY-M",
+      "name": "Galvanised cable tray supply and fix, 100 mm, per metre",
+      "description": "Hot-dip galvanised tray, covers, supports and accessories, installed.",
+      "department": "technical",
+      "rateType": "metre",
+      "unitCost": 38,
+      "unitPrice": 68
+    },
+    {
+      "sku": "SVC-COMM",
+      "name": "System commissioning and integration engineer",
+      "description": "VMS / access head-end configuration, analytics tuning, integration testing and witnessed acceptance.",
+      "department": "technical",
+      "rateType": "day",
+      "unitCost": 1300,
+      "unitPrice": 2400
+    },
+    {
+      "sku": "SVC-ENG-HR",
+      "name": "Field engineer, hourly",
+      "description": "Certified engineer for additional works, call-outs or variations. Minimum 2 hours.",
+      "department": "technical",
+      "rateType": "hour",
+      "unitCost": 140,
+      "unitPrice": 280
+    },
+    {
+      "sku": "SVC-LIFT",
+      "name": "Boom lift / scissor lift hire, per day",
+      "description": "Up to 18 m working height, including operator and delivery within Riyadh, Jeddah or Dammam.",
+      "department": "operations",
+      "rateType": "day",
+      "unitCost": 900,
+      "unitPrice": 1400
+    },
+    {
+      "sku": "SVC-TRAIN",
+      "name": "Operator and administrator training",
+      "description": "Classroom and hands-on training for control-room operators and system administrators, up to 8 attendees.",
+      "department": "support",
+      "rateType": "day",
+      "unitCost": 1200,
+      "unitPrice": 2200
+    },
+    {
+      "sku": "SVC-DOCS",
+      "name": "As-built documentation and handover pack",
+      "description": "As-built drawings, device schedules, IP schedule, passwords register and O&M manuals.",
+      "department": "technical",
+      "rateType": "job",
+      "unitCost": 2500,
+      "unitPrice": 4800
+    },
+    {
+      "sku": "SVC-PM-VISIT",
+      "name": "Preventive maintenance visit",
+      "description": "Scheduled visit: lens cleaning, firmware check, recording verification, reader and lock test, report.",
+      "department": "support",
+      "rateType": "visit",
+      "unitCost": 850,
+      "unitPrice": 1600
+    }
+  ],
+  "recurring": [
+    {
+      "name": "Static guarding, 24/7 single post",
+      "serviceType": "guarding",
+      "description": "One post covered 24 hours, 7 days: 4.2 FTE licensed guards, supervisor visits, uniform, radio and relief cover. Priced per post per month.",
+      "billingFrequency": "monthly",
+      "monthlyCost": 21500,
+      "monthlyPrice": 27500,
+      "targetMarginPercent": 22
+    },
+    {
+      "name": "Static guarding, 12-hour day post",
+      "serviceType": "guarding",
+      "description": "Day post 07:00-19:00, 7 days: 2.1 FTE licensed guards including relief. Priced per post per month.",
+      "billingFrequency": "monthly",
+      "monthlyCost": 10900,
+      "monthlyPrice": 14000,
+      "targetMarginPercent": 22
+    },
+    {
+      "name": "Mobile patrol, 4 visits per night",
+      "serviceType": "patrol",
+      "description": "Marked patrol vehicle, four randomised visits per night with electronic proof-of-visit and incident reporting.",
+      "billingFrequency": "monthly",
+      "monthlyCost": 4200,
+      "monthlyPrice": 6500,
+      "targetMarginPercent": 35
+    },
+    {
+      "name": "Alarm receiving centre monitoring, per site",
+      "serviceType": "monitoring",
+      "description": "24/7 monitoring of intrusion and fire signals at the G4S ARC, keyholder response and monthly event report.",
+      "billingFrequency": "monthly",
+      "monthlyCost": 180,
+      "monthlyPrice": 450,
+      "targetMarginPercent": 60
+    },
+    {
+      "name": "Remote CCTV monitoring, per 16 cameras",
+      "serviceType": "monitoring",
+      "description": "Virtual guard tours and analytics-triggered live monitoring 20:00-06:00 with audio warn-off and patrol dispatch.",
+      "billingFrequency": "monthly",
+      "monthlyCost": 1400,
+      "monthlyPrice": 2600,
+      "targetMarginPercent": 46
+    },
+    {
+      "name": "CCTV and access control annual maintenance contract",
+      "serviceType": "maintenance",
+      "description": "Four preventive visits per year, unlimited corrective call-outs within 24 hours, firmware updates, spares excluded. Priced per 100 devices.",
+      "billingFrequency": "annually",
+      "monthlyCost": 2900,
+      "monthlyPrice": 4800,
+      "targetMarginPercent": 40
+    },
+    {
+      "name": "Screening equipment annual maintenance contract",
+      "serviceType": "maintenance",
+      "description": "OEM-trained engineer, two preventive visits, radiation survey certificate, 48-hour response, per X-ray unit.",
+      "billingFrequency": "annually",
+      "monthlyCost": 1650,
+      "monthlyPrice": 2750,
+      "targetMarginPercent": 40
+    },
+    {
+      "name": "Facility management, integrated security and reception",
+      "serviceType": "facility-management",
+      "description": "Reception officers, visitor management system operation and security supervisor for a corporate building.",
+      "billingFrequency": "quarterly",
+      "monthlyCost": 34000,
+      "monthlyPrice": 43500,
+      "targetMarginPercent": 22
+    }
+  ],
+  "rentals": [
+    {
+      "name": "Managed CCTV rental, 8-camera site package",
+      "description": "Eight 4 MP dome cameras, a 32-channel NVR with 16 TB of storage and a PoE switch supplied on rental. Price covers equipment amortisation over 36 months, maintenance and firmware updates. Customer owns nothing; G4S recovers the hardware at contract end.",
+      "billingFrequency": "monthly",
+      "termMonths": 36,
+      "targetMarginPercent": 35,
+      "lines": [
+        {
+          "sku": "HIK-DS-2CD2143G2-I",
+          "qty": 8
+        },
+        {
+          "sku": "HIK-DS-7732NXI-I4-16P",
+          "qty": 1
+        },
+        {
+          "sku": "SEA-ST16000VE002",
+          "qty": 1
+        },
+        {
+          "sku": "UBNT-USW-PRO-48-POE",
+          "qty": 1
+        },
+        {
+          "sku": "APC-SRT3000RMXLI",
+          "qty": 1
+        }
+      ],
+      "services": [
+        {
+          "sku": "SVC-PM-VISIT",
+          "qty": 0.25
+        }
+      ]
+    },
+    {
+      "name": "Managed CCTV rental, 16-camera ColorVu perimeter package",
+      "description": "Sixteen 8 MP ColorVu bullets with a 64-channel NVR, 32 TB storage, switching and UPS on rental. Equipment amortised over 36 months with quarterly preventive maintenance included.",
+      "billingFrequency": "monthly",
+      "termMonths": 36,
+      "targetMarginPercent": 35,
+      "lines": [
+        {
+          "sku": "HIK-DS-2CD2T87G2-L",
+          "qty": 16
+        },
+        {
+          "sku": "DAH-NVR5464-EI",
+          "qty": 1
+        },
+        {
+          "sku": "SEA-ST16000VE002",
+          "qty": 2
+        },
+        {
+          "sku": "UBNT-USW-PRO-48-POE",
+          "qty": 1
+        },
+        {
+          "sku": "APC-SRT3000RMXLI",
+          "qty": 1
+        }
+      ],
+      "services": [
+        {
+          "sku": "SVC-PM-VISIT",
+          "qty": 0.33
+        }
+      ]
+    },
+    {
+      "name": "Event screening equipment rental, per lane",
+      "description": "One walk-through metal detector, two hand-held wands and a baggage X-ray screener per lane, delivered, installed and operated-ready. Amortised over 24 months to reflect event-duty wear; includes calibration and radiation survey.",
+      "billingFrequency": "monthly",
+      "termMonths": 24,
+      "targetMarginPercent": 38,
+      "lines": [
+        {
+          "sku": "GAR-PD6500I",
+          "qty": 1
+        },
+        {
+          "sku": "GAR-1165190",
+          "qty": 2
+        },
+        {
+          "sku": "RAP-618XR",
+          "qty": 1
+        }
+      ],
+      "services": [
+        {
+          "sku": "SVC-PM-VISIT",
+          "qty": 0.5
+        }
+      ]
+    },
+    {
+      "name": "Temporary site security rental, gatehouse and barrier",
+      "description": "Prefabricated guard house, automatic barrier, ANPR lane camera and a 6 m camera pole for construction and project sites. Amortised over 24 months including relocation between phases.",
+      "billingFrequency": "monthly",
+      "termMonths": 24,
+      "targetMarginPercent": 32,
+      "lines": [
+        {
+          "sku": "AKMI-GUARD-CABIN-3X3",
+          "qty": 1
+        },
+        {
+          "sku": "FAAC-B680H",
+          "qty": 1
+        },
+        {
+          "sku": "HIK-DS-2CD6D82G0-IHS",
+          "qty": 1
+        },
+        {
+          "sku": "ALF-POLE-6M-HDG",
+          "qty": 1
+        },
+        {
+          "sku": "ALF-DB-SEC-12W",
+          "qty": 1
+        }
+      ],
+      "services": [
+        {
+          "sku": "SVC-PM-VISIT",
+          "qty": 0.25
+        }
+      ]
+    },
+    {
+      "name": "Guard-force radio rental, 20 handsets with repeater",
+      "description": "Twenty DMR handsets, a 50 W repeater, chargers and spare batteries on rental, amortised over 36 months. Includes CITC licence support, programming and swap-out of faulty units within 48 hours.",
+      "billingFrequency": "monthly",
+      "termMonths": 36,
+      "targetMarginPercent": 40,
+      "lines": [
+        {
+          "sku": "HYT-HP685-UHF",
+          "qty": 20
+        },
+        {
+          "sku": "MOT-SLR5500",
+          "qty": 1
+        }
+      ],
+      "services": [
+        {
+          "sku": "SVC-ENG-HR",
+          "qty": 2
+        }
+      ]
+    },
+    {
+      "name": "Thermal perimeter rental, 4-camera fence-line package",
+      "description": "Four bi-spectrum thermal cameras with fence-mounted intrusion detection, network audio warn-off and backhaul radios. Amortised over 48 months given the capital value; includes analytics tuning twice a year.",
+      "billingFrequency": "quarterly",
+      "termMonths": 48,
+      "targetMarginPercent": 34,
+      "lines": [
+        {
+          "sku": "HIK-DS-2TD2628-10",
+          "qty": 4
+        },
+        {
+          "sku": "SEN-FLEXZONE-60",
+          "qty": 1
+        },
+        {
+          "sku": "AXIS-C1310-E",
+          "qty": 2
+        },
+        {
+          "sku": "UBNT-AF60-LR",
+          "qty": 1
+        }
+      ],
+      "services": [
+        {
+          "sku": "SVC-PM-VISIT",
+          "qty": 0.5
+        }
+      ]
+    }
+  ]
+}

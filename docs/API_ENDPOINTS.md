@@ -60,6 +60,7 @@ Updated 2026-09-17 from `crm-api/internal/router/router.go`. 180 registered rout
 | POST | `/api/v1/exchange-rates` | `exchange-rates:update` |
 | GET | `/api/v1/exchange-rates/:id` | `exchange-rates:read` |
 | PATCH | `/api/v1/exchange-rates/:id` | `exchange-rates:update` |
+| POST | `/api/v1/exchange-rates/refresh` | `exchange-rates:update` |
 | GET | `/api/v1/inventory/movements` | `inventory:read` |
 | POST | `/api/v1/inventory/movements/adjustment` | `inventory:update` |
 | POST | `/api/v1/inventory/movements/transfer` | `inventory:create` |

@@ -46,6 +46,10 @@ migrate:
 seed:
 	docker compose run --rm --no-deps -e ADMIN_EMAIL -e ADMIN_PASSWORD -e ADMIN_FIRST_NAME -e ADMIN_LAST_NAME api ./g4s-crm-api bootstrap-admin
 
+# Reference catalog: manufacturers, products, services, recurring services and FX rates. Safe to re-run.
+seed-catalog:
+	docker compose run --rm --no-deps api ./g4s-crm-api seed-catalog
+
 # Local development uses its own compose project and ports.
 dev-db:
 	docker compose -f compose.dev.yml up -d --wait
@@ -55,6 +59,9 @@ dev-migrate:
 
 dev-admin:
 	./scripts/dev-api.sh bootstrap-admin
+
+dev-seed-catalog:
+	./scripts/dev-api.sh seed-catalog
 
 dev-api:
 	./scripts/dev-api.sh

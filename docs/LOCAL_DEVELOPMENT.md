@@ -68,3 +68,13 @@ The frontend is available at `http://localhost:5174` while `make dev-web` runs. 
 ## Quote PDF and Office conversion
 
 Run `make dev-pdf` once to install the pinned PDF/test dependencies in an ignored virtual environment. Install LibreOffice (`brew install --cask libreoffice` on macOS, or `libreoffice-writer libreoffice-calc fonts-dejavu-core` on Debian/Ubuntu). Restart `make dev-api`; it detects this Python environment automatically. `make test-pdf` exercises actual PDF/image/Word/Excel conversion. `PDF_PYTHON` and `SOFFICE_PATH` can override the executables. API Docker runtime includes these tools; rebuild it before using the new export on a server. See [quote appendices](QUOTE_PDF_APPENDICES.md) for limits and verification.
+
+## Reference catalog seed
+
+`make seed-catalog` (Docker) or `make dev-seed-catalog` (local development database) loads the reference catalog from `crm-api/internal/seed/catalog.json`: manufacturers and their categories, products with landed-cost and selling-price calculations, catalog services, recurring services and equipment-rental packages, plus starting SAR exchange rates.
+
+The seed is idempotent. Records are matched by manufacturer code, product SKU, service SKU, recurring-service name or currency pair and updated in place, so it can be re-run after editing `catalog.json` without creating duplicates. Exchange-rate rows that already exist are never overwritten, so operator-entered and live-fetched rates survive a re-seed. Product costs are recalculated from the exchange rate held in the database at seed time.
+
+Rental packages are recurring services of type `rental` built from seeded products: each line charges the product's landed cost divided by the package's contract term, plus the target margin, so a rental line never charges the full purchase price monthly.
+
+`POST /api/v1/exchange-rates/refresh` (`exchange-rates:update`) pulls SAR rates from `https://open.er-api.com/v6/latest/SAR` and appends a history row per changed pair. Set `FX_PROVIDER_URL` to use a different provider with the same response shape. Rates are informational; quotes still store their own currency and totals.

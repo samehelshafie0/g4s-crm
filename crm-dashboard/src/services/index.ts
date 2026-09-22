@@ -56,6 +56,10 @@ export const exchangeRatesService = {
     http
       .patch<ApiResponse<ExchangeRate>>(`/exchange-rates/${id}`, { currentRate, effectiveDate })
       .then((r) => r.data),
+  refresh: () =>
+    http
+      .post<ApiResponse<{ provider: string; effectiveDate: string; updated: ExchangeRate[] }>>('/exchange-rates/refresh', {}, { timeout: 20_000 })
+      .then((r) => r.data),
 }
 
 // ─── Recurring Services ─────────────────────────────────────
