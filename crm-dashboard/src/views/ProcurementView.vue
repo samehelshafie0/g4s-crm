@@ -17,10 +17,10 @@ import type {
   PurchaseOrder, PurchaseOrderStatus,
   SupplierQuote, SupplierQuoteStatus, SupplierQuoteLineItem,
   SupplierItemEntry, GoodsReceipt, Manufacturer,
-  Quote, Project, QuoteLineItem,
+  Quote, QuoteLineItem, Opportunity,
 } from '@/types'
 
-import { procurementService, productsService, manufacturersService, quotesService, inventoryService, projectsService } from '@/services'
+import { procurementService, productsService, manufacturersService, quotesService, inventoryService, opportunitiesService } from '@/services'
 import { allPages } from '@/services/collections'
 import { errorMessage } from '@/services/payload'
 import type { Product } from '@/types'
@@ -30,10 +30,10 @@ const availableStock = ref<Record<string,number>>({})
 const store = useProcurementStore()
 const mfrStore = useManufacturersStore()
 const quotesStore = useQuotesStore()
-const projectList = ref<{ id: string; projectNumber: string; name: string }[]>([])
+const opportunityList = ref<Opportunity[]>([])
 
 async function reloadProcurement() {await Promise.all([store.fetchPurchaseOrders({limit:100}),store.fetchSupplierQuotes({limit:100}),store.fetchGoodsReceipts({limit:100})]);store.supplierItems=(await procurementService.supplierItems()).data}
-onMounted(async()=>{try{await reloadProcurement();catalogProducts.value=await allPages(productsService.list);mfrStore.manufacturers=await allPages(manufacturersService.list);quotesStore.quotes=await allPages(quotesService.list);projectList.value=await allPages(projectsService.list);const stock=await allPages(inventoryService.listStock);for(const row of stock) availableStock.value[row.productId]=(availableStock.value[row.productId]??0)+row.availableQty}catch(e){window.alert(errorMessage(e))}})
+onMounted(async()=>{try{await reloadProcurement();catalogProducts.value=await allPages(productsService.list);mfrStore.manufacturers=await allPages(manufacturersService.list);quotesStore.quotes=await allPages(quotesService.list);opportunityList.value=await allPages(opportunitiesService.list);const stock=await allPages(inventoryService.listStock);for(const row of stock) availableStock.value[row.productId]=(availableStock.value[row.productId]??0)+row.availableQty}catch(e){window.alert(errorMessage(e))}})
 
 function uid(): string { return Math.random().toString(36).slice(2, 11) }
 
@@ -123,13 +123,13 @@ const newPONotes = ref('')
 const newPOSourceSQ = ref('')
 const supplierSearchQuery = ref('')
 
-// Step 1: Source — project or quote
-type POSourceType = 'project' | 'quote' | 'manual'
-const poSourceType = ref<POSourceType>('project')
+// Step 1: Source — won opportunity or quote
+type POSourceType = 'opportunity' | 'quote' | 'manual'
+const poSourceType = ref<POSourceType>('opportunity')
 const selectedSourceQuote = ref<Quote | null>(null)
 const sourceSearchQuery = ref('')
 
-const availableProjects = computed(() => {
+const availableOpportunities = computed(() => {
   const q = sourceSearchQuery.value.toLowerCase().trim()
   const accepted = quotesStore.quotes.filter(qt => qt.status === 'accepted')
   if (!q) return accepted
@@ -154,7 +154,7 @@ function skipSource() {
   createPOStep.value = 'supplier'
 }
 
-// Source items extracted from the selected quote/project
+// Source items extracted from the selected quote/opportunity
 const sourceItems = computed(() => {
   if (!selectedSourceQuote.value) return []
   return selectedSourceQuote.value.lineItems.filter(li => li.category === 'materials')
@@ -512,7 +512,7 @@ function resetCreatePO() {
   newPOSourceSQ.value = ''
   newPOItems.value = []
   createPOStep.value = 'source'
-  poSourceType.value = 'project'
+  poSourceType.value = 'opportunity'
   selectedSourceQuote.value = null
   sourceSearchQuery.value = ''
   showPOFileUpload.value = false
@@ -526,8 +526,10 @@ function resetCreatePO() {
 async function createPO() {
   try {
   if (!newPOSupplier.value || newPOItems.value.length === 0) return
+  const sourceLines = selectedSourceQuote.value?.lineItems ?? []
   const items = newPOItems.value.map(i => ({
     id: uid(), productId: resolveProduct(i.sku), productSku: i.sku, productName: i.name,
+    quoteLineItemId: sourceLines.find(li => li.category === 'materials' && li.sku === i.sku)?.id,
     manufacturerName: i.manufacturer, quantity: i.qty, unitCost: i.unitCost,
     total: i.qty * i.unitCost, receivedQty: 0, leadTimeDays: i.leadTimeDays,
   }))
@@ -540,6 +542,7 @@ async function createPO() {
     total: subtotal + shippingCost + customsDuty, currency: 'SAR',
     expectedDelivery: newPOExpected.value || new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10),
     sourceQuoteId: selectedSourceQuote.value?.id,
+    opportunityId: selectedSourceQuote.value?.opportunityId,
     sourceQuoteNumber: selectedSourceQuote.value?.quoteNumber,
     notes: newPONotes.value,
     createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
@@ -672,7 +675,7 @@ const sqForm = ref({
   supplierName: '',
   supplierRef: '',
   sourceQuoteId: '',
-  projectId: '',
+  opportunityId: '',
   contactName: '',
   contactEmail: '',
   validFrom: '',
@@ -686,7 +689,7 @@ const sqForm = ref({
 function resetSQForm() {
   editingSQId.value = null
   sqForm.value = {
-    supplierName: '', supplierRef: '', sourceQuoteId: '', projectId: '', contactName: '', contactEmail: '',
+    supplierName: '', supplierRef: '', sourceQuoteId: '', opportunityId: '', contactName: '', contactEmail: '',
     validFrom: new Date().toISOString().slice(0, 10),
     validUntil: new Date(Date.now() + 90 * 86400000).toISOString().slice(0, 10),
     paymentTerms: '', deliveryTerms: '', notes: '', items: [],
@@ -708,7 +711,7 @@ function openEditSQ(sq: SupplierQuote) {
     supplierName: sq.supplierName,
     supplierRef: sq.supplierRef || '',
     sourceQuoteId: sq.sourceQuoteId || '',
-    projectId: sq.projectId || '',
+    opportunityId: sq.opportunityId || '',
     contactName: sq.contactName || '',
     contactEmail: sq.contactEmail || '',
     validFrom: sq.validFrom?.slice(0, 10) ?? '',
@@ -744,7 +747,7 @@ function selectSQSupplier(mfr: Manufacturer) {
 function resolveProduct(sku: string): string {const product=catalogProducts.value.find(p=>p.sku.toLowerCase()===sku.trim().toLowerCase());if(!product)throw new Error(`Add SKU ${sku || '(empty)'} to Products before creating a purchase order.`);return product.id}
 async function saveSQ() {
  if(!sqForm.value.supplierName||sqForm.value.items.length===0)return
- try {const items=sqForm.value.items.map(i=>({productId:catalogProducts.value.find(p=>p.sku.toLowerCase()===i.sku.toLowerCase())?.id,productSku:i.sku,productName:i.name,manufacturerName:i.manufacturer,quantity:i.qty,unitCost:i.unitCost,leadTimeDays:i.leadTimeDays,moq:i.moq}));const data={...sqForm.value,items,sourceQuoteId:sqForm.value.sourceQuoteId||null,projectId:sqForm.value.projectId||null,currency:store.supplierQuotes.find(s => s.id === editingSQId.value)?.currency ?? 'SAR'}
+ try {const items=sqForm.value.items.map(i=>({productId:catalogProducts.value.find(p=>p.sku.toLowerCase()===i.sku.toLowerCase())?.id,productSku:i.sku,productName:i.name,manufacturerName:i.manufacturer,quantity:i.qty,unitCost:i.unitCost,leadTimeDays:i.leadTimeDays,moq:i.moq}));const data={...sqForm.value,items,sourceQuoteId:sqForm.value.sourceQuoteId||null,opportunityId:sqForm.value.opportunityId||null,currency:store.supplierQuotes.find(s => s.id === editingSQId.value)?.currency ?? 'SAR'}
  if(editingSQId.value)await store.updateSupplierQuote(editingSQId.value,data);else await store.addSupplierQuote(data)
  showCreateSQModal.value=false;resetSQForm()
  }catch(e){window.alert(errorMessage(e))}
@@ -1254,9 +1257,9 @@ function delayHideSQDropdown() { window.setTimeout(() => { showSQItemDropdown.va
                 <span class="view-info-label">Source Quote</span>
                 <span class="view-info-value source-quote-link"><FileText :size="12" /> {{ viewingPO.sourceQuoteNumber }}</span>
               </div>
-              <div class="view-info-item" v-if="viewingPO.projectName">
-                <span class="view-info-label">Project</span>
-                <span class="view-info-value">{{ viewingPO.projectName }}</span>
+              <div class="view-info-item" v-if="viewingPO.opportunityTitle">
+                <span class="view-info-label">Opportunity</span>
+                <span class="view-info-value">{{ viewingPO.opportunityTitle }}</span>
               </div>
             </div>
             <div v-if="viewingPO.notes" class="view-notes"><p>{{ viewingPO.notes }}</p></div>
@@ -1341,9 +1344,9 @@ function delayHideSQDropdown() { window.setTimeout(() => { showSQItemDropdown.va
                 <span class="view-info-label">Customer Quote</span>
                 <span class="view-info-value source-quote-link"><FileText :size="12" /> {{ viewingSQ.sourceQuoteNumber }}</span>
               </div>
-              <div class="view-info-item" v-if="viewingSQ.projectName">
-                <span class="view-info-label">Project</span>
-                <span class="view-info-value">{{ viewingSQ.projectName }}</span>
+              <div class="view-info-item" v-if="viewingSQ.opportunityTitle">
+                <span class="view-info-label">Opportunity</span>
+                <span class="view-info-value">{{ viewingSQ.opportunityTitle }}</span>
               </div>
               <div class="view-info-item">
                 <span class="view-info-label">Contact</span>
@@ -1635,10 +1638,10 @@ function delayHideSQDropdown() { window.setTimeout(() => { showSQItemDropdown.va
                   </select>
                 </div>
                 <div class="form-group" style="flex:1">
-                  <label class="form-label" for="sq-project">Project</label>
-                  <select id="sq-project" v-model="sqForm.projectId" class="form-input">
+                  <label class="form-label" for="sq-opportunity">Opportunity</label>
+                  <select id="sq-opportunity" v-model="sqForm.opportunityId" class="form-input">
                     <option value="">Not linked</option>
-                    <option v-for="pr in projectList" :key="pr.id" :value="pr.id">{{ pr.projectNumber }} — {{ pr.name }}</option>
+                    <option v-for="op in opportunityList" :key="op.id" :value="op.id">{{ op.title }} — {{ op.customerName }}</option>
                   </select>
                 </div>
               </div>
@@ -1869,10 +1872,10 @@ function delayHideSQDropdown() { window.setTimeout(() => { showSQItemDropdown.va
               </div>
             </div>
 
-            <!-- Step 1: Select Source (Project / Quote / Manual) -->
+            <!-- Step 1: Select Source (Opportunity / Quote / Manual) -->
             <div v-if="createPOStep === 'source'">
               <div class="po-source-tabs">
-                <button :class="['po-source-tab', poSourceType === 'project' && 'po-source-tab--active']" @click="poSourceType = 'project'">Projects (Won Quotes)</button>
+                <button :class="['po-source-tab', poSourceType === 'opportunity' && 'po-source-tab--active']" @click="poSourceType = 'opportunity'">Won opportunities</button>
                 <button :class="['po-source-tab', poSourceType === 'quote' && 'po-source-tab--active']" @click="poSourceType = 'quote'">All Quotes</button>
                 <button :class="['po-source-tab', poSourceType === 'manual' && 'po-source-tab--active']" @click="poSourceType = 'manual'">No Source</button>
               </div>
@@ -1882,8 +1885,8 @@ function delayHideSQDropdown() { window.setTimeout(() => { showSQItemDropdown.va
                   <Search :size="16" class="search-icon" />
                   <input v-model="sourceSearchQuery" type="text" class="form-input" placeholder="Search by quote #, customer name..." />
                 </div>
-                <div v-if="(poSourceType === 'project' ? availableProjects : availableQuotes).length" class="po-source-grid">
-                  <button v-for="qt in (poSourceType === 'project' ? availableProjects : availableQuotes)" :key="qt.id" class="po-source-card" @click="selectSource(qt)">
+                <div v-if="(poSourceType === 'opportunity' ? availableOpportunities : availableQuotes).length" class="po-source-grid">
+                  <button v-for="qt in (poSourceType === 'opportunity' ? availableOpportunities : availableQuotes)" :key="qt.id" class="po-source-card" @click="selectSource(qt)">
                     <div class="po-source-card-top">
                       <span class="text-mono font-bold" style="font-size:0.78rem">{{ qt.quoteNumber }}</span>
                       <span :class="['badge', qt.status === 'accepted' ? 'badge-success' : qt.status === 'sent' ? 'badge-info' : 'badge-gray']" style="font-size:0.6rem">{{ qt.status }}</span>
@@ -1904,12 +1907,12 @@ function delayHideSQDropdown() { window.setTimeout(() => { showSQItemDropdown.va
                     <div v-if="!qt.lineItems.filter(l => l.category === 'materials').length" class="po-source-card-desc text-muted">{{ qt.notes.slice(0, 80) }}</div>
                   </button>
                 </div>
-                <div v-else class="detail-empty">No {{ poSourceType === 'project' ? 'won quotes / projects' : 'quotes' }} found.</div>
+                <div v-else class="detail-empty">No {{ poSourceType === 'opportunity' ? 'won opportunities' : 'quotes' }} found.</div>
               </template>
               <template v-else>
                 <div class="po-skip-source">
                   <Package :size="32" class="text-muted" />
-                  <p class="text-muted" style="font-size:0.85rem">Create a PO without linking to a project or quote.</p>
+                  <p class="text-muted" style="font-size:0.85rem">Create a PO without linking to an opportunity or quote.</p>
                   <button class="btn btn-primary" @click="skipSource">Continue to Supplier Selection <ArrowRight :size="16" /></button>
                 </div>
               </template>

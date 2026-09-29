@@ -4,6 +4,7 @@ import {
   Target,
   FileText,
   ScrollText,
+  Truck,
   ArrowUpRight,
   ArrowRight,
   Building2,
@@ -203,6 +204,14 @@ const statTiles = computed(() => [
       : '',
     icon: ScrollText,
     to: '/contracts',
+  },
+  {
+    key: 'won-not-delivered',
+    label: 'Won, not delivered',
+    value: kpis.value.wonNotDelivered?.value,
+    note: kpis.value.wonNotDelivered ? `${money(kpis.value.wonNotDelivered.totalValue ?? 0)} to deliver` : '',
+    icon: Truck,
+    to: '/delivery',
   },
 ])
 
@@ -779,7 +788,7 @@ const maxCustomerValue = computed(() => Math.max(...topCustomers.value.map((c) =
 /* ── KPI row ── */
 .kpi-grid {
   display: grid;
-  grid-template-columns: 1.6fr repeat(3, 1fr);
+  grid-template-columns: 1.6fr repeat(4, 1fr);
   gap: var(--space-4);
 }
 
