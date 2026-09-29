@@ -11,12 +11,12 @@ import {
   MessageSquare, Minus, Hash, Zap, FileText, Settings, Copy, MapPin, Clipboard,
   ShoppingCart, Truck, AlertTriangle, PackageCheck, History, DollarSign, TrendingDown, TrendingUp, Check,
 } from 'lucide-vue-next'
-import type { QuoteLineCategory, QuoteStatus, Currency } from '@/types'
+import type { QuoteLineCategory, QuoteStatus, Currency, CustomerSite, FulfilmentSource } from '@/types'
 import { useProcurementStore } from '@/stores/procurement'
 
-import { quotesService, http } from '@/services'
+import { quotesService, http, opportunitiesService } from '@/services'
 import type { ApiResponse } from '@/services/http'
-import type { BuilderQuote, BuilderInput, QuoteAppendix } from '@/services/workflowDtos'
+import type { BuilderQuote, BuilderInput, QuoteAppendix, QuoteVersion } from '@/services/workflowDtos'
 import { priceBooksService } from '@/services'
 import { errorMessage } from '@/services/payload'
 import { useAuthStore } from '@/stores/auth'
@@ -115,6 +115,8 @@ interface QuoteRow {
   isPrintable: boolean
   headingText?: string
   commentText?: string
+  siteId?: string
+  fulfilmentSource?: FulfilmentSource
 }
 
 // ── Quote State ──────────────────────────────────────────────
@@ -124,6 +126,22 @@ const customerId = ref('')
 const quoteStatus = ref<QuoteStatus>('draft')
 const validUntil = ref('')
 const currency = ref<Currency>('SAR')
+const fxRate = ref(1)
+const version = ref(1)
+const isCurrent = ref(true)
+const revisionReason = ref('')
+const versions = ref<QuoteVersion[]>([])
+const jobSites = ref<CustomerSite[]>([])
+const showHistory = ref(false)
+// Catalog prices are held in SAR; a USD quote divides by its pinned rate (SAR per USD).
+function toQuoteCurrency(sar: number): number {
+  return currency.value === 'SAR' || !fxRate.value ? sar : Math.round((sar / fxRate.value) * 100) / 100
+}
+const fulfilmentOptions: { value: FulfilmentSource; label: string }[] = [
+  { value: 'stock', label: 'From stock' },
+  { value: 'purchase', label: 'Purchase' },
+  { value: 'service', label: 'Service' },
+]
 const notes = ref('')
 const discountPercent = ref(0)
 const paymentTerms = ref('Net 30')
@@ -355,8 +373,8 @@ function applyPriceFromHistory(entry: PriceEntry) {
   if (priceHistoryTargetRowId.value) {
     const row = rows.value.find(r => r.id === priceHistoryTargetRowId.value)
     if (row) {
-      row.unitCost = entry.cost
-      row.unitPrice = entry.price
+      row.unitCost = toQuoteCurrency(entry.cost)
+      row.unitPrice = toQuoteCurrency(entry.price)
       recalcRow(row)
       showSaveToast(`Applied ${entry.supplier} pricing (${entry.date})`)
     }
@@ -389,12 +407,14 @@ function addWithDefaultPrice() {
 // ── Rows ─────────────────────────────────────────────────────
 const rows = ref<QuoteRow[]>([])
 
-function makeProductRow(pid: string, sku: string, desc: string, mfr: string, stock: number, lead: number | undefined, qty: number, cost: number, price: number): QuoteRow {
+function makeProductRow(pid: string, sku: string, desc: string, mfr: string, stock: number, lead: number | undefined, qty: number, sarCost: number, sarPrice: number): QuoteRow {
+  const cost = toQuoteCurrency(sarCost); const price = toQuoteCurrency(sarPrice)
   const lt = qty * price
   return { id: uid(), rowType: 'item', source: 'product', productId: pid, sku, description: desc, manufacturer: mfr, stockAvailable: stock > 0 ? stock : undefined, leadTimeDays: lead, quantity: qty, multiplier: 1, unitCost: cost, unitPrice: price, discountPercent: 0, lineTotal: lt, marginPercent: price > 0 ? ((price - cost) / price) * 100 : 0, isOptional: false, isSelected: true, isPrintable: true }
 }
 
-function makeServiceRow(pid: string, sku: string, desc: string, rateType: string, qty: number, cost: number, price: number): QuoteRow {
+function makeServiceRow(pid: string, sku: string, desc: string, rateType: string, qty: number, sarCost: number, sarPrice: number): QuoteRow {
+  const cost = toQuoteCurrency(sarCost); const price = toQuoteCurrency(sarPrice)
   const lt = qty * price
   return { id: uid(), rowType: 'item', source: 'service', productId: pid, sku, description: desc, rateType, quantity: qty, multiplier: 1, unitCost: cost, unitPrice: price, discountPercent: 0, lineTotal: lt, marginPercent: price > 0 ? ((price - cost) / price) * 100 : 0, isOptional: false, isSelected: true, isPrintable: true }
 }
@@ -440,7 +460,7 @@ const approvalReasons = computed(() => {
   const reasons: string[] = []
   if (overallMargin.value < 20) reasons.push(`Low margin (${overallMargin.value.toFixed(1)}%)`)
   if (discountPercent.value > 10) reasons.push(`High discount (${discountPercent.value}%)`)
-  if (total.value > 500000) reasons.push(`High value (SAR ${formatSAR(total.value)})`)
+  if (total.value > 500000) reasons.push(`High value (${currency.value} ${formatSAR(total.value)})`)
   return reasons
 })
 
@@ -478,7 +498,7 @@ const searchResults = computed<{ id: string; sku: string; name: string; meta: st
   if (addSource.value === 'product') {
     return productCatalog.filter(p => !q || p.sku.toLowerCase().includes(q) || p.name.toLowerCase().includes(q) || p.manufacturer.toLowerCase().includes(q)).slice(0, 25).map(p => ({
       id: p.id, sku: p.sku, name: p.name, meta: p.manufacturer,
-      price: `SAR ${formatSAR(p.unitPrice)}`,
+      price: `${currency.value} ${formatSAR(toQuoteCurrency(p.unitPrice))}`,
       stockLabel: p.stockAvailable > 0 ? `${p.stockAvailable} in stock` : `${p.leadTimeDays}d lead`,
       inStock: p.stockAvailable > 0,
     }))
@@ -486,13 +506,13 @@ const searchResults = computed<{ id: string; sku: string; name: string; meta: st
   if (addSource.value === 'service') {
     return serviceCatalog.filter(s => !q || s.sku.toLowerCase().includes(q) || s.name.toLowerCase().includes(q) || s.department.toLowerCase().includes(q)).slice(0, 25).map(s => ({
       id: s.id, sku: s.sku, name: s.name, meta: `${s.department} · ${s.rateType}`,
-      price: `SAR ${formatSAR(s.unitPrice)}/${s.rateType}`,
+      price: `${currency.value} ${formatSAR(toQuoteCurrency(s.unitPrice))}/${s.rateType}`,
     }))
   }
   if (addSource.value === 'recurring') {
     return recurringCatalog.filter(r => !q || r.sku.toLowerCase().includes(q) || r.name.toLowerCase().includes(q)).slice(0, 25).map(r => ({
       id: r.id, sku: r.sku, name: r.name, meta: r.billingCycle,
-      price: `SAR ${formatSAR(r.monthlyPrice)}/mo`,
+      price: `${currency.value} ${formatSAR(toQuoteCurrency(r.monthlyPrice))}/mo`,
     }))
   }
   return []
@@ -510,7 +530,8 @@ function selectSearchItem(item: { id: string }) {
   } else if (addSource.value === 'recurring') {
     const r = recurringCatalog.find(x => x.id === item.id)
     if (!r) return
-    const row: QuoteRow = { id: uid(), rowType: 'item', source: 'recurring', productId: r.id, sku: r.sku, description: r.name, billingCycle: r.billingCycle, quantity: 1, multiplier: 12, unitCost: r.monthlyCost, unitPrice: r.monthlyPrice, discountPercent: 0, lineTotal: 12 * r.monthlyPrice, marginPercent: r.monthlyPrice > 0 ? ((r.monthlyPrice - r.monthlyCost) / r.monthlyPrice) * 100 : 0, isOptional: false, isSelected: true, isPrintable: true }
+    const mc = toQuoteCurrency(r.monthlyCost); const mp = toQuoteCurrency(r.monthlyPrice)
+    const row: QuoteRow = { id: uid(), rowType: 'item', source: 'recurring', productId: r.id, sku: r.sku, description: r.name, billingCycle: r.billingCycle, quantity: 1, multiplier: 12, unitCost: mc, unitPrice: mp, discountPercent: 0, lineTotal: 12 * mp, marginPercent: mp > 0 ? ((mp - mc) / mp) * 100 : 0, isOptional: false, isSelected: true, isPrintable: true }
     rows.value.push(row)
   }
   searchQuery.value = ''
@@ -536,7 +557,8 @@ function handleQuickAdd() {
   } else {
     const recFound = recurringCatalog.find(r => r.sku.toUpperCase() === skuPart)
     if (recFound) {
-      rows.value.push({ id: uid(), rowType: 'item', source: 'recurring', productId: recFound.id, sku: recFound.sku, description: recFound.name, billingCycle: recFound.billingCycle, quantity: qty, multiplier: 12, unitCost: recFound.monthlyCost, unitPrice: recFound.monthlyPrice, discountPercent: 0, lineTotal: qty * 12 * recFound.monthlyPrice, marginPercent: recFound.monthlyPrice > 0 ? ((recFound.monthlyPrice - recFound.monthlyCost) / recFound.monthlyPrice) * 100 : 0, isOptional: false, isSelected: true, isPrintable: true })
+      const mc = toQuoteCurrency(recFound.monthlyCost); const mp = toQuoteCurrency(recFound.monthlyPrice)
+      rows.value.push({ id: uid(), rowType: 'item', source: 'recurring', productId: recFound.id, sku: recFound.sku, description: recFound.name, billingCycle: recFound.billingCycle, quantity: qty, multiplier: 12, unitCost: mc, unitPrice: mp, discountPercent: 0, lineTotal: qty * 12 * mp, marginPercent: mp > 0 ? ((mp - mc) / mp) * 100 : 0, isOptional: false, isSelected: true, isPrintable: true })
     } else {
       showSaveToast(`SKU "${skuPart}" not found`)
       return
@@ -595,42 +617,38 @@ const appendixBusy = ref(false)
 const appendices = ref<QuoteAppendix[]>([])
 const pdfError = ref('')
 const loadedQuote = ref<BuilderQuote | null>(null)
-const locked = computed(() => !loadedQuote.value || !auth.can('quotes:update') || quoteStatus.value !== 'draft' || saving.value || exportingPdf.value)
+const locked = computed(() => !loadedQuote.value || !auth.can('quotes:update') || quoteStatus.value !== 'draft' || !isCurrent.value || saving.value || exportingPdf.value)
 const canApprove = computed(() => auth.can('quotes:approve'))
 function applyQuote(q: BuilderQuote) {
   loadedQuote.value = q
   appendices.value = q.appendices ?? []
   quoteNumber.value = q.quoteNumber; customerId.value = q.customerId; customerName.value = q.customerName
   quoteStatus.value = q.status; validUntil.value = q.validUntil?.slice(0, 10) ?? ''; currency.value = q.currency
+  fxRate.value = q.fxRate ?? 1; version.value = q.version ?? 1; isCurrent.value = q.isCurrent !== false; revisionReason.value = q.revisionReason ?? ''
   notes.value = q.notes; discountPercent.value = q.discountPercent; vatPercent.value = q.vatPercent
   paymentTerms.value = q.paymentTerms || 'Net 30'; deliveryTerms.value = q.deliveryTerms || 'Ex-Works'
   introductionText.value = q.introductionText; closingText.value = q.closingText; internalNotes.value = q.internalNotes
   purchasingNotes.value = q.purchasingNotes; statementOfWork.value = q.statementOfWork
   soldTo.value = q.soldTo; shipTo.value = q.shipTo
   if (!soldTo.value.company) soldTo.value.company = q.customerName
-  rows.value = q.lineItems.map(line => ({ ...line, sku: line.sku ?? '', productId: line.productId || line.serviceId || line.recurringServiceId, manufacturer: line.manufacturerName }))
+  rows.value = q.lineItems.map(line => ({ ...line, sku: line.sku ?? '', productId: line.productId || line.serviceId || line.recurringServiceId, manufacturer: line.manufacturerName, siteId: line.siteId ?? '', fulfilmentSource: (line.fulfilmentSource ?? '') as FulfilmentSource }))
 }
 const catalogError = ref('')
 
-onMounted(async () => {
-  const [quoteResult, catalogResult] = await Promise.allSettled([
-    quotesService.builder(String(route.params.id)),
-    http.get<ApiResponse<{ products: CatalogProduct[]; services: CatalogService[]; recurring: CatalogRecurring[] }>>('/catalog'),
-  ])
-  if (catalogResult.status === 'fulfilled') {
-    productCatalog.push(...catalogResult.value.data.data.products)
-    serviceCatalog.push(...catalogResult.value.data.data.services)
-    recurringCatalog.push(...catalogResult.value.data.data.recurring)
-  } else {
-    catalogError.value = 'The product and service catalog could not be loaded: ' + errorMessage(catalogResult.reason)
-  }
-  if (quoteResult.status === 'rejected') {
-    window.alert(errorMessage(quoteResult.reason))
-    return
-  }
+async function loadVersions() {
+  try { versions.value = (await quotesService.versions(String(route.params.id))).data } catch { versions.value = [] }
+}
+async function loadJobSites(q: BuilderQuote) {
+  jobSites.value = []
+  if (!q.opportunityId || !auth.can('opportunities:read')) return
+  try { jobSites.value = (await opportunitiesService.get(q.opportunityId)).data.sites ?? [] } catch { jobSites.value = [] }
+}
+async function loadQuote() {
   try {
-    const quote = quoteResult.value
+    const quote = await quotesService.builder(String(route.params.id))
     applyQuote(quote.data)
+    void loadVersions()
+    void loadJobSites(quote.data)
     if (quote.data.priceBookId) {
       const book = (await priceBooksService.get(quote.data.priceBookId)).data
       for (const entry of book.entries) {
@@ -643,6 +661,20 @@ onMounted(async () => {
       }
     }
   } catch (error) { window.alert(errorMessage(error)) }
+}
+onMounted(async () => {
+  try {
+    const catalog = await http.get<ApiResponse<{ products: CatalogProduct[]; services: CatalogService[]; recurring: CatalogRecurring[] }>>('/catalog')
+    productCatalog.push(...catalog.data.data.products)
+    serviceCatalog.push(...catalog.data.data.services)
+    recurringCatalog.push(...catalog.data.data.recurring)
+  } catch (error) {
+    catalogError.value = 'The product and service catalog could not be loaded: ' + errorMessage(error)
+  }
+  await loadQuote()
+})
+watch(() => route.params.id, (id, previous) => {
+  if (id && previous && id !== previous && route.path.endsWith('/builder')) void loadQuote()
 })
 async function saveDraft(): Promise<boolean> {
   if (locked.value || appendixBusy.value || !loadedQuote.value) return false
@@ -666,6 +698,7 @@ async function saveDraft(): Promise<boolean> {
         quantity: row.quantity, multiplier: row.multiplier, unitCost: row.unitCost, unitPrice: row.unitPrice,
         discountPercent: row.discountPercent, isOptional: row.isOptional, isSelected: row.isSelected, isPrintable: row.isPrintable,
         headingText: row.headingText, commentText: row.commentText, rateType: row.rateType, billingCycle: row.billingCycle,
+        siteId: row.siteId || undefined, fulfilmentSource: row.fulfilmentSource || undefined,
       })),
     }
     const result = await quotesService.saveBuilder(String(route.params.id), payload)
@@ -687,10 +720,34 @@ async function transition(action: 'submit' | 'approve' | 'reject' | 'send' | 'ac
   } catch (error) { window.alert(errorMessage(error)) }
   finally { saving.value = false }
 }
+const reviseOpen = ref(false)
+const reviseReason = ref('')
+const reviseError = ref('')
+function openRevise() { reviseReason.value = ''; reviseError.value = ''; reviseOpen.value = true }
 async function createRevision() {
-  try { const revised = await quotesService.revise(String(route.params.id)); await router.replace(`/quotes/${revised.data.id}/builder`); applyQuote(revised.data) }
-  catch (error) { window.alert(errorMessage(error)) }
+  const reason = reviseReason.value.trim()
+  if (!reason) { reviseError.value = 'Say why the quote is being revised.'; return }
+  saving.value = true
+  try {
+    const revised = await quotesService.revise(String(route.params.id), reason)
+    reviseOpen.value = false
+    await router.replace(`/quotes/${revised.data.id}/builder`)
+    applyQuote(revised.data)
+    void loadVersions()
+  } catch (error) { reviseError.value = errorMessage(error) }
+  finally { saving.value = false }
 }
+async function switchCurrency(next: 'SAR' | 'USD') {
+  if (next === currency.value || locked.value) return
+  if (!window.confirm(`Convert every line to ${next} at the current rate? The rate is pinned to this version.`)) return
+  if (!await saveDraft()) return
+  saving.value = true
+  try { applyQuote((await quotesService.changeCurrency(String(route.params.id), next)).data); showSaveToast(`Converted to ${next}`) }
+  catch (error) { window.alert(errorMessage(error)) }
+  finally { saving.value = false }
+}
+const currentVersionId = computed(() => versions.value.find(v => v.isCurrent)?.id)
+function fmtDateTime(ts: string) { return new Date(ts).toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) }
 const contractOpen = ref(false)
 const contractError = ref('')
 const contractDates = ref({startDate:new Date().toISOString().slice(0,10),endDate:''})
@@ -728,7 +785,7 @@ function exportExcel() {
   const sep = ','
   const esc = (v: string) => `"${v.replace(/"/g, '""')}"`
 
-  const headerRow = ['#', 'Type', 'SKU', 'Description', 'Manufacturer', 'Qty', 'Multiplier', 'Unit Cost (SAR)', 'Unit Price (SAR)', 'Discount %', 'Line Total (SAR)', 'Margin %', 'Optional', 'Stock Status'].join(sep)
+  const headerRow = ['#', 'Type', 'SKU', 'Description', 'Manufacturer', 'Qty', 'Multiplier', `Unit Cost (${currency.value})`, `Unit Price (${currency.value})`, 'Discount %', `Line Total (${currency.value})`, 'Margin %', 'Optional', 'Stock Status'].join(sep)
 
   let lineNum = 0
   const dataRows = rows.value.map(r => {
@@ -797,6 +854,15 @@ function exportExcel() {
 <template>
   <div class="builder-page">
     <AppDialog v-model:open="contractOpen" title="Create contract from accepted quote" :busy="saving"><p>The contract will use this accepted quote's saved amount and currency.</p><form id="convert-contract" @submit.prevent="convertToContract"><label class="form-label" for="contract-start">Start date</label><input id="contract-start" v-model="contractDates.startDate" class="input form-input" type="date" required /><label class="form-label" for="contract-end">End date</label><input id="contract-end" v-model="contractDates.endDate" class="input form-input" type="date" required :min="contractDates.startDate" /><p v-if="contractError" class="form-error" role="alert">{{ contractError }}</p></form><template #footer><button class="btn" :disabled="saving" @click="contractOpen = false">Cancel</button><button class="btn btn-primary" form="convert-contract" type="submit" :disabled="saving">Create contract</button></template></AppDialog>
+    <AppDialog v-model:open="reviseOpen" title="Revise this quote" :busy="saving">
+      <p>A new version {{ version + 1 }} is created with the same quote number. This version is frozen and kept in the history.</p>
+      <form id="revise-form" @submit.prevent="createRevision">
+        <label class="form-label" for="revise-reason">Reason for the revision</label>
+        <textarea id="revise-reason" v-model="reviseReason" class="form-input" rows="3" required maxlength="500" placeholder="e.g. Customer asked for two more cameras at the Jeddah branch" />
+        <p v-if="reviseError" class="form-error" role="alert">{{ reviseError }}</p>
+      </form>
+      <template #footer><button class="btn" :disabled="saving" @click="reviseOpen = false">Cancel</button><button class="btn btn-primary" form="revise-form" type="submit" :disabled="saving">Create version {{ version + 1 }}</button></template>
+    </AppDialog>
     <!-- Save Toast -->
     <Transition name="toast">
       <div v-if="saveMessage" class="save-toast"><CheckCircle2 :size="16" />{{ saveMessage }}</div>
@@ -807,7 +873,7 @@ function exportExcel() {
       <div class="builder-header-left">
         <button class="btn btn-ghost btn-icon" @click="router.push('/quotes')"><ArrowLeft :size="20" /></button>
         <div>
-          <h1 class="builder-title">{{ quoteNumber }}</h1>
+          <h1 class="builder-title">{{ quoteNumber }} <span class="version-tag">v{{ version }}</span></h1>
           <div class="builder-subtitle">
             <span :class="['badge badge-dot', statusConfig[quoteStatus].badge]">{{ statusConfig[quoteStatus].label }}</span>
             <span class="text-muted">{{ customerName }}</span>
@@ -822,11 +888,17 @@ function exportExcel() {
         <button v-if="quoteStatus === 'sent' && auth.can('quotes:update')" class="btn btn-sm" :disabled="saving" @click="transition('accept')">Mark accepted</button>
         <button v-if="quoteStatus === 'sent' && auth.can('quotes:update')" class="btn btn-sm" :disabled="saving" @click="transition('decline')">Mark declined</button>
         <button v-if="quoteStatus === 'accepted' && auth.can('contracts:create')" class="btn btn-sm" :disabled="saving" @click="contractError = ''; contractOpen = true">Create contract</button>
-        <button v-if="quoteStatus !== 'draft' && auth.can('quotes:create')" class="btn btn-sm" :disabled="saving" @click="createRevision">New revision</button>
+        <button v-if="quoteStatus !== 'draft' && auth.can('quotes:create')" class="btn btn-sm" :disabled="saving" @click="openRevise">Revise</button>
         <button class="btn btn-secondary btn-sm" @click="saveDraft" :disabled="locked"><Save :size="14" /> Save Draft</button>
         <button class="btn btn-primary btn-sm" @click="submitForApproval" :disabled="locked"><Send :size="14" /> Submit</button>
       </div>
     </div>
+
+    <div v-if="loadedQuote && !isCurrent" class="version-banner" role="status">
+      You are viewing version {{ version }}, which has been superseded. It is read-only.
+      <button v-if="currentVersionId" class="btn btn-sm" @click="router.push(`/quotes/${currentVersionId}/builder`)">Open the current version</button>
+    </div>
+    <div v-else-if="revisionReason" class="version-banner version-banner--info" role="status">Version {{ version }} — {{ revisionReason }}</div>
 
     <!-- Info Bar -->
     <div class="info-bar">
@@ -836,7 +908,11 @@ function exportExcel() {
       </div>
       <div class="info-field">
         <label class="info-label">Currency</label>
-        <span class="info-value">{{ currency }}</span>
+        <select v-if="!locked && auth.can('quotes:update')" class="info-select" :value="currency" @change="switchCurrency(($event.target as HTMLSelectElement).value as 'SAR' | 'USD')">
+          <option value="SAR">SAR</option><option value="USD">USD</option>
+        </select>
+        <span v-else class="info-value">{{ currency }}</span>
+        <span v-if="currency !== 'SAR'" class="text-muted text-xs">1 {{ currency }} = {{ fxRate }} SAR (pinned)</span>
       </div>
       <div class="info-field">
         <label class="info-label">Valid Until</label>
@@ -854,6 +930,22 @@ function exportExcel() {
           <option>Ex-Works</option><option>FOB</option><option>CIF</option><option>DDP</option>
         </select>
       </div>
+    </div>
+
+    <div v-if="versions.length > 1" class="card version-history">
+      <button class="btn btn-ghost btn-sm" @click="showHistory = !showHistory">{{ showHistory ? 'Hide' : 'Show' }} version history ({{ versions.length }})</button>
+      <table v-if="showHistory" class="table table-compact">
+        <thead><tr><th>Version</th><th>Status</th><th class="text-right">Total</th><th>Reason</th><th>Created</th></tr></thead>
+        <tbody>
+          <tr v-for="v in versions" :key="v.id" :class="{ 'version-row--open': v.id === String(route.params.id) }">
+            <td><a href="#" @click.prevent="router.push(`/quotes/${v.id}/builder`)">v{{ v.version }}</a><span v-if="v.isCurrent" class="badge badge-success">current</span></td>
+            <td>{{ v.status }}</td>
+            <td class="text-right text-mono">{{ v.currency }} {{ formatSAR(v.total) }}</td>
+            <td>{{ v.revisionReason || '—' }}</td>
+            <td>{{ fmtDateTime(v.createdAt) }}</td>
+          </tr>
+        </tbody>
+      </table>
     </div>
 
     <!-- Builder Tabs -->
@@ -1012,7 +1104,7 @@ function exportExcel() {
                     <td colspan="7" class="subtotal-label">
                       <Minus :size="14" /> Running Subtotal
                     </td>
-                    <td class="text-right subtotal-value">SAR {{ formatSAR(computeRunningSubtotal(rows.indexOf(row))) }}</td>
+                    <td class="text-right subtotal-value">{{ currency }} {{ formatSAR(computeRunningSubtotal(rows.indexOf(row))) }}</td>
                     <td></td>
                     <td></td>
                     <td><button :disabled="locked" class="btn btn-ghost btn-icon btn-sm" @click="removeRow(row.id)"><Trash2 :size="14" /></button></td>
@@ -1032,6 +1124,14 @@ function exportExcel() {
                           <span v-if="row.sku" class="cell-sku">{{ row.sku }}</span>
                           <span v-if="row.source === 'write-in'" class="cell-writein">Write-in</span>
                           <span v-if="row.manufacturer" class="cell-mfr">{{ row.manufacturer }}</span>
+                          <select v-if="jobSites.length" :disabled="locked" v-model="row.siteId" class="inline-select" title="Site">
+                            <option value="">No site</option>
+                            <option v-for="site in jobSites" :key="site.id" :value="site.id">{{ site.name }}</option>
+                          </select>
+                          <select :disabled="locked" v-model="row.fulfilmentSource" class="inline-select" title="How this line is fulfilled">
+                            <option value="">Fulfilment…</option>
+                            <option v-for="o in fulfilmentOptions" :key="o.value" :value="o.value">{{ o.label }}</option>
+                          </select>
                           <span v-if="row.rateType" class="cell-rate">{{ row.rateType }}</span>
                           <span v-if="row.billingCycle" class="cell-rate">{{ row.billingCycle }} × {{ row.multiplier }}mo</span>
                           <span v-if="stockStatus(row) === 'in-stock'" class="stock-badge stock-badge--in">
@@ -1064,7 +1164,7 @@ function exportExcel() {
                         <span class="disc-sym">%</span>
                       </div>
                     </td>
-                    <td class="text-right col-total whitespace-nowrap font-medium">SAR {{ formatSAR(row.lineTotal) }}</td>
+                    <td class="text-right col-total whitespace-nowrap font-medium">{{ currency }} {{ formatSAR(row.lineTotal) }}</td>
                     <td class="text-right col-margin">
                       <span :class="['font-semibold', marginClass(row.marginPercent)]">{{ row.marginPercent.toFixed(1) }}%</span>
                     </td>
@@ -1110,7 +1210,7 @@ function exportExcel() {
                   <component :is="sourceIcons[src]" :size="13" :class="'source-icon--' + src" />
                   {{ sourceLabels[src] }} ({{ categoryBreakdown[src].count }})
                 </div>
-                <span class="text-mono">SAR {{ formatSAR(categoryBreakdown[src].total) }}</span>
+                <span class="text-mono">{{ currency }} {{ formatSAR(categoryBreakdown[src].total) }}</span>
               </div>
             </div>
 
@@ -1120,7 +1220,7 @@ function exportExcel() {
             <div class="summary-rows">
               <div class="summary-row">
                 <span>Subtotal</span>
-                <span class="text-mono">SAR {{ formatSAR(subtotal) }}</span>
+                <span class="text-mono">{{ currency }} {{ formatSAR(subtotal) }}</span>
               </div>
               <div class="summary-row summary-row--input">
                 <div class="disc-label">
@@ -1130,19 +1230,19 @@ function exportExcel() {
                     <span class="disc-input-sym">%</span>
                   </div>
                 </div>
-                <span class="text-mono text-danger">- SAR {{ formatSAR(discountAmount) }}</span>
+                <span class="text-mono text-danger">- {{ currency }} {{ formatSAR(discountAmount) }}</span>
               </div>
               <div class="summary-row summary-row--sub">
                 <span class="font-medium">After Discount</span>
-                <span class="text-mono font-medium">SAR {{ formatSAR(subtotalAfterDiscount) }}</span>
+                <span class="text-mono font-medium">{{ currency }} {{ formatSAR(subtotalAfterDiscount) }}</span>
               </div>
               <div class="summary-row">
                 <span>VAT ({{ vatPercent }}%)</span>
-                <span class="text-mono">SAR {{ formatSAR(vatAmount) }}</span>
+                <span class="text-mono">{{ currency }} {{ formatSAR(vatAmount) }}</span>
               </div>
               <div class="summary-row summary-row--total">
                 <span class="font-bold">Total</span>
-                <span class="summary-grand">SAR {{ formatSAR(total) }}</span>
+                <span class="summary-grand">{{ currency }} {{ formatSAR(total) }}</span>
               </div>
             </div>
 
@@ -1150,8 +1250,8 @@ function exportExcel() {
             <div class="cost-section">
               <h4 class="cost-title">Cost & Margin</h4>
               <div class="summary-rows">
-                <div class="summary-row"><span>Total Cost</span><span class="text-mono">SAR {{ formatSAR(totalCost) }}</span></div>
-                <div class="summary-row"><span>Margin</span><span class="text-mono text-success">SAR {{ formatSAR(marginAmount) }}</span></div>
+                <div class="summary-row"><span>Total Cost</span><span class="text-mono">{{ currency }} {{ formatSAR(totalCost) }}</span></div>
+                <div class="summary-row"><span>Margin</span><span class="text-mono text-success">{{ currency }} {{ formatSAR(marginAmount) }}</span></div>
                 <div class="summary-row"><span class="font-medium">Margin %</span><span :class="['font-bold', marginClass(overallMargin)]">{{ overallMargin.toFixed(1) }}%</span></div>
               </div>
               <div class="margin-bar-track"><div class="margin-bar-fill" :class="marginClass(overallMargin)" :style="{ width: `${Math.min(overallMargin, 50) * 2}%` }" /></div>
@@ -1406,7 +1506,7 @@ function exportExcel() {
                     <td class="text-center">{{ row.stockAvailable ?? 0 }}</td>
                     <td class="text-center font-bold">{{ row.stockAvailable != null ? Math.max(0, row.quantity - row.stockAvailable) : row.quantity }}</td>
                     <td class="text-right whitespace-nowrap text-mono">
-                      SAR {{ formatSAR((row.stockAvailable != null ? Math.max(0, row.quantity - row.stockAvailable) : row.quantity) * row.unitCost) }}
+                      {{ currency }} {{ formatSAR((row.stockAvailable != null ? Math.max(0, row.quantity - row.stockAvailable) : row.quantity) * row.unitCost) }}
                     </td>
                     <td class="text-center">
                       <span class="stock-badge stock-badge--out">{{ row.leadTimeDays || '?' }}d</span>
@@ -1423,7 +1523,7 @@ function exportExcel() {
               </div>
               <div class="po-modal-summary-row">
                 <span>Estimated procurement cost</span>
-                <span class="font-bold text-mono">SAR {{ formatSAR(outOfStockRows.reduce((s, r) => s + (r.stockAvailable != null ? Math.max(0, r.quantity - r.stockAvailable) : r.quantity) * r.unitCost, 0)) }}</span>
+                <span class="font-bold text-mono">{{ currency }} {{ formatSAR(outOfStockRows.reduce((s, r) => s + (r.stockAvailable != null ? Math.max(0, r.quantity - r.stockAvailable) : r.quantity) * r.unitCost, 0)) }}</span>
               </div>
               <div class="po-modal-summary-row">
                 <span>POs to create (grouped by supplier)</span>
@@ -1584,6 +1684,13 @@ function exportExcel() {
 </template>
 
 <style scoped>
+.version-tag { font-size: var(--text-sm); font-weight: 600; color: var(--color-neutral-500); margin-left: var(--space-2); }
+.version-banner { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-3) var(--space-4); margin-bottom: var(--space-3); border-radius: var(--radius-lg); background: var(--color-warning-50, #fffbeb); border: 1px solid var(--color-warning, #f59e0b); }
+.version-banner--info { background: var(--color-neutral-50); border-color: var(--color-neutral-200); font-size: var(--text-sm); }
+.version-history { padding: var(--space-3) var(--space-4); margin-bottom: var(--space-3); }
+.version-row--open { font-weight: 600; }
+.inline-select { font-size: var(--text-xs); padding: 1px 4px; max-width: 130px; border: 1px solid var(--color-neutral-200); border-radius: var(--radius-md); background: transparent; }
+
 .quote-attachments { margin-top: var(--space-6); padding-top: var(--space-5); border-top: 1px solid var(--color-neutral-200); }
 
 .catalog-count { display: inline-flex; align-items: center; gap: 4px; font-size: var(--text-xs); color: var(--color-neutral-500); white-space: nowrap; background: none; border: 0; cursor: pointer; padding: 2px 4px; }
