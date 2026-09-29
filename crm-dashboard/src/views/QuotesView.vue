@@ -21,7 +21,6 @@ import {
   Users,
   Wrench,
   Boxes,
-  Copy,
   Lock,
   History,
   Target,
@@ -29,7 +28,7 @@ import {
   ChevronRight,
   Building2,
 } from 'lucide-vue-next'
-import type { Quote, QuoteStatus, QuoteLineItem, QuoteLineCategory } from '@/types'
+import type { Quote, QuoteStatus, QuoteLineItem, QuoteLineCategory, Opportunity, QuoteCurrency } from '@/types'
 import { useOpportunitiesStore } from '@/stores/opportunities'
 import { usePriceBooksStore } from '@/stores/priceBooks'
 import { useQuotesStore } from '@/stores/quotes'
@@ -176,6 +175,7 @@ const newQuoteForm = ref({
   priceBookName: '',
   notes: '',
   validUntil: '',
+  currency: 'SAR' as QuoteCurrency,
 })
 
 const customerSearch = ref('')
@@ -205,7 +205,7 @@ const customerPriceBooks = computed(() => {
 })
 
 function resetNewQuoteForm() {
-  newQuoteForm.value = { customerId: '', customerName: '', customerStoreId: '', opportunityId: '', opportunityTitle: '', priceBookId: '', priceBookName: '', notes: '', validUntil: '' }
+  newQuoteForm.value = { customerId: '', customerName: '', customerStoreId: '', opportunityId: '', opportunityTitle: '', priceBookId: '', priceBookName: '', notes: '', validUntil: '', currency: 'SAR' as QuoteCurrency }
   newQuoteStep.value = 'customer'
   customerSearch.value = ''
 }
@@ -221,15 +221,14 @@ function selectCustomer(cust: { id: string; name: string; storeId: string }) {
   newQuoteStep.value = 'opportunity'
 }
 
+function chooseOpportunity(opp: Opportunity) {
+  if (opp.currentQuote) { router.push(`/quotes/${opp.currentQuote.id}/builder`); return }
+  selectOpportunity(opp.id, opp.title)
+}
+
 function selectOpportunity(oppId: string, oppTitle: string) {
   newQuoteForm.value.opportunityId = oppId
   newQuoteForm.value.opportunityTitle = oppTitle
-  newQuoteStep.value = 'pricebook'
-}
-
-function skipOpportunity() {
-  newQuoteForm.value.opportunityId = ''
-  newQuoteForm.value.opportunityTitle = ''
   newQuoteStep.value = 'pricebook'
 }
 
@@ -251,14 +250,14 @@ function goBackToStep(step: NewQuoteStep) {
 
 const creating = ref(false)
 async function createAndOpenQuote() {
-  if (!newQuoteForm.value.customerId || creating.value) return
+  if (!newQuoteForm.value.customerId || !newQuoteForm.value.opportunityId || creating.value) return
   creating.value = true
   try {
     const quote = await quotesStore.addQuote({
       customerId: newQuoteForm.value.customerId,
-      opportunityId: newQuoteForm.value.opportunityId || undefined,
+      opportunityId: newQuoteForm.value.opportunityId,
       priceBookId: newQuoteForm.value.priceBookId || undefined,
-      currency: 'SAR', notes: newQuoteForm.value.notes,
+      currency: newQuoteForm.value.currency, notes: newQuoteForm.value.notes,
       validUntil: newQuoteForm.value.validUntil || new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10),
     })
     showNewQuoteModal.value = false
@@ -273,9 +272,15 @@ function openNewQuoteFromOpp(oppId: string) {
   const cust = customers.value.find(c => c.storeId === opp.customerId)
   if (!cust) return
 
+  if (opp.currentQuote) { router.push(`/quotes/${opp.currentQuote.id}/builder`); return }
   showNewQuoteModal.value = true
   selectCustomer(cust)
   selectOpportunity(opp.id, opp.title)
+}
+
+function oppTitle(q: Quote): string {
+  if (q.contractId) return 'Contract quote'
+  return oppStore.opportunities.find(o => o.id === q.opportunityId)?.title ?? '—'
 }
 
 function openBuilder(quoteId: string) {
@@ -299,12 +304,6 @@ onMounted(async () => {
 // ── Document Locking ─────────────────────────────────────────
 function isLocked(q: Quote): boolean {
   return q.status !== 'draft'
-}
-
-// ── Duplicate Quote ──────────────────────────────────────────
-async function duplicateQuote(q: Quote) {
-  try { const res = await quotesService.duplicate(q.id); quotes.value.unshift(res.data) }
-  catch (error) { window.alert(errorMessage(error)) }
 }
 
 // ── Audit Trail ──────────────────────────────────────────────
@@ -436,6 +435,8 @@ function formatTimestamp(ts: string): string {
         <thead>
           <tr>
             <th>Quote #</th>
+            <th>Ver.</th>
+            <th>Opportunity</th>
             <th>Customer</th>
             <th>Status</th>
             <th class="text-center">Items</th>
@@ -451,6 +452,8 @@ function formatTimestamp(ts: string): string {
         <tbody>
           <tr v-for="q in filteredQuotes" :key="q.id">
             <td class="text-mono font-bold">{{ q.quoteNumber }}</td>
+            <td>v{{ q.version }}</td>
+            <td>{{ oppTitle(q) }}</td>
             <td class="font-medium text-dark">{{ q.customerName }}</td>
             <td>
               <span :class="['badge badge-dot', statusConfig[q.status].badge]">
@@ -476,9 +479,6 @@ function formatTimestamp(ts: string): string {
                 </button>
                 <button class="btn btn-ghost btn-icon btn-sm" v-if="auth.can('quotes:update')" title="Edit" @click="openBuilder(q.id)" :disabled="isLocked(q)">
                   <Pencil :size="14" />
-                </button>
-                <button class="btn btn-ghost btn-icon btn-sm" v-if="auth.can('quotes:create')" title="Duplicate" @click="duplicateQuote(q)">
-                  <Copy :size="14" />
                 </button>
                 <button class="btn btn-ghost btn-icon btn-sm" title="Open Builder" @click="openBuilder(q.id)">
                   <ExternalLink :size="14" />
@@ -738,20 +738,20 @@ function formatTimestamp(ts: string): string {
             <!-- Step 2: Select Opportunity (optional) -->
             <div v-else-if="newQuoteStep === 'opportunity'">
               <div class="nq-section-title">
-                Link to Opportunity
-                <span class="nq-section-subtitle">(optional)</span>
+                Choose the Opportunity
+                <span class="nq-section-subtitle">(each opportunity has one quote; changes become versions)</span>
               </div>
               <div class="nq-selected-badge">
                 <Building2 :size="14" /> {{ newQuoteForm.customerName }}
               </div>
 
               <div v-if="customerOpportunities.length" class="nq-list">
-                <button v-for="opp in customerOpportunities" :key="opp.id" class="nq-list-item" @click="selectOpportunity(opp.id, opp.title)">
+                <button v-for="opp in customerOpportunities" :key="opp.id" class="nq-list-item" @click="chooseOpportunity(opp)">
                   <div class="nq-list-icon nq-list-icon--opp"><Target :size="16" /></div>
                   <div class="nq-list-info">
                     <span class="nq-list-name">{{ opp.title }}</span>
                     <span class="nq-list-meta">
-                      {{ opp.stage.replace('-', ' ') }} · SAR {{ (opp.estimatedValue / 1000).toFixed(0) }}K · {{ opp.quoteIds.length }} quote{{ opp.quoteIds.length !== 1 ? 's' : '' }}
+                      {{ opp.stage.replace('-', ' ') }} · SAR {{ (opp.estimatedValue / 1000).toFixed(0) }}K · {{ opp.currentQuote ? `open ${opp.currentQuote.quoteNumber} v${opp.currentQuote.version}` : 'no quote yet' }}
                     </span>
                   </div>
                   <ChevronRight :size="16" class="nq-list-chevron" />
@@ -761,10 +761,6 @@ function formatTimestamp(ts: string): string {
                 <Target :size="24" class="text-muted" />
                 <p>No active opportunities for this customer</p>
               </div>
-
-              <button class="btn btn-ghost nq-skip-btn" @click="skipOpportunity">
-                Skip — Create without an opportunity
-              </button>
             </div>
 
             <!-- Step 3: Select Price Book (optional) -->
@@ -812,7 +808,7 @@ function formatTimestamp(ts: string): string {
                 </div>
                 <div class="nq-confirm-item" @click="goBackToStep('opportunity')">
                   <span class="nq-confirm-label">Opportunity</span>
-                  <span class="nq-confirm-value">{{ newQuoteForm.opportunityTitle || 'None (standalone quote)' }}</span>
+                  <span class="nq-confirm-value">{{ newQuoteForm.opportunityTitle }}</span>
                 </div>
                 <div class="nq-confirm-item" @click="goBackToStep('pricebook')">
                   <span class="nq-confirm-label">Price Book</span>
@@ -820,6 +816,13 @@ function formatTimestamp(ts: string): string {
                 </div>
               </div>
 
+              <div class="form-group mb-4">
+                <label class="form-label">Currency</label>
+                <select v-model="newQuoteForm.currency" class="form-select">
+                  <option value="SAR">SAR</option>
+                  <option value="USD">USD (rate pinned at creation)</option>
+                </select>
+              </div>
               <div class="form-group mb-4">
                 <label class="form-label">Valid Until</label>
                 <input v-model="newQuoteForm.validUntil" type="date" class="form-input" />
