@@ -1,9 +1,9 @@
 import type { AuthUser } from './auth.service'
 import { editable } from './payload'
-import type { ServiceItem, DocumentVersion, UserLookup, WarehouseStock, StockReservation, InventoryMovement, Team, Project, CrmDocument } from './workflowDtos'
+import type { ServiceItem, DocumentVersion, UserLookup, WarehouseStock, StockReservation, InventoryMovement, Team, CrmDocument } from './workflowDtos'
 import type { PurchaseOrderDto, SupplierQuoteDto, GoodsReceiptDto } from './procurementDtos'
 import { http, type ApiResponse, type PaginationParams } from './http'
-import type { Contract, PriceBook, ExchangeRate, RecurringService } from '@/types'
+import type { Contract, ContractQuote, PriceBook, ExchangeRate, RecurringService } from '@/types'
 
 // ─── Contracts ──────────────────────────────────────────────
 export const contractsService = {
@@ -25,6 +25,8 @@ export const contractsService = {
     http.post<ApiResponse<Contract>>(`/contracts/${id}/renew`).then((r) => r.data),
   expiring: () =>
     http.get<ApiResponse<Contract[]>>('/contracts/expiring').then((r) => r.data),
+  quotes: (id: string) =>
+    http.get<ApiResponse<ContractQuote[]>>(`/contracts/${id}/quotes`).then((r) => r.data),
 }
 
 // ─── Price Books ────────────────────────────────────────────
@@ -175,20 +177,6 @@ export const teamsService = {
     http.delete<ApiResponse<null>>(`/teams/${id}`).then((r) => r.data),
 }
 
-// ─── Projects ───────────────────────────────────────────────
-export const projectsService = {
-  list: (params?: PaginationParams) =>
-    http.get<ApiResponse<Project[]>>('/projects', { params }).then((r) => r.data),
-  get: (id: string) =>
-    http.get<ApiResponse<Project>>(`/projects/${id}`).then((r) => r.data),
-  create: (data: Record<string, unknown>) =>
-    http.post<ApiResponse<Project>>('/projects', editable(data, ['name', 'customerId', 'quoteId', 'status', 'priority', 'startDate', 'targetEndDate', 'actualEndDate', 'projectManagerId', 'notes'])).then((r) => r.data),
-  update: (id: string, data: Record<string, unknown>) =>
-    http.patch<ApiResponse<Project>>(`/projects/${id}`, editable(data, ['name', 'customerId', 'quoteId', 'status', 'priority', 'startDate', 'targetEndDate', 'actualEndDate', 'projectManagerId', 'notes'])).then((r) => r.data),
-  delete: (id: string) =>
-    http.delete<ApiResponse<null>>(`/projects/${id}`).then((r) => r.data),
-}
-
 // ─── Dashboard ──────────────────────────────────────────────
 export const dashboardService = {
   recentQuotes: () => http.get<ApiResponse<import('@/types').Quote[]>>('/dashboard/recent-quotes').then(r => r.data),
@@ -237,10 +225,10 @@ function linePayloads(data: Record<string, unknown>, fields: string[]) {
  return Array.isArray(data.items) ? data.items.map(item => editable(item, fields)) : []
 }
 export function poPayload(data: Record<string, unknown>) {
- return { ...editable(data, ['supplierId', 'supplierName', 'currency', 'shippingCost', 'customsDuty', 'expectedDelivery', 'sourceQuoteId', 'projectId', 'notes']), items: linePayloads(data, ['productId', 'quantity', 'unitCost', 'leadTimeDays']) }
+ return { ...editable(data, ['supplierId', 'supplierName', 'currency', 'shippingCost', 'customsDuty', 'expectedDelivery', 'sourceQuoteId', 'opportunityId', 'notes']), items: linePayloads(data, ['productId', 'quantity', 'unitCost', 'leadTimeDays', 'quoteLineItemId']) }
 }
 export function sqPayload(data: Record<string, unknown>) {
- return { ...editable(data, ['supplierId', 'supplierName', 'supplierRef', 'sourceQuoteId', 'projectId', 'currency', 'validFrom', 'validUntil', 'contactName', 'contactEmail', 'paymentTerms', 'deliveryTerms', 'notes']), items: linePayloads(data, ['productId', 'productSku', 'productName', 'manufacturerName', 'quantity', 'unitCost', 'leadTimeDays', 'moq', 'validUntil', 'notes']) }
+ return { ...editable(data, ['supplierId', 'supplierName', 'supplierRef', 'sourceQuoteId', 'opportunityId', 'currency', 'validFrom', 'validUntil', 'contactName', 'contactEmail', 'paymentTerms', 'deliveryTerms', 'notes']), items: linePayloads(data, ['productId', 'productSku', 'productName', 'manufacturerName', 'quantity', 'unitCost', 'leadTimeDays', 'moq', 'validUntil', 'notes']) }
 }
 export function grPayload(data: Record<string, unknown>) {
  return { ...editable(data, ['poId', 'receiveDate', 'notes']), items: linePayloads(data, ['poItemId', 'productId', 'receivedQty', 'storageLocation', 'condition', 'notes']) }

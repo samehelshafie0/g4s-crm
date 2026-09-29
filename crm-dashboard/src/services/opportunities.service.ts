@@ -1,6 +1,16 @@
 import { editable } from './payload'
 import { http, type ApiResponse, type PaginationParams } from './http'
-import type { Opportunity } from '@/types'
+import type { Opportunity, Fulfilment, DeliveryStatus } from '@/types'
+
+export interface DeliveryInput {
+  deliveryStatus: DeliveryStatus
+  projectManagerId?: string | null
+  startDate?: string | null
+  targetEndDate?: string | null
+  actualEndDate?: string | null
+  actualValue?: number | null
+  actualCost?: number | null
+}
 
 export const opportunitiesService = {
   list: (params?: PaginationParams) =>
@@ -15,10 +25,10 @@ export const opportunitiesService = {
       .then((r) => r.data),
 
   create: (data: Partial<Opportunity>) =>
-    http.post<ApiResponse<Opportunity>>('/opportunities', editable(data, ['title', 'customerId', 'stage', 'serviceTypes', 'estimatedValue', 'estimatedCost', 'winProbability', 'salesExecutiveId', 'preSalesId', 'expectedCloseDate', 'notes'])).then((r) => r.data),
+    http.post<ApiResponse<Opportunity>>('/opportunities', editable(data, ['title', 'customerId', 'stage', 'serviceTypes', 'estimatedValue', 'estimatedCost', 'winProbability', 'salesExecutiveId', 'preSalesId', 'expectedCloseDate', 'notes', 'siteIds'])).then((r) => r.data),
 
   update: (id: string, data: Partial<Opportunity>) =>
-    http.patch<ApiResponse<Opportunity>>(`/opportunities/${id}`, editable(data, ['title', 'customerId', 'stage', 'serviceTypes', 'estimatedValue', 'estimatedCost', 'winProbability', 'salesExecutiveId', 'preSalesId', 'expectedCloseDate', 'notes'])).then((r) => r.data),
+    http.patch<ApiResponse<Opportunity>>(`/opportunities/${id}`, editable(data, ['title', 'customerId', 'stage', 'serviceTypes', 'estimatedValue', 'estimatedCost', 'winProbability', 'salesExecutiveId', 'preSalesId', 'expectedCloseDate', 'notes', 'siteIds'])).then((r) => r.data),
 
   updateStage: (id: string, stage: string, notes?: string) =>
     http
@@ -27,4 +37,13 @@ export const opportunitiesService = {
 
   delete: (id: string) =>
     http.delete<ApiResponse<null>>(`/opportunities/${id}`).then((r) => r.data),
+
+  fulfilment: (id: string) =>
+    http.get<ApiResponse<Fulfilment>>(`/opportunities/${id}/fulfilment`).then((r) => r.data),
+
+  updateDelivery: (id: string, data: DeliveryInput) =>
+    http.patch<ApiResponse<Opportunity>>(`/opportunities/${id}/delivery`, data).then((r) => r.data),
+
+  delivery: (params?: PaginationParams & Record<string, unknown>) =>
+    http.get<ApiResponse<Opportunity[]>>('/delivery', { params }).then((r) => r.data),
 }

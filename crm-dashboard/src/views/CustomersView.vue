@@ -17,6 +17,7 @@ import {
 } from 'lucide-vue-next'
 import type { Customer, CustomerStatus, CustomerType, Sector } from '@/types'
 import { useCustomersStore } from '@/stores/customers'
+import CustomerSites from '@/components/CustomerSites.vue'
 
 const customerStore = useCustomersStore()
 
@@ -29,6 +30,8 @@ const showAddModal = ref(false)
 const showViewModal = ref(false)
 const editingCustomer = ref<Customer | null>(null)
 const viewingCustomer = ref<Customer | null>(null)
+const viewTab = ref<'details' | 'sites'>('details')
+const siteCounts = ref<Record<string, number>>({})
 
 const defaultForm = (): Omit<Customer, 'id' | 'createdAt' | 'updatedAt'> => ({
   companyName: '',
@@ -99,7 +102,7 @@ function openEditModal(c: Customer) {
     type: c.type,
     crNumber: c.crNumber,
     vatNumber: c.vatNumber,
-    sites: c.sites,
+    sites: c.sites ?? [],
     contacts: c.contacts,
     notes: c.notes,
   }
@@ -108,6 +111,7 @@ function openEditModal(c: Customer) {
 
 function openViewModal(c: Customer) {
   viewingCustomer.value = c
+  viewTab.value = 'details'
   showViewModal.value = true
 }
 
@@ -207,7 +211,7 @@ async function deleteCustomer(id: string) {
               <span class="badge" :class="typeBadgeClass(c.type)">{{ c.type.toUpperCase() }}</span>
             </td>
             <td class="text-center">{{ c.contacts.length }}</td>
-            <td class="text-center">{{ c.sites.length }}</td>
+            <td class="text-center">{{ siteCounts[c.id] ?? c.sites?.length ?? 0 }}</td>
             <td>
               <div class="table-actions">
                 <button class="btn btn-ghost btn-icon btn-sm" title="View" @click="openViewModal(c)">
@@ -311,6 +315,16 @@ async function deleteCustomer(id: string) {
             <button class="modal-close" @click="showViewModal = false"><X :size="18" /></button>
           </div>
           <div class="modal-body">
+            <div class="tabs mb-4">
+              <button type="button" class="tab" :class="{ active: viewTab === 'details' }" @click="viewTab = 'details'">Details</button>
+              <button type="button" class="tab" :class="{ active: viewTab === 'sites' }" @click="viewTab = 'sites'">Sites</button>
+            </div>
+            <CustomerSites
+              v-if="viewTab === 'sites'"
+              :customer-id="viewingCustomer.id"
+              @changed="(list) => (siteCounts[viewingCustomer!.id] = list.length)"
+            />
+            <template v-else>
             <!-- Top meta -->
             <div class="view-meta-row">
               <span class="badge badge-dot" :class="statusBadgeClass(viewingCustomer.status)">{{ viewingCustomer.status }}</span>
@@ -357,17 +371,7 @@ async function deleteCustomer(id: string) {
               <p v-else class="text-muted text-sm">No contacts recorded.</p>
             </div>
 
-            <!-- Sites -->
-            <div class="view-section">
-              <p class="view-section-title"><Building2 :size="15" /> Sites ({{ viewingCustomer.sites.length }})</p>
-              <div v-if="viewingCustomer.sites.length" class="view-sites-list">
-                <div v-for="site in viewingCustomer.sites" :key="site.id" class="view-site-card">
-                  <div class="font-semibold">{{ site.name }}</div>
-                  <div class="text-sm text-muted">{{ site.address }}, {{ site.city }} — {{ site.region }}</div>
-                </div>
-              </div>
-              <p v-else class="text-muted text-sm">No sites recorded.</p>
-            </div>
+            </template>
           </div>
           <div class="modal-footer">
             <button class="btn btn-secondary" @click="showViewModal = false">Close</button>

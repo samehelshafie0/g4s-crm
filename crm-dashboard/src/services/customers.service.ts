@@ -2,6 +2,8 @@ import { editable } from './payload'
 import { http, type ApiResponse, type PaginationParams } from './http'
 import type { Customer, CustomerSite, CustomerContact } from '@/types'
 
+const SITE_FIELDS = ['name', 'code', 'siteType', 'address', 'city', 'region', 'latitude', 'longitude', 'contactName', 'contactPhone', 'isActive'] as const
+
 // Send only editable header fields; contacts and sites have their own endpoints.
 function customerPayload(data: Partial<Customer>) {
   const { companyName, sector, region, status, type, crNumber, vatNumber, notes } = data
@@ -29,11 +31,11 @@ export const customersService = {
 
   // Sites
   addSite: (customerId: string, data: Partial<CustomerSite>) =>
-    http.post<ApiResponse<CustomerSite>>(`/customers/${customerId}/sites`, editable(data, ['name', 'address', 'city', 'region'])).then((r) => r.data),
+    http.post<ApiResponse<CustomerSite>>(`/customers/${customerId}/sites`, editable(data, SITE_FIELDS)).then((r) => r.data),
 
   updateSite: (customerId: string, siteId: string, data: Partial<CustomerSite>) =>
     http
-      .patch<ApiResponse<CustomerSite>>(`/customers/${customerId}/sites/${siteId}`, editable(data, ['name', 'address', 'city', 'region']))
+      .patch<ApiResponse<CustomerSite>>(`/customers/${customerId}/sites/${siteId}`, editable(data, SITE_FIELDS))
       .then((r) => r.data),
 
   deleteSite: (customerId: string, siteId: string) =>

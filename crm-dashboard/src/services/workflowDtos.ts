@@ -1,5 +1,5 @@
-import type { Quote, QuoteLineItem, Department, WarehouseStock, StockReservation, InventoryMovement, Team, Project, Document as CrmDocument } from '@/types'
-export type { WarehouseStock, StockReservation, InventoryMovement, Team, Project, CrmDocument }
+import type { Quote, QuoteLineItem, Department, WarehouseStock, StockReservation, InventoryMovement, Team, Document as CrmDocument } from '@/types'
+export type { WarehouseStock, StockReservation, InventoryMovement, Team, CrmDocument }
 export interface ServiceItem {
   id: string; sku: string; name: string; description: string; department: Department
   rateType: string; unitCost: number; unitPrice: number; isActive: boolean
@@ -13,6 +13,11 @@ export interface BuilderLine extends QuoteLineItem {
   serviceId?: string; recurringServiceId?: string; multiplier: number; discountPercent: number
   isOptional: boolean; isSelected: boolean; isPrintable: boolean
   headingText?: string; commentText?: string; rateType?: string; billingCycle?: string
+}
+export interface QuoteVersion {
+  id: string; quoteNumber: string; version: number; isCurrent: boolean; status: string; total: number
+  currency: string; fxRate: number; marginPercent: number; revisionReason: string
+  createdAt: string; supersededAt?: string | null; createdBy: string
 }
 export interface QuoteAppendix {
   id?: string; documentId: string; documentVersionId: string; label: string; documentName: string

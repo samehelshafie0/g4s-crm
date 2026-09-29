@@ -29,13 +29,23 @@ export interface CustomerContact {
   isPrimary: boolean
 }
 
+export type SiteType = 'head-office' | 'branch' | 'warehouse' | 'plant' | 'retail' | 'other'
+
 export interface CustomerSite {
   id: string
+  customerId?: string
   name: string
+  code: string
+  siteType: SiteType
   address: string
   city: string
   region: string
-  contacts: CustomerContact[]
+  latitude?: number | null
+  longitude?: number | null
+  contactName: string
+  contactPhone: string
+  isActive: boolean
+  contacts?: CustomerContact[]
 }
 
 export interface Customer extends BaseEntity {
@@ -88,6 +98,62 @@ export interface Opportunity extends BaseEntity {
   expectedCloseDate: string
   quoteIds: string[]
   notes: string
+  sites: CustomerSite[]
+  currentQuote?: OpportunityQuoteRef | null
+  deliveryStatus?: DeliveryStatus
+  projectManagerId?: string
+  projectManagerName?: string
+  startDate?: string
+  targetEndDate?: string
+  actualEndDate?: string
+  actualValue?: number
+  actualCost?: number
+}
+
+export interface OpportunityQuoteRef {
+  id: string
+  quoteNumber: string
+  version: number
+  status: QuoteStatus
+  total: number
+  currency: Currency
+  fxRate: number
+}
+
+// ─── Delivery (a won opportunity is the project) ────────────
+export type DeliveryStatus = 'planning' | 'in-progress' | 'on-hold' | 'completed' | 'cancelled'
+
+export type FulfilmentSource = 'stock' | 'purchase' | 'service'
+
+export interface FulfilmentOrder {
+  purchaseOrderId: string
+  poNumber: string
+  status: string
+  quantity: number
+  received: number
+  expectedDelivery?: string
+}
+
+export interface FulfilmentLine {
+  quoteLineItemId: string
+  sku: string
+  description: string
+  siteId?: string
+  quantity: number
+  source: FulfilmentSource | 'unassigned'
+  reserved: number
+  ordered: number
+  received: number
+  orders: FulfilmentOrder[]
+  state: 'covered' | 'on-order' | 'partial' | 'open' | 'not-applicable'
+}
+
+export interface Fulfilment {
+  basis: 'accepted' | 'current' | 'none'
+  quoteId?: string
+  quoteNumber?: string
+  version?: number
+  lines: FulfilmentLine[]
 }
 
 // ─── Manufacturers ──────────────────────────────────────────
@@ -229,12 +295,19 @@ export interface QuoteLineItem {
   unitPrice: number
   lineTotal: number
   marginPercent: number
+  siteId?: string
+  fulfilmentSource?: FulfilmentSource
 }
 
 export interface Quote extends BaseEntity {
   priceBookId?: string
   quoteNumber: string
-  opportunityId: string
+  opportunityId?: string
+  contractId?: string
+  isCurrent: boolean
+  revisionReason?: string
+  supersededAt?: string
+  fxRate: number
   customerId: string
   customerName: string
   version: number
@@ -257,29 +330,18 @@ export interface Quote extends BaseEntity {
   approvedAt?: string
 }
 
-// ─── Projects ──────────────────────────────────────────────
-export type ProjectStatus = 'planning' | 'in-progress' | 'on-hold' | 'completed' | 'cancelled'
-export type ProjectPriority = 'low' | 'medium' | 'high' | 'critical'
+export type QuoteCurrency = 'SAR' | 'USD'
 
-export interface Project extends BaseEntity {
-  projectNumber: string
-  name: string
-  customerName: string
-  customerId: string
-  quoteId: string
+export interface ContractQuote {
+  id: string
   quoteNumber: string
-  status: ProjectStatus
-  priority: ProjectPriority
-  startDate: string
-  targetEndDate: string
-  actualEndDate?: string
-  projectManager: string
-  totalValue: number
-  totalCost: number
-  marginPercent: number
-  lineItems: QuoteLineItem[]
-  purchaseOrders: string[]
-  notes: string
+  version: number
+  status: QuoteStatus
+  total: number
+  currency: Currency
+  fxRate: number
+  createdAt: string
+  role: 'origin' | 'raised-inside'
 }
 
 // ─── Price Books ────────────────────────────────────────────
@@ -471,6 +533,7 @@ export interface PurchaseOrderItem {
   unitCost: number
   total: number
   receivedQty: number
+  quoteLineItemId?: string
   leadTimeDays: number
 }
 
@@ -489,8 +552,8 @@ export interface PurchaseOrder extends BaseEntity {
   actualDelivery?: string
   sourceQuoteId?: string
   sourceQuoteNumber?: string
-  projectId?: string
-  projectName?: string
+  opportunityId?: string
+  opportunityTitle?: string
   notes: string
   approvedBy?: string
   approvedAt?: string
@@ -521,8 +584,8 @@ export interface SupplierQuote extends BaseEntity {
   supplierRef?: string
   sourceQuoteId?: string
   sourceQuoteNumber?: string
-  projectId?: string
-  projectName?: string
+  opportunityId?: string
+  opportunityTitle?: string
   status: SupplierQuoteStatus
   items: SupplierQuoteLineItem[]
   subtotal: number
