@@ -99,7 +99,7 @@ Dependencies: T03/T04 protect all mutations. T05 enables repeatable environments
 
 ## In progress — opportunity-centred flow, 2026-09-29
 
-**Backend DONE and tested, uncommitted; frontend TODO.** The opportunity becomes the project, each opportunity has one quote with retained versions, contracts hold quotes, sites and fulfilment links are recorded, and customer quotes are SAR/USD with a pinned rate. Migrations 000008–000014 are written and dry-run against a copy of live data but **not applied to the live database**. Do not deploy the backend without the frontend. Full detail, defaults taken and next steps: [docs/OPPORTUNITY_FLOW_PROGRESS.md](docs/OPPORTUNITY_FLOW_PROGRESS.md).
+**Backend and frontend DONE and committed on `feature/opportunity-flow`; not merged, not migrated, not deployed.** The opportunity becomes the project, each opportunity has one quote with retained versions, contracts hold quotes, sites and fulfilment links are recorded, and customer quotes are SAR/USD with a pinned rate. Migrations 000008–000014 are written and dry-run against a copy of live data but **not applied to the live database**. Do not deploy the backend without the frontend. Full detail, defaults taken and next steps: [docs/OPPORTUNITY_FLOW_PROGRESS.md](docs/OPPORTUNITY_FLOW_PROGRESS.md).
 
 Also shipped since 2026-09-17 (committed): dashboard redesign, nginx upload/timeout fix, Saudi catalog seed with rentals and live FX refresh, catalog visible in builder/price books, vendor-file product import, server-side PDF table extraction, supplier quote/PO customer links and record attachments, multipart upload fix.
 

@@ -63,20 +63,20 @@ The owner had not answered these; each can be changed later.
 
 `./scripts/test-integration.sh` — **passing**. Updated: every test quote now has an opportunity; the revision test now revises a *sent* quote, checks the number is kept, the old version is frozen, accepting wins the job, and an accepted version cannot be revised; the project test is now a delivery test; the appendix test revises after approval. Frontend unit tests not yet re-run (frontend unchanged).
 
-## Not done — frontend (the next session)
+## Done — frontend (all 8 phases, committed on `feature/opportunity-flow`)
 
-The frontend still calls removed or changed endpoints, so **do not deploy the backend alone.** Known breakages: Projects screen (`/projects`), quote creation without an opportunity, `/duplicate`, currency list of six, `projectId` on procurement forms.
+1. **Customers → Sites tab** (`CustomerSites.vue`) with the KSA city list.
+2. **Opportunities:** site multi-select; opportunity page `/opportunities/:id` (overview, quote and versions, fulfilment, procurement, documents, activity).
+3. **Quotes list:** one row per job with version; a new quote starts from an opportunity.
+4. **Quote builder:** version banner, revise with reason, version history, SAR/USD switch with pinned rate, site and fulfilment source per line.
+5. **Delivery screen** `/delivery` replaces Projects (`/projects` redirects). `ProjectsView` and `projectsService` removed.
+6. **Contracts:** Quotes section in the contract view and a "Raise quote" action.
+7. **Procurement:** opportunity replaces project on POs and supplier quotes; PO lines carry `quoteLineItemId` from the source quote.
+8. **Dashboard:** "Won, not delivered" tile.
 
-1. **Customers → Sites tab** with the KSA city list (city → region), site type, code, contact, active.
-2. **Opportunities:** site multi-select from the customer's sites; an opportunity page (overview, quote + versions, fulfilment, procurement, documents, activity).
-3. **Quotes list:** one row per job, version column; "New quote" starts from an opportunity (or contract).
-4. **Quote builder:** version banner and read-only superseded versions; "Revise" with reason; version history panel; SAR/USD switch via `POST /quotes/:id/currency` with the pinned rate shown; convert catalog SAR prices by `fxRate` when adding lines; site selector on lines; fulfilment source per line.
-5. **Delivery screen** replacing Projects (`/delivery`, `PATCH …/delivery`).
-6. **Contracts:** quotes tab + "Raise quote" (POST `/quotes` with `contractId`).
-7. **Procurement:** project selector → opportunity selector; PO/SQ payload whitelists (`opportunityId`, line `quoteLineItemId`).
-8. **Dashboard:** won-not-delivered tile.
-9. Remove `projectsService`, `ProjectsView`, `Project` types; update router + sidebar.
-10. Then: `npm test`, `npm run build`, update `docs/API_ENDPOINTS.md` / STATUS.md, commit in phases, rebuild images, run `migrate`, verify in the browser.
+`npm test` (18 pass) and `npm run build` (vue-tsc clean) pass. `docs/API_ENDPOINTS.md` is updated.
+
+**Still to do:** browser check against a migrated copy, rebuild images, then the release below. Nothing has been migrated or deployed.
 
 ## Before deploying
 

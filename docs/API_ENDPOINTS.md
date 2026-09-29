@@ -1,6 +1,6 @@
 # Backend endpoint inventory
 
-Updated 2026-09-17 from `crm-api/internal/router/router.go`. 180 registered routes. This is a route inventory, not a claim that every role or edge case is tested. See [API coverage](API_COVERAGE.md) for behavior and remaining gaps. Password email recovery routes return 501 until configured.
+Updated 2026-09-29 from `crm-api/internal/router/router.go`. 182 registered routes. This is a route inventory, not a claim that every role or edge case is tested. See [API coverage](API_COVERAGE.md) for behavior and remaining gaps. Password email recovery routes return 501 until configured.
 
 | Method | Path | Permission |
 |---|---|---|
@@ -19,6 +19,7 @@ Updated 2026-09-17 from `crm-api/internal/router/router.go`. 180 registered rout
 | DELETE | `/api/v1/contracts/:id` | `contracts:delete` |
 | GET | `/api/v1/contracts/:id` | `contracts:read` |
 | PATCH | `/api/v1/contracts/:id` | `contracts:update` |
+| GET | `/api/v1/contracts/:id/quotes` | `contracts:read` |
 | PATCH | `/api/v1/contracts/:id/activate` | `contracts:approve` |
 | POST | `/api/v1/contracts/:id/renew` | `contracts:create` |
 | PATCH | `/api/v1/contracts/:id/terminate` | `contracts:approve` |
@@ -37,6 +38,7 @@ Updated 2026-09-17 from `crm-api/internal/router/router.go`. 180 registered rout
 | DELETE | `/api/v1/customers/:id/sites/:siteId` | `customers:update` |
 | PATCH | `/api/v1/customers/:id/sites/:siteId` | `customers:update` |
 | GET | `/api/v1/customers/lookup` | `customers:read` |
+| GET | `/api/v1/delivery` | `projects:read` |
 | GET | `/api/v1/dashboard/alerts` | `dashboard:read` |
 | GET | `/api/v1/dashboard/expiring-quotes` | `dashboard:read` |
 | GET | `/api/v1/dashboard/kpis` | `dashboard:read` |
@@ -87,6 +89,9 @@ Updated 2026-09-17 from `crm-api/internal/router/router.go`. 180 registered rout
 | DELETE | `/api/v1/opportunities/:id` | `opportunities:delete` |
 | GET | `/api/v1/opportunities/:id` | `opportunities:read` |
 | PATCH | `/api/v1/opportunities/:id` | `opportunities:update` |
+| GET | `/api/v1/opportunities/:id/activity` | `opportunities:read` |
+| PATCH | `/api/v1/opportunities/:id/delivery` | `projects:update` |
+| GET | `/api/v1/opportunities/:id/fulfilment` | `opportunities:read` or `projects:read` |
 | PATCH | `/api/v1/opportunities/:id/stage` | `opportunities:update` |
 | GET | `/api/v1/opportunities/pipeline` | `opportunities:read` |
 | GET | `/api/v1/price-books` | `price-books:read` |
@@ -137,11 +142,6 @@ Updated 2026-09-17 from `crm-api/internal/router/router.go`. 180 registered rout
 | POST | `/api/v1/products/recalculate-costs` | `products:update` |
 | POST | `/api/v1/products/import` | `products:create` + `products:update` |
 | POST | `/api/v1/extract/pdf-tables` | `products:create` or `procurement:create` |
-| GET | `/api/v1/projects` | `projects:read` |
-| POST | `/api/v1/projects` | `projects:create` |
-| DELETE | `/api/v1/projects/:id` | `projects:delete` |
-| GET | `/api/v1/projects/:id` | `projects:read` |
-| PATCH | `/api/v1/projects/:id` | `projects:update` |
 | GET | `/api/v1/quotes` | `quotes:read` |
 | POST | `/api/v1/quotes` | `quotes:create` |
 | DELETE | `/api/v1/quotes/:id` | `quotes:delete` |
@@ -154,13 +154,14 @@ Updated 2026-09-17 from `crm-api/internal/router/router.go`. 180 registered rout
 | GET | `/api/v1/quotes/:id/pdf` | `quotes:read` |
 | PUT | `/api/v1/quotes/:id/builder` | `quotes:update` |
 | POST | `/api/v1/quotes/:id/convert-to-contract` | `contracts:create` |
+| POST | `/api/v1/quotes/:id/currency` | `quotes:update` |
 | PATCH | `/api/v1/quotes/:id/decline` | `quotes:update` |
-| POST | `/api/v1/quotes/:id/duplicate` | `quotes:create` |
 | POST | `/api/v1/quotes/:id/recalculate` | `quotes:update` |
 | PATCH | `/api/v1/quotes/:id/reject` | `quotes:approve` |
 | POST | `/api/v1/quotes/:id/revisions` | `quotes:create` |
 | PATCH | `/api/v1/quotes/:id/send` | `quotes:update` |
 | PATCH | `/api/v1/quotes/:id/submit` | `quotes:update` |
+| GET | `/api/v1/quotes/:id/versions` | `quotes:read` |
 | GET | `/api/v1/recurring-services` | `recurring-services:read` |
 | POST | `/api/v1/recurring-services` | `recurring-services:create` |
 | DELETE | `/api/v1/recurring-services/:id` | `recurring-services:delete` |
