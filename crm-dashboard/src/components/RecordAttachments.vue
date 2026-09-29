@@ -13,7 +13,7 @@ import type { Document as CrmDocument } from '@/types'
  * the same document can sit on the quote and the order it produced.
  */
 const props = defineProps<{
-  entityType: 'quote' | 'purchase-order' | 'supplier-quote' | 'project'
+  entityType: 'quote' | 'purchase-order' | 'supplier-quote' | 'opportunity'
   entityId: string
   /** Shown in the uploaded document's name so the library stays readable */
   entityLabel?: string

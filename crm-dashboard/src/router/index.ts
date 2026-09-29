@@ -39,6 +39,12 @@ const router = createRouter({
       meta: { title: 'Opportunities & Leads' },
     },
     {
+      path: '/opportunities/:id',
+      name: 'opportunity',
+      component: () => import('@/views/OpportunityView.vue'),
+      meta: { title: 'Opportunity' },
+    },
+    {
       path: '/manufacturers',
       name: 'manufacturers',
       component: () => import('@/views/ManufacturersView.vue'),

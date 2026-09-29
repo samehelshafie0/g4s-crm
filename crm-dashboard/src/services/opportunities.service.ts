@@ -1,6 +1,7 @@
 import { editable } from './payload'
 import { http, type ApiResponse, type PaginationParams } from './http'
 import type { Opportunity, Fulfilment, DeliveryStatus } from '@/types'
+import type { Activity } from './workflowDtos'
 
 export interface DeliveryInput {
   deliveryStatus: DeliveryStatus
@@ -11,6 +12,8 @@ export interface DeliveryInput {
   actualValue?: number | null
   actualCost?: number | null
 }
+
+export type OpportunityInput = Partial<Opportunity> & { siteIds?: string[] }
 
 export const opportunitiesService = {
   list: (params?: PaginationParams) =>
@@ -24,10 +27,10 @@ export const opportunitiesService = {
       .get<ApiResponse<{ stage: string; count: number; value: number }[]>>('/opportunities/pipeline')
       .then((r) => r.data),
 
-  create: (data: Partial<Opportunity>) =>
+  create: (data: OpportunityInput) =>
     http.post<ApiResponse<Opportunity>>('/opportunities', editable(data, ['title', 'customerId', 'stage', 'serviceTypes', 'estimatedValue', 'estimatedCost', 'winProbability', 'salesExecutiveId', 'preSalesId', 'expectedCloseDate', 'notes', 'siteIds'])).then((r) => r.data),
 
-  update: (id: string, data: Partial<Opportunity>) =>
+  update: (id: string, data: OpportunityInput) =>
     http.patch<ApiResponse<Opportunity>>(`/opportunities/${id}`, editable(data, ['title', 'customerId', 'stage', 'serviceTypes', 'estimatedValue', 'estimatedCost', 'winProbability', 'salesExecutiveId', 'preSalesId', 'expectedCloseDate', 'notes', 'siteIds'])).then((r) => r.data),
 
   updateStage: (id: string, stage: string, notes?: string) =>
@@ -43,6 +46,9 @@ export const opportunitiesService = {
 
   updateDelivery: (id: string, data: DeliveryInput) =>
     http.patch<ApiResponse<Opportunity>>(`/opportunities/${id}/delivery`, data).then((r) => r.data),
+
+  activity: (id: string) =>
+    http.get<ApiResponse<Activity[]>>(`/opportunities/${id}/activity`).then((r) => r.data),
 
   delivery: (params?: PaginationParams & Record<string, unknown>) =>
     http.get<ApiResponse<Opportunity[]>>('/delivery', { params }).then((r) => r.data),

@@ -23,7 +23,7 @@ const success = ref('')
 const file = ref<File | null>(null)
 const fileInput = ref<HTMLInputElement>()
 const metadata = ref({name:'',category:'general' as CrmDocument['category'],documentType:'technical' as CrmDocument['documentType'],tags:''})
-const linkTypes = [ ['customer','customers','Customer'], ['opportunity','opportunities','Opportunity'], ['quote','quotes','Quote'], ['contract','contracts','Contract'], ['project','projects','Project'], ['product','products','Product'], ['purchase-order','procurement/purchase-orders','Purchase order'] ] as const
+const linkTypes = [ ['customer','customers','Customer'], ['opportunity','opportunities','Opportunity'], ['quote','quotes','Quote'], ['contract','contracts','Contract'], ['product','products','Product'], ['purchase-order','procurement/purchase-orders','Purchase order'] ] as const
 const allowedLinks = computed(() => linkTypes.filter(([,path]) => auth.can(`${path.split('/')[0]}:read`)))
 const linkType = ref<string>(allowedLinks.value[0]?.[0] ?? '')
 const query = ref('')

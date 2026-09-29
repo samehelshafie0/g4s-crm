@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import {
   Plus,
   Search,
@@ -16,15 +16,16 @@ import {
   User,
   FileText,
 } from 'lucide-vue-next'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { useOpportunitiesStore } from '@/stores/opportunities'
-import type { Opportunity, OpportunityStage, ServiceType } from '@/types'
+import type { Opportunity, OpportunityStage, ServiceType, CustomerSite } from '@/types'
 
 import { customersService, usersService } from '@/services'
 import { allPages } from '@/services/collections'
 import { errorMessage } from '@/services/payload'
 
 const router = useRouter()
+const route = useRoute()
 const oppStore = useOpportunitiesStore()
 
 type ViewMode = 'pipeline' | 'table'
@@ -71,7 +72,8 @@ const customers = ref<{id: string; name: string}[]>([])
 const salesTeam = ref<{id: string; name: string}[]>([])
 const preSales = ref<{id: string; name: string}[]>([])
 
-const defaultForm = (): Omit<Opportunity, 'id' | 'createdAt' | 'updatedAt' | 'estimatedMargin' | 'quoteIds'> => ({
+type OppForm = Omit<Opportunity, 'id' | 'createdAt' | 'updatedAt' | 'estimatedMargin' | 'quoteIds' | 'sites'> & { siteIds: string[] }
+const defaultForm = (): OppForm => ({
   title: '',
   customerId: '',
   customerName: '',
@@ -86,6 +88,7 @@ const defaultForm = (): Omit<Opportunity, 'id' | 'createdAt' | 'updatedAt' | 'es
   preSalesName: '',
   expectedCloseDate: '',
   notes: '',
+  siteIds: [],
 })
 
 const form = ref(defaultForm())
@@ -101,6 +104,12 @@ onMounted(async () => {
     salesTeam.value = names.filter(u => ['admin', 'sales_manager', 'sales_executive'].includes(u.role))
     preSales.value = names.filter(u => ['admin', 'pre_sales'].includes(u.role))
     await oppStore.fetchOpportunities({ limit: 100 })
+    const editId = route.query.edit as string | undefined
+    if (editId) {
+      const target = oppStore.opportunities.find((o) => o.id === editId)
+      if (target) openEditModal(target)
+      await router.replace({ path: '/leads' })
+    }
   } catch (error) { window.alert(errorMessage(error)) }
 })
 
@@ -179,6 +188,7 @@ function openEditModal(o: Opportunity) {
     preSalesName: o.preSalesName,
     expectedCloseDate: o.expectedCloseDate?.slice(0, 10),
     notes: o.notes,
+    siteIds: (o.sites ?? []).map((x) => x.id),
   }
   showAddModal.value = true
 }
@@ -186,6 +196,30 @@ function openEditModal(o: Opportunity) {
 function onCustomerChange() {
   const found = customers.value.find((c) => c.id === form.value.customerId)
   form.value.customerName = found?.name ?? ''
+  form.value.siteIds = []
+}
+
+const customerSites = ref<CustomerSite[]>([])
+watch(
+  () => [showAddModal.value, form.value.customerId] as const,
+  async ([open, customerId]) => {
+    customerSites.value = []
+    if (!open || !customerId) return
+    try {
+      const res = await customersService.sites(customerId)
+      customerSites.value = res.data ?? []
+    } catch (e) { window.alert(errorMessage(e)) }
+  },
+)
+// Active sites, plus any already-chosen site that has since been deactivated.
+const selectableSites = computed(() =>
+  customerSites.value.filter((s) => s.isActive || form.value.siteIds.includes(s.id)),
+)
+const customerLocked = computed(() => !!editingOpportunity.value?.currentQuote)
+function toggleSite(id: string) {
+  const i = form.value.siteIds.indexOf(id)
+  if (i === -1) form.value.siteIds.push(id)
+  else form.value.siteIds.splice(i, 1)
 }
 function onSalesChange() {
   const found = salesTeam.value.find((u) => u.id === form.value.salesExecutiveId)
@@ -231,7 +265,12 @@ async function deleteOpportunity(id: string) {
 }
 
 function createQuoteFromOpp(opp: Opportunity) {
-  router.push({ path: '/quotes', query: { newFromOpp: opp.id } })
+  if (opp.currentQuote) router.push(`/quotes/${opp.currentQuote.id}/builder`)
+  else router.push({ path: '/quotes', query: { newFromOpp: opp.id } })
+}
+
+function openOpportunity(opp: Opportunity) {
+  router.push(`/opportunities/${opp.id}`)
 }
 
 function probClass(prob: number): string {
@@ -326,7 +365,7 @@ function probClass(prob: number): string {
           <div class="pipeline-column-total">{{ formatCurrency(col.total) }}</div>
         </div>
         <div class="pipeline-column-body">
-          <div v-for="opp in col.items" :key="opp.id" class="pipeline-card card card-clickable" @click="openEditModal(opp)">
+          <div v-for="opp in col.items" :key="opp.id" class="pipeline-card card card-clickable" @click="openOpportunity(opp)">
             <div class="pipeline-card-title">{{ opp.title }}</div>
             <div class="pipeline-card-customer">{{ opp.customerName }}</div>
             <div class="pipeline-card-meta">
@@ -361,7 +400,7 @@ function probClass(prob: number): string {
         </thead>
         <tbody>
           <tr v-for="o in filteredOpportunities" :key="o.id">
-            <td class="font-semibold">{{ o.title }}</td>
+            <td class="font-semibold"><a href="#" class="row-link" @click.prevent="openOpportunity(o)">{{ o.title }}</a></td>
             <td>{{ o.customerName }}</td>
             <td>
               <span class="badge badge-dot" :class="stageBadgeClass(o.stage)">
@@ -384,7 +423,7 @@ function probClass(prob: number): string {
             <td>{{ o.expectedCloseDate }}</td>
             <td>
               <div class="table-actions">
-                <button class="btn btn-ghost btn-icon btn-sm" title="Create Quote" @click="createQuoteFromOpp(o)">
+                <button class="btn btn-ghost btn-icon btn-sm" title="Quote" @click="createQuoteFromOpp(o)">
                   <FileText :size="15" />
                 </button>
                 <button class="btn btn-ghost btn-icon btn-sm" title="Edit" @click="openEditModal(o)">
@@ -425,7 +464,7 @@ function probClass(prob: number): string {
             <div class="form-row">
               <div class="form-group">
                 <label class="form-label">Customer</label>
-                <select v-model="form.customerId" class="form-select" @change="onCustomerChange">
+                <select v-model="form.customerId" class="form-select" :disabled="customerLocked" :title="customerLocked ? 'The customer cannot change once a quote exists' : ''" @change="onCustomerChange">
                   <option value="">Select customer…</option>
                   <option v-for="c in customers" :key="c.id" :value="c.id">{{ c.name }}</option>
                 </select>
@@ -436,6 +475,17 @@ function probClass(prob: number): string {
                   <option v-for="s in pipelineStages" :key="s" :value="s">{{ stageConfig[s].label }}</option>
                 </select>
               </div>
+            </div>
+
+            <div v-if="form.customerId" class="form-group">
+              <label class="form-label">Sites</label>
+              <div v-if="selectableSites.length" class="service-type-grid">
+                <label v-for="site in selectableSites" :key="site.id" class="form-checkbox">
+                  <input type="checkbox" :checked="form.siteIds.includes(site.id)" @change="toggleSite(site.id)" />
+                  {{ site.name }}<span v-if="site.city" class="text-muted"> · {{ site.city }}</span><span v-if="!site.isActive" class="text-muted"> (inactive)</span>
+                </label>
+              </div>
+              <p v-else class="text-sm text-muted">This customer has no sites yet. Add them from Customers → Sites.</p>
             </div>
 
             <div class="form-group">
@@ -503,6 +553,8 @@ function probClass(prob: number): string {
 </template>
 
 <style scoped>
+.row-link { color: inherit; text-decoration: none; }
+.row-link:hover { text-decoration: underline; }
 .leads-view {
   padding: var(--space-6);
 }

@@ -2,6 +2,7 @@ import { allPages } from '@/services/collections'
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { opportunitiesService } from '@/services'
+import type { OpportunityInput } from '@/services/opportunities.service'
 import type { Opportunity } from '@/types'
 
 export const useOpportunitiesStore = defineStore('opportunities', () => {
@@ -48,7 +49,7 @@ export const useOpportunitiesStore = defineStore('opportunities', () => {
     return opportunities.value.filter((o) => o.customerId === customerId)
   }
 
-  async function addOpportunity(data: Partial<Opportunity>) {
+  async function addOpportunity(data: OpportunityInput) {
     const res = await opportunitiesService.create(data)
     if (res.success) {
       opportunities.value.unshift(res.data)
@@ -57,7 +58,7 @@ export const useOpportunitiesStore = defineStore('opportunities', () => {
     throw new Error(res.error?.message ?? 'Failed to create opportunity')
   }
 
-  async function updateOpportunity(id: string, data: Partial<Opportunity>) {
+  async function updateOpportunity(id: string, data: OpportunityInput) {
     const res = await opportunitiesService.update(id, data)
     if (res.success) {
       const idx = opportunities.value.findIndex((o) => o.id === id)
