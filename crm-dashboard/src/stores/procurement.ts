@@ -20,9 +20,6 @@ export const useProcurementStore = defineStore('procurement', () => {
   const inTransitPOs = computed(() =>
     purchaseOrders.value.filter((p) => p.status === 'ordered' || p.status === 'partial-received').length,
   )
-  const totalValue = computed(() =>
-    purchaseOrders.value.reduce((sum: number, p: any) => sum + (p.total ?? 0), 0),
-  )
   const activeSQCount = computed(() =>
     supplierQuotes.value.filter((s) => s.status === 'received' || s.status === 'under-review').length,
   )
@@ -139,7 +136,6 @@ export const useProcurementStore = defineStore('procurement', () => {
     totalPOs,
     pendingPOs,
     inTransitPOs,
-    totalValue,
     activeSQCount,
     sqTotalValue,
     totalGRs,

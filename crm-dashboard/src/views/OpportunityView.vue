@@ -216,7 +216,7 @@ function openQuote() {
                   <td class="text-right">{{ l.quantity }}</td>
                   <td class="text-right">{{ l.reserved }}</td>
                   <td class="text-right">{{ l.ordered }}</td>
-                  <td class="text-right">{{ l.received }}</td>
+                  <td class="text-right">{{ l.received }}<span v-if="l.damaged" class="text-danger text-xs"> +{{ l.damaged }} damaged</span></td>
                   <td><span class="badge" :class="stateBadge[l.state]">{{ label(l.state) }}</span></td>
                 </tr>
                 <tr v-if="!fulfilment.lines.length"><td colspan="7" class="text-muted">No lines.</td></tr>

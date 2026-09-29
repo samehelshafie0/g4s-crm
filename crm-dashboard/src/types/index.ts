@@ -144,6 +144,8 @@ export interface FulfilmentLine {
   reserved: number
   ordered: number
   received: number
+  damaged: number
+  outstanding: number
   orders: FulfilmentOrder[]
   state: 'covered' | 'on-order' | 'partial' | 'open' | 'not-applicable'
 }

@@ -20,11 +20,85 @@ import type {
   Quote, QuoteLineItem, Opportunity,
 } from '@/types'
 
-import { procurementService, productsService, manufacturersService, quotesService, inventoryService, opportunitiesService } from '@/services'
+import { procurementService, productsService, manufacturersService, quotesService, inventoryService, opportunitiesService, exchangeRatesService } from '@/services'
 import { allPages } from '@/services/collections'
 import { errorMessage } from '@/services/payload'
-import type { Product } from '@/types'
+import type { Product, Currency } from '@/types'
 const catalogProducts = ref<Product[]>([])
+const fxRates = ref<Record<string, number>>({ SAR: 1 })
+const currencies: Currency[] = ['SAR', 'USD', 'EUR', 'GBP', 'AED', 'CNY']
+
+function convert(amount: number, from: Currency, to: Currency): number {
+  if (from === to) return amount
+  const sar = amount * (fxRates.value[from] ?? 1)
+  return Math.round((sar / (fxRates.value[to] ?? 1)) * 100) / 100
+}
+
+// What each supplier charges for each catalog product. Supplier quotes are the
+// firmest price, then the supplier catalog, then the vendor price recorded on
+// the product when it was imported, so lookups take the first match.
+interface Offer {
+  productId: string; sku: string; name: string; manufacturer: string
+  supplierName: string; cost: number; currency: Currency; leadTimeDays: number; moq: number; sqRef: string
+}
+const poTotalSAR = computed(() => store.purchaseOrders.filter(po => po.status !== 'cancelled').reduce((sum, po) => sum + convert(po.total, po.currency, 'SAR'), 0))
+const sameName = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase()
+const catalogOffers = computed<Offer[]>(() => {
+  const offers: Offer[] = []
+  for (const sq of store.supplierQuotes) {
+    if (sq.status === 'expired' || sq.status === 'rejected') continue
+    for (const i of sq.items) {
+      const productId = i.productId || catalogProducts.value.find(p => sameName(p.sku, i.productSku))?.id
+      if (productId) offers.push({ productId, sku: i.productSku, name: i.productName, manufacturer: i.manufacturerName, supplierName: sq.supplierName, cost: i.unitCost, currency: sq.currency, leadTimeDays: i.leadTimeDays, moq: i.moq || 1, sqRef: sq.sqNumber })
+    }
+  }
+  for (const si of store.supplierItems) {
+    offers.push({ productId: si.productId, sku: si.productSku, name: si.productName, manufacturer: si.manufacturerName, supplierName: si.supplierName, cost: si.latestCost, currency: 'SAR', leadTimeDays: si.leadTimeDays, moq: si.moq, sqRef: '' })
+  }
+  for (const p of catalogProducts.value) {
+    const base = { productId: p.id, sku: p.sku, name: p.name, manufacturer: p.manufacturerName ?? '', sqRef: '' }
+    const entries = p.vendorEntries ?? []
+    for (const v of entries) {
+      offers.push({ ...base, supplierName: v.vendorName, cost: v.unitCost, currency: v.currency || p.originCurrency, leadTimeDays: v.leadTimeDays || p.leadTimeDays, moq: v.moq || 1 })
+    }
+    if (!entries.length && p.supplierName) {
+      offers.push({ ...base, supplierName: p.supplierName, cost: p.unitCostOrigin, currency: p.originCurrency, leadTimeDays: p.leadTimeDays, moq: 1 })
+    }
+  }
+  return offers
+})
+function supplierOffer(productId: string, supplierName: string): Offer | undefined {
+  return catalogOffers.value.find(o => o.productId === productId && sameName(o.supplierName, supplierName))
+}
+function cheapestOffer(productId: string): Offer | undefined {
+  let best: Offer | undefined
+  for (const o of catalogOffers.value) {
+    if (o.productId !== productId) continue
+    if (!best || convert(o.cost, o.currency, 'SAR') < convert(best.cost, best.currency, 'SAR')) best = o
+  }
+  return best
+}
+function productForLine(li: { productId?: string; sku?: string }): Product | undefined {
+  return catalogProducts.value.find(p => p.id === li.productId) ?? (li.sku ? catalogProducts.value.find(p => sameName(p.sku, li.sku!)) : undefined)
+}
+
+// Supplier records, plus the vendors named on catalog products that have no
+// record yet, so a PO can go to the vendor the price list came from.
+interface SupplierOption {
+  id: string; name: string; code: string; country: string; categories: { id: string; name: string }[]
+  label: string; contactEmail: string; record: boolean
+}
+const supplierOptions = computed<SupplierOption[]>(() => {
+  const list: SupplierOption[] = mfrStore.suppliers.map(m => ({ id: m.id, name: m.name, code: m.code, country: m.country, categories: m.categories, label: m.vendorType === 'both' ? 'Mfr + Supplier' : 'Supplier', contactEmail: m.contactEmail, record: true }))
+  const known = new Set(list.map(s => s.name.trim().toLowerCase()))
+  for (const o of catalogOffers.value) {
+    const key = o.supplierName.trim().toLowerCase()
+    if (!key || known.has(key)) continue
+    known.add(key)
+    list.push({ id: `vendor:${key}`, name: o.supplierName.trim(), code: '', country: '', categories: [], label: 'Vendor in catalog', contactEmail: '', record: false })
+  }
+  return list
+})
 const availableStock = ref<Record<string,number>>({})
 
 const store = useProcurementStore()
@@ -33,7 +107,7 @@ const quotesStore = useQuotesStore()
 const opportunityList = ref<Opportunity[]>([])
 
 async function reloadProcurement() {await Promise.all([store.fetchPurchaseOrders({limit:100}),store.fetchSupplierQuotes({limit:100}),store.fetchGoodsReceipts({limit:100})]);store.supplierItems=(await procurementService.supplierItems()).data}
-onMounted(async()=>{try{await reloadProcurement();catalogProducts.value=await allPages(productsService.list);mfrStore.manufacturers=await allPages(manufacturersService.list);quotesStore.quotes=await allPages(quotesService.list);opportunityList.value=await allPages(opportunitiesService.list);const stock=await allPages(inventoryService.listStock);for(const row of stock) availableStock.value[row.productId]=(availableStock.value[row.productId]??0)+row.availableQty}catch(e){window.alert(errorMessage(e))}})
+onMounted(async()=>{try{await reloadProcurement();catalogProducts.value=await allPages(productsService.list);mfrStore.manufacturers=await allPages(manufacturersService.list);quotesStore.quotes=await allPages(quotesService.list);opportunityList.value=await allPages(opportunitiesService.list);for(const rate of (await exchangeRatesService.list()).data) fxRates.value[rate.fromCurrency]=rate.currentRate;const stock=await allPages(inventoryService.listStock);for(const row of stock) availableStock.value[row.productId]=(availableStock.value[row.productId]??0)+row.availableQty}catch(e){window.alert(errorMessage(e))}})
 
 function uid(): string { return Math.random().toString(36).slice(2, 11) }
 
@@ -41,7 +115,8 @@ function formatSAR(v: number): string {
   return v.toLocaleString('en-SA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
-function formatDate(dateStr: string): string {
+function formatDate(dateStr?: string | null): string {
+  if (!dateStr) return '—'
   return new Date(dateStr).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
@@ -143,8 +218,22 @@ const availableQuotes = computed(() => {
   return all.filter(qt => qt.quoteNumber.toLowerCase().includes(q) || qt.customerName.toLowerCase().includes(q) || qt.notes.toLowerCase().includes(q))
 })
 
-function selectSource(quote: Quote) {
+// What each line of an accepted job still needs bought: its quantity less what
+// is already held for it or still on order.
+const sourceNeed = ref<Record<string, number>>({})
+const remainingFor = (li: QuoteLineItem) => sourceNeed.value[li.id] ?? li.quantity
+
+async function selectSource(quote: Quote) {
   selectedSourceQuote.value = quote
+  sourceNeed.value = {}
+  if (quote.status === 'accepted' && quote.opportunityId) {
+    try {
+      const fulfilment = (await opportunitiesService.fulfilment(quote.opportunityId)).data
+      for (const line of fulfilment.lines) {
+        sourceNeed.value[line.quoteLineItemId] = Math.max(0, Math.ceil(line.quantity) - line.reserved - line.outstanding)
+      }
+    } catch (e) { window.alert(errorMessage(e)); return }
+  }
   createPOStep.value = 'supplier'
 }
 
@@ -159,17 +248,11 @@ const sourceItems = computed(() => {
   if (!selectedSourceQuote.value) return []
   return selectedSourceQuote.value.lineItems.filter(li => li.category === 'materials')
 })
+const sourceToBuy = computed(() => sourceItems.value.filter(li => remainingFor(li) > 0))
 
-// Step 2: Supplier (with catalog/quote requirement)
-const selectedSupplier = computed(() => {
-  if (!selectedSupplierId.value) return null
-  return mfrStore.manufacturers.find(m => m.id === selectedSupplierId.value) ?? null
-})
-
+// Step 2: Supplier
 function supplierHasCatalog(supplierName: string): boolean {
-  const hasItems = store.supplierItems.some(si => si.supplierName === supplierName)
-  const hasQuotes = store.supplierQuotes.some(sq => sq.supplierName === supplierName && sq.status !== 'expired' && sq.status !== 'rejected')
-  return hasItems || hasQuotes
+  return catalogOffers.value.some(o => sameName(o.supplierName, supplierName))
 }
 
 interface SupplierCoverage {
@@ -181,21 +264,16 @@ interface SupplierCoverage {
 }
 
 function getSupplierCoverage(supplierName: string): SupplierCoverage {
-  const items = sourceItems.value
+  const items = sourceToBuy.value
   if (items.length === 0) return { matchedSkus: [], matchedNames: [], totalSourceItems: 0, matchCount: 0, coveragePercent: 0 }
 
-  const name = supplierName.toLowerCase()
   const matchedSkus: string[] = []
   const matchedNames: string[] = []
 
   for (const li of items) {
-    const sku = li.sku || ''
-    const hasCatalog = sku && store.supplierItems.some(si => si.productSku === sku && si.supplierName.toLowerCase() === name)
-    const hasSQ = sku && store.supplierQuotes.some(sq =>
-      sq.supplierName.toLowerCase() === name && sq.status !== 'expired' && sq.status !== 'rejected' && sq.items.some(i => i.productSku === sku),
-    )
-    if (hasCatalog || hasSQ) {
-      matchedSkus.push(sku)
+    const product = productForLine(li)
+    if (product && supplierOffer(product.id, supplierName)) {
+      matchedSkus.push(li.sku || product.sku)
       matchedNames.push(li.description.length > 30 ? li.description.slice(0, 28) + '...' : li.description)
     }
   }
@@ -211,10 +289,10 @@ function getSupplierCoverage(supplierName: string): SupplierCoverage {
 
 const filteredSupplierList = computed(() => {
   const q = supplierSearchQuery.value.toLowerCase().trim()
-  let list = [...mfrStore.suppliers]
+  let list = [...supplierOptions.value]
   if (q) list = list.filter(s => s.name.toLowerCase().includes(q) || s.code.toLowerCase().includes(q))
 
-  if (sourceItems.value.length > 0) {
+  if (sourceToBuy.value.length > 0) {
     list.sort((a, b) => {
       const ca = getSupplierCoverage(a.name)
       const cb = getSupplierCoverage(b.name)
@@ -229,21 +307,15 @@ const filteredSupplierList = computed(() => {
 })
 
 const supplierAvailableQuotes = computed(() => {
-  if (!selectedSupplier.value) return []
-  const name = selectedSupplier.value.name
+  if (!newPOSupplier.value) return []
   return store.supplierQuotes.filter(sq =>
-    sq.supplierName === name && sq.status !== 'expired' && sq.status !== 'rejected',
+    sameName(sq.supplierName, newPOSupplier.value) && sq.status !== 'expired' && sq.status !== 'rejected',
   )
 })
 
-const supplierCatalogItems = computed(() => {
-  if (!selectedSupplier.value) return []
-  return store.supplierItems.filter(si => si.supplierName === selectedSupplier.value!.name)
-})
-
-function selectSupplierForPO(mfr: Manufacturer) {
-  selectedSupplierId.value = mfr.id
-  newPOSupplier.value = mfr.name
+function selectSupplierForPO(supplier: SupplierOption) {
+  selectedSupplierId.value = supplier.record ? supplier.id : ''
+  newPOSupplier.value = supplier.name
   autoMatchSourceItems()
   createPOStep.value = 'items'
 }
@@ -253,6 +325,7 @@ function enterNewSupplier() {
   if (supplierSearchQuery.value.trim()) {
     newPOSupplier.value = supplierSearchQuery.value.trim()
   }
+  autoMatchSourceItems()
   createPOStep.value = 'items'
 }
 
@@ -262,8 +335,40 @@ interface NewPOItem {
   leadTimeDays: number; onHand: number; bestSupplierPrice: number | null;
   bestSupplierName: string; landingCost: number | null; lastReceiveDate: string;
   fromSQ: boolean; sqRef: string; matched: boolean;
+  quoteLineItemId?: string; priceFrom?: string
 }
 const newPOItems = ref<NewPOItem[]>([])
+const newPOCurrency = ref<Currency>('SAR')
+
+function setPOCurrency(to: Currency) {
+  const from = newPOCurrency.value
+  for (const item of newPOItems.value) {
+    item.unitCost = convert(item.unitCost, from, to)
+    if (item.bestSupplierPrice !== null) item.bestSupplierPrice = convert(item.bestSupplierPrice, from, to)
+  }
+  newPOCurrency.value = to
+}
+
+// A PO line for a catalog product, priced from the chosen supplier when it has
+// a price, otherwise from the cheapest known vendor so the buyer can see why.
+function catalogPOLine(product: Product, qty: number, quoteLineItemId?: string): NewPOItem {
+  const own = supplierOffer(product.id, newPOSupplier.value)
+  const best = cheapestOffer(product.id)
+  const offer = own ?? best
+  const receipts = store.getReceiptHistoryForProduct(product.id)
+  const lastReceipt = receipts.length > 0 ? receipts[0] : null
+  return {
+    sku: product.sku, name: product.name, manufacturer: product.manufacturerName ?? '',
+    qty, unitCost: offer ? convert(offer.cost, offer.currency, newPOCurrency.value) : 0,
+    leadTimeDays: offer?.leadTimeDays || product.leadTimeDays || 30,
+    onHand: availableStock.value[product.id] ?? 0,
+    bestSupplierPrice: best ? convert(best.cost, best.currency, newPOCurrency.value) : null, bestSupplierName: best?.supplierName ?? '',
+    landingCost: lastReceipt ? lastReceipt.item.landingCost : null,
+    lastReceiveDate: lastReceipt ? lastReceipt.gr.receiveDate : '',
+    fromSQ: Boolean(own?.sqRef), sqRef: own?.sqRef ?? '', matched: Boolean(own),
+    quoteLineItemId, priceFrom: !own && offer ? offer.supplierName : undefined,
+  }
+}
 
 const newPOItemSearch = ref('')
 const showPOItemDropdown = ref(false)
@@ -271,74 +376,32 @@ const showPOItemDropdown = ref(false)
 function autoMatchSourceItems() {
   newPOItems.value = []
   if (!selectedSourceQuote.value) return
-  const materialItems = selectedSourceQuote.value.lineItems.filter(li => li.category === 'materials' && li.sku)
-  const supplierName = newPOSupplier.value.toLowerCase()
-
-  for (const li of materialItems) {
-    const catalogMatch = store.supplierItems.find(si => si.productSku === li.sku && si.supplierName.toLowerCase() === supplierName)
-    const sqMatch = findSQItemMatch(li.sku || '', newPOSupplier.value)
-
-    if (catalogMatch) {
-      const receipts = store.getReceiptHistoryForProduct(catalogMatch.productId)
-      const lastReceipt = receipts.length > 0 ? receipts[0] : null
-      newPOItems.value.push({
-        sku: li.sku || '', name: li.description, manufacturer: li.manufacturerName || '',
-        qty: li.quantity, unitCost: catalogMatch.latestCost, leadTimeDays: catalogMatch.leadTimeDays,
-        onHand: li.stockAvailable || 0,
-        bestSupplierPrice: catalogMatch.latestCost, bestSupplierName: catalogMatch.supplierName,
-        landingCost: lastReceipt ? lastReceipt.item.landingCost : null,
-        lastReceiveDate: lastReceipt ? lastReceipt.gr.receiveDate : '',
-        fromSQ: false, sqRef: '', matched: true,
-      })
-    } else if (sqMatch) {
-      newPOItems.value.push({
-        sku: li.sku || '', name: li.description, manufacturer: li.manufacturerName || '',
-        qty: li.quantity, unitCost: sqMatch.item.unitCost, leadTimeDays: sqMatch.item.leadTimeDays,
-        onHand: li.stockAvailable || 0,
-        bestSupplierPrice: sqMatch.item.unitCost, bestSupplierName: sqMatch.sq.supplierName,
-        landingCost: null, lastReceiveDate: '',
-        fromSQ: true, sqRef: sqMatch.sq.sqNumber, matched: true,
-      })
-    }
+  const accepted = selectedSourceQuote.value.status === 'accepted'
+  const lines = sourceToBuy.value.map(li => ({ li, product: productForLine(li) }))
+  // Order in the currency the supplier prices in.
+  const priced = lines.map(l => l.product && supplierOffer(l.product.id, newPOSupplier.value)).find(Boolean)
+  newPOCurrency.value = priced ? priced.currency : 'SAR'
+  for (const { li, product } of lines) {
+    if (!product) continue
+    newPOItems.value.push({ ...catalogPOLine(product, remainingFor(li), accepted ? li.id : undefined), name: li.description })
   }
 }
 
-function findSQItemMatch(sku: string, supplierName: string): { sq: SupplierQuote; item: SupplierQuoteLineItem } | null {
-  for (const sq of store.supplierQuotes) {
-    if (sq.supplierName !== supplierName || sq.status === 'expired' || sq.status === 'rejected') continue
-    const item = sq.items.find(i => i.productSku === sku)
-    if (item) return { sq, item }
-  }
-  return null
-}
-
-const poItemSearchResults = computed(() => {
-  const q = newPOItemSearch.value.toLowerCase().trim()
+function searchCatalog(query: string, supplierName: string, exclude: Set<string>) {
+  const q = query.toLowerCase().trim()
   if (!q) return []
-  const existingSkus = new Set(newPOItems.value.map(i => i.sku))
-  return store.supplierItems
-    .filter(si => {
-      if (newPOSupplier.value && si.supplierName.toLowerCase() !== newPOSupplier.value.toLowerCase()) return false
-      if (existingSkus.has(si.productSku)) return false
-      return si.productSku.toLowerCase().includes(q) || si.productName.toLowerCase().includes(q) || si.manufacturerName.toLowerCase().includes(q)
-    })
+  return catalogProducts.value
+    .filter(p => !exclude.has(p.sku.toLowerCase()) && (p.sku.toLowerCase().includes(q) || p.name.toLowerCase().includes(q) || (p.manufacturerName ?? '').toLowerCase().includes(q)))
     .slice(0, 10)
-})
+    .map(product => ({ product, offer: (supplierName && supplierOffer(product.id, supplierName)) || cheapestOffer(product.id) }))
+}
 
-function selectPOItem(si: SupplierItemEntry) {
-  const receipts = store.getReceiptHistoryForProduct(si.productId)
-  const lastReceipt = receipts.length > 0 ? receipts[0] : null
-  const best = store.getBestSupplierPrice(si.productSku)
-  const onHandMap = availableStock.value
-  newPOItems.value.push({
-    sku: si.productSku, name: si.productName, manufacturer: si.manufacturerName,
-    qty: si.moq, unitCost: si.latestCost, leadTimeDays: si.leadTimeDays,
-    onHand: onHandMap[si.productId] ?? 0,
-    bestSupplierPrice: best ? best.cost : null, bestSupplierName: best ? best.supplierName : '',
-    landingCost: lastReceipt ? lastReceipt.item.landingCost : null,
-    lastReceiveDate: lastReceipt ? lastReceipt.gr.receiveDate : '',
-    fromSQ: false, sqRef: '', matched: false,
-  })
+const poItemSearchResults = computed(() =>
+  searchCatalog(newPOItemSearch.value, newPOSupplier.value, new Set(newPOItems.value.map(i => i.sku.toLowerCase()))))
+
+function selectPOItem(product: Product) {
+  const offer = supplierOffer(product.id, newPOSupplier.value)
+  newPOItems.value.push(catalogPOLine(product, offer?.moq || 1))
   newPOItemSearch.value = ''
   showPOItemDropdown.value = false
 }
@@ -348,6 +411,7 @@ function importFromSupplierQuote(sq: SupplierQuote) {
   if (mfr) selectedSupplierId.value = mfr.id
   newPOSupplier.value = sq.supplierName
   newPOSourceSQ.value = sq.sqNumber
+  newPOCurrency.value = sq.currency
   for (const item of sq.items) {
     const receipts = store.getReceiptHistoryForProduct(item.productId ?? '')
     const lastReceipt = receipts.length > 0 ? receipts[0] : null
@@ -497,11 +561,8 @@ function importPOFileItems() {
 
 const newPOSubtotal = computed(() => newPOItems.value.reduce((s, i) => s + i.qty * i.unitCost, 0))
 const matchedCount = computed(() => newPOItems.value.filter(i => i.matched).length)
-const unmatchedSourceItems = computed(() => {
-  if (!selectedSourceQuote.value) return []
-  const matchedSkus = new Set(newPOItems.value.filter(i => i.matched).map(i => i.sku))
-  return selectedSourceQuote.value.lineItems.filter(li => li.category === 'materials' && li.sku && !matchedSkus.has(li.sku))
-})
+const unmatchedSourceItems = computed(() => newPOItems.value.filter(i => i.quoteLineItemId && !i.matched))
+const coveredSourceItems = computed(() => sourceItems.value.filter(li => remainingFor(li) <= 0))
 
 function resetCreatePO() {
   selectedSupplierId.value = ''
@@ -511,6 +572,8 @@ function resetCreatePO() {
   newPONotes.value = ''
   newPOSourceSQ.value = ''
   newPOItems.value = []
+  newPOCurrency.value = 'SAR'
+  sourceNeed.value = {}
   createPOStep.value = 'source'
   poSourceType.value = 'opportunity'
   selectedSourceQuote.value = null
@@ -530,7 +593,7 @@ async function createPO() {
   const sourceLines = selectedSourceQuote.value?.status === 'accepted' ? selectedSourceQuote.value.lineItems : []
   const items = newPOItems.value.map(i => ({
     id: uid(), productId: resolveProduct(i.sku), productSku: i.sku, productName: i.name,
-    quoteLineItemId: sourceLines.find(li => li.category === 'materials' && li.sku === i.sku)?.id,
+    quoteLineItemId: i.quoteLineItemId ?? sourceLines.find(li => li.category === 'materials' && li.sku === i.sku)?.id,
     manufacturerName: i.manufacturer, quantity: i.qty, unitCost: i.unitCost,
     total: i.qty * i.unitCost, receivedQty: 0, leadTimeDays: i.leadTimeDays,
   }))
@@ -540,7 +603,7 @@ async function createPO() {
   const po: PurchaseOrder = {
     id: uid(), poNumber: '', supplierName: newPOSupplier.value,
     status: 'draft', items, subtotal, shippingCost, customsDuty,
-    total: subtotal + shippingCost + customsDuty, currency: 'SAR',
+    total: subtotal + shippingCost + customsDuty, currency: newPOCurrency.value,
     expectedDelivery: newPOExpected.value || new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10),
     sourceQuoteId: selectedSourceQuote.value?.id,
     opportunityId: selectedSourceQuote.value?.opportunityId,
@@ -684,6 +747,7 @@ const sqForm = ref({
   paymentTerms: '',
   deliveryTerms: '',
   notes: '',
+  currency: 'SAR' as Currency,
   items: [] as SQFormItem[],
 })
 
@@ -693,7 +757,7 @@ function resetSQForm() {
     supplierName: '', supplierRef: '', sourceQuoteId: '', opportunityId: '', contactName: '', contactEmail: '',
     validFrom: new Date().toISOString().slice(0, 10),
     validUntil: new Date(Date.now() + 90 * 86400000).toISOString().slice(0, 10),
-    paymentTerms: '', deliveryTerms: '', notes: '', items: [],
+    paymentTerms: '', deliveryTerms: '', notes: '', currency: 'SAR', items: [],
   }
   csvPreviewItems.value = []
   csvFileName.value = ''
@@ -720,6 +784,7 @@ function openEditSQ(sq: SupplierQuote) {
     paymentTerms: sq.paymentTerms || '',
     deliveryTerms: sq.deliveryTerms || '',
     notes: sq.notes,
+    currency: sq.currency,
     items: sq.items.map(i => ({
       sku: i.productSku, name: i.productName, manufacturer: i.manufacturerName,
       qty: i.quantity, unitCost: i.unitCost, leadTimeDays: i.leadTimeDays, moq: i.moq ?? 1,
@@ -740,15 +805,35 @@ function removeSQItem(idx: number) { sqForm.value.items.splice(idx, 1) }
 
 const sqFormSubtotal = computed(() => sqForm.value.items.reduce((s, i) => s + i.qty * i.unitCost, 0))
 
-function selectSQSupplier(mfr: Manufacturer) {
-  sqForm.value.supplierName = mfr.name
-  sqForm.value.contactEmail = mfr.contactEmail
+function selectSQSupplier(supplier: SupplierOption) {
+  sqForm.value.supplierName = supplier.name
+  sqForm.value.contactEmail = supplier.contactEmail
+}
+
+// Asking a supplier to price a customer quote starts from that quote's material
+// lines, priced with what this supplier last charged when that is known.
+function loadSQFromQuote() {
+  const quote = quotesStore.quotes.find(q => q.id === sqForm.value.sourceQuoteId)
+  if (!quote) return
+  if (quote.opportunityId) sqForm.value.opportunityId = quote.opportunityId
+  if (sqForm.value.items.length && !window.confirm('Replace the lines already on this supplier quote with the lines of ' + quote.quoteNumber + '?')) return
+  const lines = quote.lineItems.filter(li => li.category === 'materials').map(li => ({ li, product: productForLine(li) }))
+  const priced = lines.map(l => l.product && supplierOffer(l.product.id, sqForm.value.supplierName)).find(Boolean)
+  if (priced) sqForm.value.currency = priced.currency
+  sqForm.value.items = lines.map(({ li, product }) => {
+    const offer = product ? supplierOffer(product.id, sqForm.value.supplierName) : undefined
+    return {
+      sku: product?.sku ?? li.sku ?? '', name: li.description, manufacturer: product?.manufacturerName ?? li.manufacturerName ?? '',
+      qty: li.quantity, unitCost: offer ? convert(offer.cost, offer.currency, sqForm.value.currency) : 0,
+      leadTimeDays: offer?.leadTimeDays || product?.leadTimeDays || 30, moq: offer?.moq || 1,
+    }
+  })
 }
 
 function resolveProduct(sku: string): string {const product=catalogProducts.value.find(p=>p.sku.toLowerCase()===sku.trim().toLowerCase());if(!product)throw new Error(`Add SKU ${sku || '(empty)'} to Products before creating a purchase order.`);return product.id}
 async function saveSQ() {
  if(!sqForm.value.supplierName||sqForm.value.items.length===0)return
- try {const items=sqForm.value.items.map(i=>({productId:catalogProducts.value.find(p=>p.sku.toLowerCase()===i.sku.toLowerCase())?.id,productSku:i.sku,productName:i.name,manufacturerName:i.manufacturer,quantity:i.qty,unitCost:i.unitCost,leadTimeDays:i.leadTimeDays,moq:i.moq}));const data={...sqForm.value,items,sourceQuoteId:sqForm.value.sourceQuoteId||null,opportunityId:sqForm.value.opportunityId||null,currency:store.supplierQuotes.find(s => s.id === editingSQId.value)?.currency ?? 'SAR'}
+ try {const items=sqForm.value.items.map(i=>({productId:catalogProducts.value.find(p=>p.sku.toLowerCase()===i.sku.toLowerCase())?.id,productSku:i.sku,productName:i.name,manufacturerName:i.manufacturer,quantity:i.qty,unitCost:i.unitCost,leadTimeDays:i.leadTimeDays,moq:i.moq}));const data={...sqForm.value,items,sourceQuoteId:sqForm.value.sourceQuoteId||null,opportunityId:sqForm.value.opportunityId||null,currency:sqForm.value.currency}
  if(editingSQId.value)await store.updateSupplierQuote(editingSQId.value,data);else await store.addSupplierQuote(data)
  showCreateSQModal.value=false;resetSQForm()
  }catch(e){window.alert(errorMessage(e))}
@@ -851,22 +936,15 @@ function clearCSVPreview() {
 const sqItemSearch = ref('')
 const showSQItemDropdown = ref(false)
 
-const sqItemSearchResults = computed(() => {
-  const q = sqItemSearch.value.toLowerCase().trim()
-  if (!q) return []
-  const supplierName = sqForm.value.supplierName.toLowerCase()
-  return store.supplierItems
-    .filter(si => {
-      if (supplierName && si.supplierName.toLowerCase() !== supplierName) return false
-      return si.productSku.toLowerCase().includes(q) || si.productName.toLowerCase().includes(q)
-    })
-    .slice(0, 8)
-})
+const sqItemSearchResults = computed(() =>
+  searchCatalog(sqItemSearch.value, sqForm.value.supplierName, new Set(sqForm.value.items.map(i => i.sku.toLowerCase()))))
 
-function selectSQCatalogItem(si: SupplierItemEntry) {
+function selectSQCatalogItem(product: Product) {
+  const offer = supplierOffer(product.id, sqForm.value.supplierName)
   sqForm.value.items.push({
-    sku: si.productSku, name: si.productName, manufacturer: si.manufacturerName,
-    qty: si.moq, unitCost: si.latestCost, leadTimeDays: si.leadTimeDays, moq: si.moq,
+    sku: product.sku, name: product.name, manufacturer: product.manufacturerName ?? '',
+    qty: offer?.moq || 1, unitCost: offer ? convert(offer.cost, offer.currency, sqForm.value.currency) : 0,
+    leadTimeDays: offer?.leadTimeDays || product.leadTimeDays || 30, moq: offer?.moq || 1,
   })
   sqItemSearch.value = ''
   showSQItemDropdown.value = false
@@ -926,7 +1004,7 @@ function delayHideSQDropdown() { window.setTimeout(() => { showSQItemDropdown.va
         <div class="kpi-top">
           <div>
             <p class="kpi-label">PO Total Value</p>
-            <p class="kpi-value kpi-value--sm">SAR {{ formatSAR(store.totalValue) }}</p>
+            <p class="kpi-value kpi-value--sm">SAR {{ formatSAR(poTotalSAR) }}</p>
           </div>
           <div class="kpi-icon kpi-icon--success"><DollarSign :size="22" /></div>
         </div>
@@ -1005,7 +1083,7 @@ function delayHideSQDropdown() { window.setTimeout(() => { showSQItemDropdown.va
               <td class="font-medium text-dark">{{ po.supplierName }}</td>
               <td><span :class="['badge badge-dot', statusConfig[po.status].badge]">{{ statusConfig[po.status].label }}</span></td>
               <td class="text-center">{{ po.items.length }}</td>
-              <td class="text-right whitespace-nowrap font-bold">SAR {{ formatSAR(po.total) }}</td>
+              <td class="text-right whitespace-nowrap font-bold">{{ po.currency }} {{ formatSAR(po.total) }}</td>
               <td class="text-muted whitespace-nowrap">{{ formatDate(po.expectedDelivery) }}</td>
               <td>
                 <span v-if="po.sourceQuoteNumber" class="source-quote-link"><FileText :size="12" /> {{ po.sourceQuoteNumber }}</span>
@@ -1078,7 +1156,7 @@ function delayHideSQDropdown() { window.setTimeout(() => { showSQItemDropdown.va
               <td class="text-mono text-muted" style="font-size:0.75rem">{{ sq.supplierRef || '—' }}</td>
               <td><span :class="['badge badge-dot', sqStatusConfig[sq.status].badge]">{{ sqStatusConfig[sq.status].label }}</span></td>
               <td class="text-center">{{ sq.items.length }}</td>
-              <td class="text-right whitespace-nowrap font-bold">SAR {{ formatSAR(sq.subtotal) }}</td>
+              <td class="text-right whitespace-nowrap font-bold">{{ sq.currency }} {{ formatSAR(sq.subtotal) }}</td>
               <td>
                 <span :class="['whitespace-nowrap', daysUntilExpiry(sq) <= 14 && daysUntilExpiry(sq) > 0 ? 'text-warning font-semibold' : daysUntilExpiry(sq) <= 0 ? 'text-danger font-semibold' : 'text-muted']">
                   {{ formatDate(sq.validUntil) }}
@@ -1280,8 +1358,8 @@ function delayHideSQDropdown() { window.setTimeout(() => { showSQItemDropdown.va
                     <td class="font-medium">{{ item.productName }}</td>
                     <td>{{ item.manufacturerName }}</td>
                     <td class="text-center">{{ item.quantity }}</td>
-                    <td class="text-right whitespace-nowrap">SAR {{ formatSAR(item.unitCost) }}</td>
-                    <td class="text-right whitespace-nowrap font-medium">SAR {{ formatSAR(item.total) }}</td>
+                    <td class="text-right whitespace-nowrap">{{ viewingPO.currency }} {{ formatSAR(item.unitCost) }}</td>
+                    <td class="text-right whitespace-nowrap font-medium">{{ viewingPO.currency }} {{ formatSAR(item.total) }}</td>
                     <td class="text-center">
                       <span :class="item.receivedQty >= item.quantity ? 'text-success font-semibold' : 'text-warning'">{{ item.receivedQty }} / {{ item.quantity }}</span>
                     </td>
@@ -1291,12 +1369,12 @@ function delayHideSQDropdown() { window.setTimeout(() => { showSQItemDropdown.va
               </table>
             </div>
             <div class="view-totals-card">
-              <div class="view-totals-row"><span>Subtotal</span><span class="text-mono">SAR {{ formatSAR(viewingPO.subtotal) }}</span></div>
-              <div class="view-totals-row"><span>Shipping</span><span class="text-mono">SAR {{ formatSAR(viewingPO.shippingCost) }}</span></div>
-              <div class="view-totals-row"><span>Customs / Duty</span><span class="text-mono">SAR {{ formatSAR(viewingPO.customsDuty) }}</span></div>
+              <div class="view-totals-row"><span>Subtotal</span><span class="text-mono">{{ viewingPO.currency }} {{ formatSAR(viewingPO.subtotal) }}</span></div>
+              <div class="view-totals-row"><span>Shipping</span><span class="text-mono">{{ viewingPO.currency }} {{ formatSAR(viewingPO.shippingCost) }}</span></div>
+              <div class="view-totals-row"><span>Customs / Duty</span><span class="text-mono">{{ viewingPO.currency }} {{ formatSAR(viewingPO.customsDuty) }}</span></div>
               <div class="view-totals-row view-totals-row--grand">
                 <span class="font-bold">Total</span>
-                <span class="font-bold text-mono view-grand-total">SAR {{ formatSAR(viewingPO.total) }}</span>
+                <span class="font-bold text-mono view-grand-total">{{ viewingPO.currency }} {{ formatSAR(viewingPO.total) }}</span>
               </div>
             </div>
             <div v-if="viewingPO.approvedBy" class="view-approval">
@@ -1394,8 +1472,8 @@ function delayHideSQDropdown() { window.setTimeout(() => { showSQItemDropdown.va
                     <td>{{ item.manufacturerName }}</td>
                     <td class="text-center">{{ item.quantity }}</td>
                     <td class="text-center text-muted">{{ item.moq ?? '—' }}</td>
-                    <td class="text-right whitespace-nowrap font-bold">SAR {{ formatSAR(item.unitCost) }}</td>
-                    <td class="text-right whitespace-nowrap">SAR {{ formatSAR(item.total) }}</td>
+                    <td class="text-right whitespace-nowrap font-bold">{{ viewingSQ.currency }} {{ formatSAR(item.unitCost) }}</td>
+                    <td class="text-right whitespace-nowrap">{{ viewingSQ.currency }} {{ formatSAR(item.total) }}</td>
                     <td class="text-center">{{ item.leadTimeDays }}d</td>
                   </tr>
                 </tbody>
@@ -1405,7 +1483,7 @@ function delayHideSQDropdown() { window.setTimeout(() => { showSQItemDropdown.va
             <div class="view-totals-card">
               <div class="view-totals-row view-totals-row--grand">
                 <span class="font-bold">Total Value</span>
-                <span class="font-bold text-mono view-grand-total">SAR {{ formatSAR(viewingSQ.subtotal) }}</span>
+                <span class="font-bold text-mono view-grand-total">{{ viewingSQ.currency }} {{ formatSAR(viewingSQ.subtotal) }}</span>
               </div>
             </div>
             <RecordAttachments
@@ -1617,10 +1695,13 @@ function delayHideSQDropdown() { window.setTimeout(() => { showSQItemDropdown.va
                 <div class="form-group" style="flex:2">
                   <label class="form-label">Supplier <span class="text-danger">*</span></label>
                   <div class="sq-supplier-pick">
-                    <input v-model="sqForm.supplierName" type="text" class="form-input" placeholder="Type or select supplier..." />
+                    <input v-model="sqForm.supplierName" type="text" class="form-input" list="sq-supplier-options" placeholder="Type or select supplier..." />
+                    <datalist id="sq-supplier-options">
+                      <option v-for="s in supplierOptions" :key="s.id" :value="s.name" />
+                    </datalist>
                     <div v-if="!sqForm.supplierName" class="sq-supplier-chips">
-                      <button v-for="mfr in mfrStore.suppliers.slice(0, 6)" :key="mfr.id" class="sq-supplier-chip" @click="selectSQSupplier(mfr)">
-                        {{ mfr.name }}
+                      <button v-for="s in supplierOptions.slice(0, 6)" :key="s.id" class="sq-supplier-chip" @click="selectSQSupplier(s)">
+                        {{ s.name }}
                       </button>
                     </div>
                   </div>
@@ -1629,11 +1710,17 @@ function delayHideSQDropdown() { window.setTimeout(() => { showSQItemDropdown.va
                   <label class="form-label">Supplier Ref / Quote #</label>
                   <input v-model="sqForm.supplierRef" type="text" class="form-input" placeholder="e.g. HIK-QT-2026..." />
                 </div>
+                <div class="form-group" style="width:110px">
+                  <label class="form-label" for="sq-currency">Currency</label>
+                  <select id="sq-currency" v-model="sqForm.currency" class="form-input">
+                    <option v-for="cur in currencies" :key="cur" :value="cur">{{ cur }}</option>
+                  </select>
+                </div>
               </div>
               <div class="create-form-row">
                 <div class="form-group" style="flex:1">
                   <label class="form-label" for="sq-source-quote">Requested for customer quote</label>
-                  <select id="sq-source-quote" v-model="sqForm.sourceQuoteId" class="form-input">
+                  <select id="sq-source-quote" v-model="sqForm.sourceQuoteId" class="form-input" @change="loadSQFromQuote">
                     <option value="">Not linked</option>
                     <option v-for="qt in quotesStore.quotes" :key="qt.id" :value="qt.id">{{ qt.quoteNumber }} — {{ qt.customerName }}</option>
                   </select>
@@ -1777,13 +1864,14 @@ function delayHideSQDropdown() { window.setTimeout(() => { showSQItemDropdown.va
                       <input v-model="sqItemSearch" type="text" class="form-input" style="font-size:0.75rem" placeholder="Search catalog..." @focus="showSQItemDropdown = sqItemSearch.trim().length > 0" @blur="delayHideSQDropdown" @input="showSQItemDropdown = sqItemSearch.trim().length > 0" />
                     </div>
                     <div v-if="showSQItemDropdown && sqItemSearchResults.length" class="sq-item-dropdown">
-                      <button v-for="si in sqItemSearchResults" :key="si.id" class="po-dd-item" @mousedown.prevent="selectSQCatalogItem(si)">
+                      <button v-for="r in sqItemSearchResults" :key="r.product.id" class="po-dd-item" @mousedown.prevent="selectSQCatalogItem(r.product)">
                         <div class="po-dd-left">
-                          <span class="po-dd-sku">{{ si.productSku }}</span>
-                          <span class="po-dd-name">{{ si.productName }}</span>
+                          <span class="po-dd-sku">{{ r.product.sku }}</span>
+                          <span class="po-dd-name">{{ r.product.name }}</span>
                         </div>
                         <div class="po-dd-right">
-                          <span class="po-dd-price">SAR {{ formatSAR(si.latestCost) }}</span>
+                          <span v-if="r.offer" class="po-dd-price">{{ r.offer.currency }} {{ formatSAR(r.offer.cost) }}</span>
+                          <span v-if="r.offer" class="po-dd-lead">{{ r.offer.supplierName }}</span>
                         </div>
                       </button>
                     </div>
@@ -1810,7 +1898,7 @@ function delayHideSQDropdown() { window.setTimeout(() => { showSQItemDropdown.va
                       <td><input v-model="item.manufacturer" type="text" class="form-input form-input--sm" placeholder="Mfr" style="width:120px" /></td>
                       <td class="text-center"><input v-model.number="item.qty" type="number" min="1" class="form-input form-input--sm form-input--center" style="width:65px" /></td>
                       <td class="text-right"><input v-model.number="item.unitCost" type="number" step="0.01" min="0" class="form-input form-input--sm form-input--right" style="width:100px" /></td>
-                      <td class="text-right whitespace-nowrap font-medium" style="font-size:0.75rem">SAR {{ formatSAR(item.qty * item.unitCost) }}</td>
+                      <td class="text-right whitespace-nowrap font-medium" style="font-size:0.75rem">{{ sqForm.currency }} {{ formatSAR(item.qty * item.unitCost) }}</td>
                       <td class="text-center"><input v-model.number="item.leadTimeDays" type="number" min="1" class="form-input form-input--sm form-input--center" style="width:55px" /></td>
                       <td class="text-center"><input v-model.number="item.moq" type="number" min="1" class="form-input form-input--sm form-input--center" style="width:55px" /></td>
                       <td><button class="btn btn-ghost btn-icon btn-sm" @click="removeSQItem(idx)"><Trash2 :size="14" /></button></td>
@@ -1819,7 +1907,7 @@ function delayHideSQDropdown() { window.setTimeout(() => { showSQItemDropdown.va
                   <tfoot>
                     <tr>
                       <td colspan="6" class="text-right font-bold" style="border-top:2px solid var(--color-neutral-300)">Total</td>
-                      <td class="text-right font-bold whitespace-nowrap" style="border-top:2px solid var(--color-neutral-300)">SAR {{ formatSAR(sqFormSubtotal) }}</td>
+                      <td class="text-right font-bold whitespace-nowrap" style="border-top:2px solid var(--color-neutral-300)">{{ sqForm.currency }} {{ formatSAR(sqFormSubtotal) }}</td>
                       <td colspan="3" style="border-top:2px solid var(--color-neutral-300)"></td>
                     </tr>
                   </tfoot>
@@ -1895,7 +1983,7 @@ function delayHideSQDropdown() { window.setTimeout(() => { showSQItemDropdown.va
                     <div class="po-source-card-customer font-medium">{{ qt.customerName }}</div>
                     <div class="po-source-card-meta">
                       <span>{{ qt.lineItems.filter(l => l.category === 'materials').length }} material items</span>
-                      <span class="font-bold" style="color:var(--color-primary)">SAR {{ formatSAR(qt.total) }}</span>
+                      <span class="font-bold" style="color:var(--color-primary)">{{ qt.currency }} {{ formatSAR(qt.total) }}</span>
                     </div>
                     <div v-if="qt.lineItems.filter(l => l.category === 'materials').length" class="po-source-card-items">
                       <div v-for="li in qt.lineItems.filter(l => l.category === 'materials').slice(0, 4)" :key="li.id" class="po-src-inline-item">
@@ -1933,7 +2021,7 @@ function delayHideSQDropdown() { window.setTimeout(() => { showSQItemDropdown.va
                   <div v-for="li in sourceItems" :key="li.id" class="po-source-item-chip">
                     <span v-if="li.sku" class="po-src-sku">{{ li.sku }}</span>
                     <span class="po-src-name">{{ li.description }}</span>
-                    <span class="po-src-qty">× {{ li.quantity }}</span>
+                    <span class="po-src-qty">{{ remainingFor(li) > 0 ? `× ${remainingFor(li)} to buy` : 'covered' }}</span>
                   </div>
                 </div>
               </div>
@@ -1950,15 +2038,15 @@ function delayHideSQDropdown() { window.setTimeout(() => { showSQItemDropdown.va
                 </div>
 
                 <div v-if="filteredSupplierList.length" class="supplier-grid">
-                  <button v-for="mfr in filteredSupplierList" :key="mfr.id" class="supplier-card" :class="{ 'supplier-card--has-catalog': supplierHasCatalog(mfr.name), 'supplier-card--full-match': sourceItems.length > 0 && getSupplierCoverage(mfr.name).coveragePercent === 100, 'supplier-card--partial-match': sourceItems.length > 0 && getSupplierCoverage(mfr.name).matchCount > 0 && getSupplierCoverage(mfr.name).coveragePercent < 100 }" @click="selectSupplierForPO(mfr)">
+                  <button v-for="mfr in filteredSupplierList" :key="mfr.id" class="supplier-card" :class="{ 'supplier-card--has-catalog': supplierHasCatalog(mfr.name), 'supplier-card--full-match': sourceToBuy.length > 0 && getSupplierCoverage(mfr.name).coveragePercent === 100, 'supplier-card--partial-match': sourceToBuy.length > 0 && getSupplierCoverage(mfr.name).matchCount > 0 && getSupplierCoverage(mfr.name).coveragePercent < 100 }" @click="selectSupplierForPO(mfr)">
                     <div class="supplier-card-top">
                       <span class="supplier-card-name">{{ mfr.name }}</span>
                       <span class="badge badge-neutral text-mono" style="font-size:0.625rem">{{ mfr.code }}</span>
                     </div>
                     <div class="supplier-card-meta">
                       <span>{{ mfr.country }}</span>
-                      <span :class="['badge', mfr.vendorType === 'supplier' ? 'badge-primary' : 'badge-success']" style="font-size:0.5625rem">
-                        {{ mfr.vendorType === 'both' ? 'Mfr + Supplier' : 'Supplier' }}
+                      <span :class="['badge', mfr.record ? 'badge-success' : 'badge-neutral']" style="font-size:0.5625rem">
+                        {{ mfr.label }}
                       </span>
                     </div>
                     <div class="supplier-card-cats">
@@ -1966,13 +2054,13 @@ function delayHideSQDropdown() { window.setTimeout(() => { showSQItemDropdown.va
                     </div>
 
                     <!-- Coverage info when a source is selected -->
-                    <template v-if="sourceItems.length > 0">
+                    <template v-if="sourceToBuy.length > 0">
                       <div class="supplier-coverage">
                         <div class="supplier-coverage-bar-track">
                           <div class="supplier-coverage-bar-fill" :style="{ width: getSupplierCoverage(mfr.name).coveragePercent + '%' }" :class="{ 'cov-full': getSupplierCoverage(mfr.name).coveragePercent === 100, 'cov-partial': getSupplierCoverage(mfr.name).coveragePercent > 0 && getSupplierCoverage(mfr.name).coveragePercent < 100, 'cov-none': getSupplierCoverage(mfr.name).coveragePercent === 0 }"></div>
                         </div>
                         <span class="supplier-coverage-text" :class="{ 'cov-text-full': getSupplierCoverage(mfr.name).coveragePercent === 100 }">
-                          {{ getSupplierCoverage(mfr.name).matchCount }} / {{ getSupplierCoverage(mfr.name).totalSourceItems }} items matched
+                          {{ getSupplierCoverage(mfr.name).matchCount }} / {{ getSupplierCoverage(mfr.name).totalSourceItems }} priced by this supplier
                         </span>
                       </div>
                       <div v-if="getSupplierCoverage(mfr.name).matchedNames.length" class="supplier-matched-items">
@@ -1982,10 +2070,10 @@ function delayHideSQDropdown() { window.setTimeout(() => { showSQItemDropdown.va
                     </template>
 
                     <!-- Catalog badge (shown when no source or as secondary info) -->
-                    <div v-if="sourceItems.length === 0 && supplierHasCatalog(mfr.name)" class="supplier-card-catalog-badge">
+                    <div v-if="sourceToBuy.length === 0 && supplierHasCatalog(mfr.name)" class="supplier-card-catalog-badge">
                       <Check :size="10" /> Has Catalog / Quotes
                     </div>
-                    <div v-if="sourceItems.length === 0 && !supplierHasCatalog(mfr.name)" class="supplier-card-no-catalog">
+                    <div v-if="sourceToBuy.length === 0 && !supplierHasCatalog(mfr.name)" class="supplier-card-no-catalog">
                       <AlertCircle :size="10" /> No catalog uploaded
                     </div>
                   </button>
@@ -2017,11 +2105,15 @@ function delayHideSQDropdown() { window.setTimeout(() => { showSQItemDropdown.va
 
               <!-- Auto-match results -->
               <div v-if="selectedSourceQuote && matchedCount > 0" class="po-match-banner po-match-banner--success">
-                <Check :size="14" /> <strong>{{ matchedCount }} item{{ matchedCount !== 1 ? 's' : '' }}</strong> auto-matched from {{ newPOSupplier }}'s catalog/quotes
+                <Check :size="14" /> <strong>{{ matchedCount }} item{{ matchedCount !== 1 ? 's' : '' }}</strong> priced from {{ newPOSupplier }}'s quotes, catalog or product vendor prices
               </div>
               <div v-if="selectedSourceQuote && unmatchedSourceItems.length > 0" class="po-match-banner po-match-banner--warn">
-                <AlertTriangle :size="14" /> <strong>{{ unmatchedSourceItems.length }} item{{ unmatchedSourceItems.length !== 1 ? 's' : '' }}</strong> from the source could not be matched in this supplier's catalog:
-                <span class="po-unmatched-list">{{ unmatchedSourceItems.map(li => li.sku || li.description).join(', ') }}</span>
+                <AlertTriangle :size="14" /> <strong>{{ unmatchedSourceItems.length }} item{{ unmatchedSourceItems.length !== 1 ? 's' : '' }}</strong> have no price from this supplier; check the cost (taken from another vendor where known):
+                <span class="po-unmatched-list">{{ unmatchedSourceItems.map(i => i.sku).join(', ') }}</span>
+              </div>
+              <div v-if="selectedSourceQuote && coveredSourceItems.length > 0" class="po-match-banner po-match-banner--success">
+                <Check :size="14" /> {{ coveredSourceItems.length }} line{{ coveredSourceItems.length !== 1 ? 's are' : ' is' }} already held or on order and left out:
+                <span class="po-unmatched-list">{{ coveredSourceItems.map(li => li.sku || li.description).join(', ') }}</span>
               </div>
 
               <!-- Available quotes from this supplier -->
@@ -2031,8 +2123,8 @@ function delayHideSQDropdown() { window.setTimeout(() => { showSQItemDropdown.va
                   <div v-for="sq in supplierAvailableQuotes" :key="sq.id" class="sq-available-card">
                     <div class="sq-available-left">
                       <span class="text-mono font-semibold" style="font-size:0.75rem">{{ sq.sqNumber }}</span>
-                      <span class="text-muted" style="font-size:0.6875rem">{{ sq.items.length }} items · SAR {{ formatSAR(sq.subtotal) }}</span>
-                      <span class="text-muted" style="font-size:0.625rem">Valid until {{ formatDate(sq.validUntil) }}</span>
+                      <span class="text-muted" style="font-size:0.6875rem">{{ sq.items.length }} items · {{ sq.currency }} {{ formatSAR(sq.subtotal) }}</span>
+                      <span v-if="sq.validUntil" class="text-muted" style="font-size:0.625rem">Valid until {{ formatDate(sq.validUntil) }}</span>
                     </div>
                     <button class="btn btn-primary btn-sm" @click="convertSQ(sq)" style="font-size:0.6875rem">
                       <ArrowRight :size="13" /> Import Items
@@ -2044,6 +2136,7 @@ function delayHideSQDropdown() { window.setTimeout(() => { showSQItemDropdown.va
               <div class="create-form-row">
                 <div class="form-group" style="width:200px"><label class="form-label">Expected Delivery</label><input v-model="newPOExpected" type="date" class="form-input" /></div>
                 <div class="form-group" style="width:160px"><label class="form-label">Source SQ</label><input v-model="newPOSourceSQ" type="text" class="form-input" placeholder="SQ-..." readonly /></div>
+                <div class="form-group" style="width:110px"><label class="form-label" for="po-currency">Currency</label><select id="po-currency" :value="newPOCurrency" class="form-input" @change="setPOCurrency(($event.target as HTMLSelectElement).value as Currency)"><option v-for="cur in currencies" :key="cur" :value="cur">{{ cur }}</option></select></div>
               </div>
 
               <div class="po-item-search-row">
@@ -2053,9 +2146,9 @@ function delayHideSQDropdown() { window.setTimeout(() => { showSQItemDropdown.va
                     <input v-model="newPOItemSearch" type="text" class="form-input" placeholder="Search catalog by SKU, name, or manufacturer..." @focus="showPOItemDropdown = newPOItemSearch.trim().length > 0" @blur="delayHidePODropdown" @input="showPOItemDropdown = newPOItemSearch.trim().length > 0" />
                   </div>
                   <div v-if="showPOItemDropdown && poItemSearchResults.length" class="po-item-dropdown">
-                    <button v-for="si in poItemSearchResults" :key="si.id" class="po-dd-item" @mousedown.prevent="selectPOItem(si)">
-                      <div class="po-dd-left"><span class="po-dd-sku">{{ si.productSku }}</span><span class="po-dd-name">{{ si.productName }}</span><span class="po-dd-meta">{{ si.supplierName }} · {{ si.manufacturerName }}</span></div>
-                      <div class="po-dd-right"><span class="po-dd-price">SAR {{ formatSAR(si.latestCost) }}</span><span class="po-dd-lead">{{ si.leadTimeDays }}d lead · MOQ {{ si.moq }}</span></div>
+                    <button v-for="r in poItemSearchResults" :key="r.product.id" class="po-dd-item" @mousedown.prevent="selectPOItem(r.product)">
+                      <div class="po-dd-left"><span class="po-dd-sku">{{ r.product.sku }}</span><span class="po-dd-name">{{ r.product.name }}</span><span class="po-dd-meta">{{ r.offer?.supplierName || 'No vendor price' }} · {{ r.product.manufacturerName }}</span></div>
+                      <div v-if="r.offer" class="po-dd-right"><span class="po-dd-price">{{ r.offer.currency }} {{ formatSAR(r.offer.cost) }}</span><span class="po-dd-lead">{{ r.offer.leadTimeDays }}d lead · MOQ {{ r.offer.moq }}</span></div>
                     </button>
                   </div>
                 </div>
@@ -2158,20 +2251,21 @@ function delayHideSQDropdown() { window.setTimeout(() => { showSQItemDropdown.va
                       <td class="text-center"><span :class="['onhand-badge', item.onHand > 0 ? 'onhand-badge--has' : 'onhand-badge--zero']">{{ item.onHand }}</span></td>
                       <td class="text-center"><input v-model.number="item.qty" type="number" min="1" class="form-input form-input--sm form-input--center" style="width:70px" /></td>
                       <td class="text-right"><input v-model.number="item.unitCost" type="number" step="0.01" min="0" class="form-input form-input--sm form-input--right" style="width:110px" /></td>
-                      <td class="text-right"><span v-if="item.bestSupplierPrice !== null" class="best-price-badge" :class="{ 'best-price--better': item.bestSupplierPrice < item.unitCost, 'best-price--same': item.bestSupplierPrice === item.unitCost, 'best-price--worse': item.bestSupplierPrice > item.unitCost }" :title="item.bestSupplierName">SAR {{ formatSAR(item.bestSupplierPrice) }}</span><span v-else class="text-muted">—</span></td>
+                      <td class="text-right"><span v-if="item.bestSupplierPrice !== null" class="best-price-badge" :class="{ 'best-price--better': item.bestSupplierPrice < item.unitCost, 'best-price--same': item.bestSupplierPrice === item.unitCost, 'best-price--worse': item.bestSupplierPrice > item.unitCost }" :title="item.bestSupplierName">{{ newPOCurrency }} {{ formatSAR(item.bestSupplierPrice) }}</span><span v-else class="text-muted">—</span></td>
                       <td class="text-right"><span v-if="item.landingCost !== null" class="text-mono" style="font-size:0.75rem">SAR {{ formatSAR(item.landingCost) }}</span><span v-else class="text-muted">—</span></td>
                       <td><span v-if="item.lastReceiveDate" class="text-muted whitespace-nowrap" style="font-size:0.75rem">{{ formatDate(item.lastReceiveDate) }}</span><span v-else class="text-muted">Never</span></td>
-                      <td class="text-right whitespace-nowrap font-medium">SAR {{ formatSAR(item.qty * item.unitCost) }}</td>
+                      <td class="text-right whitespace-nowrap font-medium">{{ newPOCurrency }} {{ formatSAR(item.qty * item.unitCost) }}</td>
                       <td class="text-center"><input v-model.number="item.leadTimeDays" type="number" min="1" class="form-input form-input--sm form-input--center" style="width:55px" /></td>
                       <td>
-                        <span v-if="item.matched" class="badge badge-success" style="font-size:0.58rem">Matched</span>
+                        <span v-if="item.matched" class="badge badge-success" style="font-size:0.58rem">{{ item.sqRef || 'Supplier price' }}</span>
+                        <span v-else-if="item.priceFrom" class="badge badge-warning" style="font-size:0.58rem" :title="`Cost from ${item.priceFrom}`">Other vendor's price</span>
                         <span v-else-if="item.fromSQ" class="badge badge-info" style="font-size:0.58rem">{{ item.sqRef }}</span>
                         <span v-else class="badge badge-gray" style="font-size:0.58rem">Manual</span>
                       </td>
                       <td><button class="btn btn-ghost btn-icon btn-sm" @click="removePOItem(idx)"><Trash2 :size="14" /></button></td>
                     </tr>
                   </tbody>
-                  <tfoot><tr><td colspan="9" class="text-right font-bold" style="border-top:2px solid var(--color-neutral-300)">Subtotal</td><td class="text-right font-bold whitespace-nowrap" style="border-top:2px solid var(--color-neutral-300)">SAR {{ formatSAR(newPOSubtotal) }}</td><td colspan="3" style="border-top:2px solid var(--color-neutral-300)"></td></tr></tfoot>
+                  <tfoot><tr><td colspan="9" class="text-right font-bold" style="border-top:2px solid var(--color-neutral-300)">Subtotal</td><td class="text-right font-bold whitespace-nowrap" style="border-top:2px solid var(--color-neutral-300)">{{ newPOCurrency }} {{ formatSAR(newPOSubtotal) }}</td><td colspan="3" style="border-top:2px solid var(--color-neutral-300)"></td></tr></tfoot>
                 </table>
               </div>
               <div v-else class="create-empty"><Package :size="28" class="text-muted" /><p class="text-muted">Search the catalog to add items, or add manually.</p></div>
@@ -2190,10 +2284,10 @@ function delayHideSQDropdown() { window.setTimeout(() => { showSQItemDropdown.va
                 <div v-if="matchedCount > 0" class="view-info-item"><span class="view-info-label">Auto-Matched</span><span class="view-info-value text-success font-bold">{{ matchedCount }} items</span></div>
               </div>
               <div class="view-totals-card mt-4">
-                <div class="view-totals-row"><span>Subtotal</span><span class="text-mono">SAR {{ formatSAR(newPOSubtotal) }}</span></div>
-                <div class="view-totals-row"><span>Shipping (not entered)</span><span class="text-mono">SAR {{ formatSAR(0) }}</span></div>
-                <div class="view-totals-row"><span>Customs (not entered)</span><span class="text-mono">SAR {{ formatSAR(0) }}</span></div>
-                <div class="view-totals-row view-totals-row--grand"><span class="font-bold">Estimated Total</span><span class="font-bold text-mono view-grand-total">SAR {{ formatSAR(newPOSubtotal + 0 + 0) }}</span></div>
+                <div class="view-totals-row"><span>Subtotal</span><span class="text-mono">{{ newPOCurrency }} {{ formatSAR(newPOSubtotal) }}</span></div>
+                <div class="view-totals-row"><span>Shipping (not entered)</span><span class="text-mono">{{ newPOCurrency }} {{ formatSAR(0) }}</span></div>
+                <div class="view-totals-row"><span>Customs (not entered)</span><span class="text-mono">{{ newPOCurrency }} {{ formatSAR(0) }}</span></div>
+                <div class="view-totals-row view-totals-row--grand"><span class="font-bold">Estimated Total</span><span class="font-bold text-mono view-grand-total">{{ newPOCurrency }} {{ formatSAR(newPOSubtotal + 0 + 0) }}</span></div>
               </div>
             </div>
           </div>

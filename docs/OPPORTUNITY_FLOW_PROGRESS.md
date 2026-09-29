@@ -78,6 +78,23 @@ The owner had not answered these; each can be changed later.
 
 **Still to do:** browser check against a migrated copy, rebuild images, then the release below. Nothing has been migrated or deployed.
 
+## Procurement fixes from the live-data test (2026-09-29)
+
+Tested on a migrated copy of the live database with real catalog SKUs.
+
+- **Fulfilment** counts only stock held for a line. Good receipts against a job's quote line are held for that job automatically, up to what the line still needs. Damaged units are reported separately and never count as covering the line. States: covered = held ≥ need; on order = held + outstanding ≥ need.
+- **Supplier quote → PO** links each line to the job's accepted quote line (by product; products quoted on two lines are left unlinked) and takes the job's opportunity. A supplier quote with a source quote takes that quote's opportunity.
+- **Migration 000015** fills the opportunity on existing POs and supplier quotes from their source quote.
+- **PO wizard:**
+  - Picking a won job brings in each material line with the quantity still to buy.
+  - Lines are priced from the supplier's quote, the supplier catalog, then the product's vendor price, converted to the order's currency.
+  - Catalog search covers all products.
+  - Vendors named on products are offered as suppliers.
+  - POs and supplier quotes have a currency choice.
+- **Supplier quote form:** choosing a customer quote loads its material lines and opportunity.
+
+**Live migration blocker:** migration 11 stops on live data because opportunity *op2* has two quotes, QT-2026-0002 (22 Sep) and QT-2026-0004 (29 Sep), both empty drafts. The owner must choose which one stays (delete the other) before migrating.
+
 ## Before deploying
 
 - Back up the live database first; migration 9 drops a table and 11 renumbers quotes.
