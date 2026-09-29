@@ -526,7 +526,8 @@ function resetCreatePO() {
 async function createPO() {
   try {
   if (!newPOSupplier.value || newPOItems.value.length === 0) return
-  const sourceLines = selectedSourceQuote.value?.lineItems ?? []
+  // The API links order lines only to an accepted quote.
+  const sourceLines = selectedSourceQuote.value?.status === 'accepted' ? selectedSourceQuote.value.lineItems : []
   const items = newPOItems.value.map(i => ({
     id: uid(), productId: resolveProduct(i.sku), productSku: i.sku, productName: i.name,
     quoteLineItemId: sourceLines.find(li => li.category === 'materials' && li.sku === i.sku)?.id,
