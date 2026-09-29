@@ -152,6 +152,8 @@ type fulfilmentLine struct {
 	Reserved        int           `json:"reserved"`
 	Ordered         int           `json:"ordered"`
 	Received        int           `json:"received"`
+	Damaged         int           `json:"damaged"`
+	Outstanding     int           `json:"outstanding"`
 	Orders          []orderedLine `json:"orders"`
 	State           string        `json:"state"`
 }
@@ -218,33 +220,40 @@ func (h *OpportunityHandler) Fulfilment(c *gin.Context) {
 			Status           string
 			Quantity         int
 			ReceivedQty      int
+			GoodQty          int
 			ExpectedDelivery *time.Time
 		}
 		var rows []row
-		if err := h.db.Table("purchase_order_items").Select("purchase_orders.id AS purchase_order_id, purchase_orders.po_number, purchase_orders.status, purchase_order_items.quantity, purchase_order_items.received_qty, purchase_orders.expected_delivery").
+		if err := h.db.Table("purchase_order_items").Select("purchase_orders.id AS purchase_order_id, purchase_orders.po_number, purchase_orders.status, purchase_order_items.quantity, purchase_order_items.received_qty, purchase_orders.expected_delivery, "+
+			"(SELECT COALESCE(SUM(gri.received_qty), 0) FROM goods_receipt_items gri WHERE gri.po_item_id = purchase_order_items.id AND gri.condition = 'good' AND gri.deleted_at IS NULL) AS good_qty").
 			Joins("JOIN purchase_orders ON purchase_orders.id = purchase_order_items.purchase_order_id AND purchase_orders.deleted_at IS NULL").
 			Where("purchase_order_items.quote_line_item_id = ? AND purchase_order_items.deleted_at IS NULL AND purchase_orders.status <> 'cancelled'", item.ID).Scan(&rows).Error; err != nil {
 			apiError(c, err)
 			return
 		}
 		for _, r := range rows {
-			order := orderedLine{PurchaseOrderID: r.PurchaseOrderID, PONumber: r.PONumber, Status: r.Status, Quantity: r.Quantity, Received: r.ReceivedQty}
+			order := orderedLine{PurchaseOrderID: r.PurchaseOrderID, PONumber: r.PONumber, Status: r.Status, Quantity: r.Quantity, Received: r.GoodQty}
 			if r.ExpectedDelivery != nil {
 				order.Expected = r.ExpectedDelivery.Format("2006-01-02")
 			}
 			line.Orders = append(line.Orders, order)
 			line.Ordered += r.Quantity
-			line.Received += r.ReceivedQty
+			line.Received += r.GoodQty
+			line.Damaged += r.ReceivedQty - r.GoodQty
+			line.Outstanding += r.Quantity - r.ReceivedQty
 		}
+		// Only stock held for the line counts as covering it: good receipts are
+		// held automatically, so adding received units would count them twice,
+		// and damaged units never reach stock.
 		needed := int(line.Quantity + 0.999)
 		switch {
 		case line.Source == "service":
 			line.State = "not-applicable"
-		case line.Reserved+line.Received >= needed:
+		case line.Reserved >= needed:
 			line.State = "covered"
-		case line.Reserved+line.Ordered >= needed:
+		case line.Reserved+line.Outstanding >= needed:
 			line.State = "on-order"
-		case line.Reserved+line.Ordered > 0:
+		case line.Reserved+line.Outstanding > 0:
 			line.State = "partial"
 		default:
 			line.State = "open"

@@ -447,5 +447,63 @@ func testModuleAPIs(t *testing.T, db *gorm.DB, r *gin.Engine, token, customerID 
 		call(t, "DELETE", path, nil, 204)
 		call(t, "GET", path, nil, 404)
 	})
+	t.Run("job purchases are held on receipt and fulfilment counts only held stock", func(t *testing.T) {
+		cameraLine := func() map[string]any {
+			f := call(t, "GET", "/opportunities/"+oppID+"/fulfilment", nil, 200)
+			for _, raw := range f["lines"].([]any) {
+				if line := raw.(map[string]any); line["description"] == "Camera" {
+					return line
+				}
+			}
+			t.Fatal(f)
+			return nil
+		}
+		before := cameraLine()
+		lineID := before["quoteLineItemId"].(string)
 
+		// Converting a supplier quote raised for the job links its lines to the job.
+		sq := call(t, "POST", "/procurement/supplier-quotes", m("supplierName", "Job vendor", "currency", "SAR", "sourceQuoteId", quoteID,
+			"items", []any{m("productId", productID, "productName", "Camera", "quantity", 5, "unitCost", 20)}), 201)
+		if sq["opportunityId"] != oppID {
+			t.Fatalf("supplier quote did not take the quote's opportunity: %v", sq)
+		}
+		sqPath := "/procurement/supplier-quotes/" + sq["id"].(string)
+		call(t, "PATCH", sqPath+"/status", m("status", "accepted"), 200)
+		po := call(t, "POST", sqPath+"/convert-to-po", m(), 201)
+		item := po["items"].([]any)[0].(map[string]any)
+		if item["quoteLineItemId"] != lineID || po["opportunityId"] != oppID {
+			t.Fatalf("converted order is not tied to the job's quote line: %v", po)
+		}
+		poPath := "/procurement/purchase-orders/" + po["id"].(string)
+		call(t, "PATCH", poPath+"/status", m("status", "pending-approval"), 200)
+		call(t, "PATCH", poPath+"/approve", m(), 200)
+		call(t, "PATCH", poPath+"/status", m("status", "ordered"), 200)
+		ordered := cameraLine()
+		if ordered["outstanding"].(float64)-before["outstanding"].(float64) != 5 {
+			t.Fatalf("order not counted as outstanding: %v", ordered)
+		}
+
+		receive := func(qty int, condition string) {
+			call(t, "POST", "/procurement/goods-receipts", m("poId", po["id"], "receiveDate", "2026-09-29", "items", []any{m("poItemId", item["id"], "productId", productID, "receivedQty", qty, "storageLocation", "dammam-branch", "condition", condition)}), 201)
+		}
+		receive(3, "good")
+		var held int64
+		must(t, db.Model(&models.StockReservation{}).Where("quote_line_item_id = ? AND status = 'active' AND warehouse_location = 'dammam-branch'", lineID).Select("COALESCE(SUM(qty), 0)").Scan(&held).Error)
+		var stock models.WarehouseStock
+		must(t, db.Where("product_id = ? AND warehouse_location = 'dammam-branch'", productID).First(&stock).Error)
+		need := int64(before["quantity"].(float64) + 0.999)
+		want := min(3, need-int64(before["reserved"].(float64)))
+		if held != want || stock.AvailableQty != stock.OnHandQty-int(want) {
+			t.Fatalf("good receipt was not held for the job: held %d want %d, stock %+v", held, want, stock)
+		}
+
+		receive(2, "damaged")
+		after := cameraLine()
+		if after["damaged"].(float64)-before["damaged"].(float64) != 2 || after["received"].(float64)-before["received"].(float64) != 3 {
+			t.Fatalf("damaged units counted as received: %v", after)
+		}
+		if after["reserved"].(float64) < float64(need) && after["state"] == "covered" {
+			t.Fatalf("line shows covered without enough held stock: %v", after)
+		}
+	})
 }

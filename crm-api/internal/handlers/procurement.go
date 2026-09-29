@@ -349,6 +349,13 @@ func (h *ProcurementHandler) saveSQ(c *gin.Context, create bool) {
 		sq.SupplierRef = req.SupplierRef
 		sq.SourceQuoteID = req.SourceQuoteID
 		sq.OpportunityID = req.OpportunityID
+		if sq.OpportunityID == nil && sq.SourceQuoteID != nil {
+			var source models.Quote
+			if err := tx.First(&source, "id = ?", sq.SourceQuoteID).Error; err != nil {
+				return err
+			}
+			sq.OpportunityID = source.OpportunityID
+		}
 		sq.Currency = req.Currency
 		sq.ValidFrom = from
 		sq.ValidUntil = until
@@ -472,6 +479,14 @@ func (h *ProcurementHandler) ConvertToPO(c *gin.Context) {
 		}
 		user := middleware.GetCurrentUserID(c)
 		po = models.PurchaseOrder{PONumber: number, SupplierQuoteID: &sq.ID, SupplierID: sq.SupplierID, SupplierName: sq.SupplierName, Currency: sq.Currency, CreatedByID: &user, Status: models.POStatusDraft, Subtotal: sq.Subtotal, Total: sq.Subtotal, SourceQuoteID: sq.SourceQuoteID, OpportunityID: sq.OpportunityID}
+		opportunityID, accepted, lines, err := jobLines(tx, sq.OpportunityID, sq.SourceQuoteID)
+		if err != nil {
+			return err
+		}
+		po.OpportunityID = opportunityID
+		if accepted != nil {
+			po.SourceQuoteID = &accepted.ID
+		}
 		for _, line := range sq.Items {
 			if line.ProductID == nil {
 				return invalid("Link every supplier quote item to a catalog product before conversion")
@@ -479,7 +494,11 @@ func (h *ProcurementHandler) ConvertToPO(c *gin.Context) {
 			if err := exists(tx, &models.Product{}, *line.ProductID); err != nil {
 				return err
 			}
-			po.Items = append(po.Items, models.PurchaseOrderItem{ProductID: *line.ProductID, Quantity: line.Quantity, UnitCost: line.UnitCost, Total: line.Total, LeadTimeDays: line.LeadTimeDays})
+			item := models.PurchaseOrderItem{ProductID: *line.ProductID, Quantity: line.Quantity, UnitCost: line.UnitCost, Total: line.Total, LeadTimeDays: line.LeadTimeDays}
+			if lineID, ok := lines[*line.ProductID]; ok {
+				item.QuoteLineItemID = &lineID
+			}
+			po.Items = append(po.Items, item)
 		}
 		if err := tx.Create(&po).Error; err != nil {
 			return err
@@ -633,11 +652,29 @@ func (h *ProcurementHandler) CreateGR(c *gin.Context) {
 				cost := gri.LandingCost / float64(gri.ReceivedQty)
 				stock.UnitCost = (float64(stock.OnHandQty)*stock.UnitCost + gri.LandingCost) / float64(stock.OnHandQty+line.ReceivedQty)
 				stock.OnHandQty += line.ReceivedQty
+				// Goods bought for a job are held for it on arrival, so no other
+				// hold can take them before the job does.
+				hold, err := jobHold(tx, *item, line.ReceivedQty, line.StorageLocation)
+				if err != nil {
+					return err
+				}
+				if hold != nil {
+					stock.ReservedQty += hold.Qty
+				}
 				if err := saveStock(tx, stock); err != nil {
 					return err
 				}
 				if err := stockMovement(tx, c, &models.InventoryMovement{ProductID: item.ProductID, MovementType: models.MovementReceipt, Qty: line.ReceivedQty, ToWarehouse: &line.StorageLocation, Reference: gr.GRNumber, Reason: "Goods receipt"}); err != nil {
 					return err
+				}
+				if hold != nil {
+					hold.ReservedByID, hold.ReservedAt, hold.Notes = &user, time.Now(), "Held on receipt "+gr.GRNumber
+					if err := tx.Create(hold).Error; err != nil {
+						return err
+					}
+					if err := stockMovement(tx, c, &models.InventoryMovement{ProductID: item.ProductID, MovementType: models.MovementAllocation, Qty: hold.Qty, FromWarehouse: &line.StorageLocation, Reference: hold.ID.String(), Reason: "Held for " + hold.SourceRef + " on receipt"}); err != nil {
+						return err
+					}
 				}
 				if err := tx.Create(&models.ProductPriceRecord{ProductID: item.ProductID, Date: date, Currency: models.CurrencySAR, LandingCost: cost, Source: models.PriceSourceGoodsReceipt, SourceRef: gr.GRNumber, UnitCost: cost, Qty: line.ReceivedQty}).Error; err != nil {
 					return err
