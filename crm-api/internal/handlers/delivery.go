@@ -253,3 +253,19 @@ func (h *OpportunityHandler) Fulfilment(c *gin.Context) {
 	}
 	response.OK(c, gin.H{"basis": basis, "quoteId": quote.ID, "quoteNumber": quote.QuoteNumber, "version": quote.Version, "lines": lines})
 }
+
+// Activity is the opportunity's audit trail: stage moves, delivery updates and
+// the like, oldest first.
+func (h *OpportunityHandler) Activity(c *gin.Context) {
+	var item models.Opportunity
+	if err := h.db.First(&item, "id = ?", c.Param("id")).Error; err != nil {
+		apiError(c, err)
+		return
+	}
+	items := []models.ActivityLog{}
+	if err := h.db.Preload("User").Where("entity_type = 'opportunity' AND entity_id = ?", item.ID).Order("created_at ASC").Find(&items).Error; err != nil {
+		apiError(c, err)
+		return
+	}
+	response.OK(c, items)
+}

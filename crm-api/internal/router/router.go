@@ -154,6 +154,7 @@ func Setup(db *gorm.DB, cfg *config.Config) *gin.Engine {
 		opps.PATCH("/:id/stage", middleware.Authorize("opportunities:update"), oppH.UpdateStage)
 		// The opportunity is the project: delivery is set by whoever manages projects.
 		opps.PATCH("/:id/delivery", middleware.Authorize("projects:update"), oppH.UpdateDelivery)
+		opps.GET("/:id/activity", middleware.Authorize("opportunities:read"), oppH.Activity)
 		opps.GET("/:id/fulfilment", middleware.AuthorizeAny("opportunities:read", "projects:read"), oppH.Fulfilment)
 	}
 
