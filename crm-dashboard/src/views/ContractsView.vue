@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { useAuthStore } from '@/stores/auth'
 const auth = useAuthStore()
-import { contractsService, customersService } from '@/services'
+import { contractsService, customersService, quotesService } from '@/services'
+import { useRouter } from 'vue-router'
 import { allPages } from '@/services/collections'
 import { errorMessage } from '@/services/payload'
 import { onMounted, ref, computed } from 'vue'
@@ -22,7 +23,7 @@ import {
   Check,
   XCircle,
 } from 'lucide-vue-next'
-import type { Contract, ContractType, ContractStatus } from '@/types'
+import type { Contract, ContractType, ContractStatus, ContractQuote, QuoteCurrency } from '@/types'
 import { useContractsStore } from '@/stores/contracts'
 
 function uid(): string {
@@ -171,9 +172,38 @@ function openEditModal(c: Contract) {
   showModal.value = true
 }
 
+const router = useRouter()
+const contractQuotes = ref<ContractQuote[]>([])
+const quotesLoading = ref(false)
+const quotesError = ref('')
+const raiseCurrency = ref<QuoteCurrency>('SAR')
+const raising = ref(false)
+
+async function loadContractQuotes(id: string) {
+  quotesLoading.value = true
+  quotesError.value = ''
+  try { contractQuotes.value = (await contractsService.quotes(id)).data ?? [] }
+  catch (e) { contractQuotes.value = []; quotesError.value = errorMessage(e) }
+  finally { quotesLoading.value = false }
+}
+
+async function raiseQuote() {
+  const c = viewingContract.value
+  if (!c) return
+  raising.value = true
+  quotesError.value = ''
+  try {
+    const res = await quotesService.create({ customerId: c.customerId, contractId: c.id, currency: raiseCurrency.value } as never)
+    router.push(`/quotes/${res.data.id}/builder`)
+  } catch (e) { quotesError.value = errorMessage(e) }
+  finally { raising.value = false }
+}
+
 function openViewModal(c: Contract) {
   viewingContract.value = c
   showViewModal.value = true
+  raiseCurrency.value = 'SAR'
+  loadContractQuotes(c.id)
 }
 
 const saving = ref(false)
@@ -485,6 +515,31 @@ function daysRemaining(endDate: string): number {
               <p class="view-text">{{ viewingContract.terms }}</p>
             </div>
 
+            <div class="view-section">
+              <p class="view-section-title">Quotes</p>
+              <p v-if="quotesError" class="text-danger text-sm" role="alert">{{ quotesError }}</p>
+              <p v-if="quotesLoading" class="text-muted text-sm">Loading quotes…</p>
+              <table v-else-if="contractQuotes.length" class="table table-compact">
+                <thead><tr><th>Quote</th><th>Relation</th><th>Status</th><th class="text-right">Total</th></tr></thead>
+                <tbody>
+                  <tr v-for="q in contractQuotes" :key="q.id">
+                    <td><a href="#" class="text-mono" @click.prevent="router.push(`/quotes/${q.id}/builder`)">{{ q.quoteNumber }} v{{ q.version }}</a></td>
+                    <td>{{ q.role === 'origin' ? 'Origin of this contract' : 'Raised inside this contract' }}</td>
+                    <td><span class="badge badge-neutral">{{ q.status }}</span></td>
+                    <td class="text-right text-mono">{{ q.currency }} {{ q.total.toLocaleString('en-SA', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }}</td>
+                  </tr>
+                </tbody>
+              </table>
+              <p v-else class="text-muted text-sm">No quotes yet.</p>
+              <div v-if="viewingContract.status === 'active' && auth.can('quotes:create')" class="raise-quote">
+                <select v-model="raiseCurrency" class="form-select" aria-label="Quote currency">
+                  <option value="SAR">SAR</option>
+                  <option value="USD">USD</option>
+                </select>
+                <button class="btn btn-secondary btn-sm" :disabled="raising" @click="raiseQuote">{{ raising ? 'Creating…' : 'Raise quote' }}</button>
+              </div>
+            </div>
+
             <div v-if="viewingContract.notes" class="view-notes">
               <p class="view-section-title">Notes</p>
               <p class="view-text">{{ viewingContract.notes }}</p>
@@ -504,6 +559,8 @@ function daysRemaining(endDate: string): number {
 </template>
 
 <style scoped>
+.raise-quote { display: flex; gap: var(--space-2); align-items: center; margin-top: var(--space-3); }
+.raise-quote .form-select { width: auto; }
 .contracts-page {
   padding: var(--space-6);
 }
