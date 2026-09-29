@@ -44,10 +44,15 @@ func customerName(customer *Customer) string {
 func (o Opportunity) MarshalJSON() ([]byte, error) {
 	type plain Opportunity
 	ids := []string{}
+	// The opportunity's one quote, as its current version; versions are history.
+	var current map[string]any
 	for _, quote := range o.Quotes {
 		ids = append(ids, quote.ID.String())
+		if quote.IsCurrent && current == nil {
+			current = map[string]any{"id": quote.ID, "quoteNumber": quote.QuoteNumber, "version": quote.Version, "status": quote.Status, "total": quote.Total, "currency": quote.Currency, "fxRate": quote.FXRate}
+		}
 	}
-	return withFields(plain(o), map[string]any{"customerName": customerName(o.Customer), "salesExecutiveName": userName(o.SalesExecutive), "preSalesName": userName(o.PreSales), "serviceTypes": rows(o.ServiceTypes), "quoteIds": ids})
+	return withFields(plain(o), map[string]any{"customerName": customerName(o.Customer), "salesExecutiveName": userName(o.SalesExecutive), "preSalesName": userName(o.PreSales), "projectManagerName": userName(o.ProjectManager), "serviceTypes": rows(o.ServiceTypes), "sites": rows(o.Sites), "quoteIds": ids, "currentQuote": current})
 }
 func (p Product) MarshalJSON() ([]byte, error) {
 	type plain Product
@@ -71,16 +76,6 @@ func (q Quote) MarshalJSON() ([]byte, error) {
 func (c Contract) MarshalJSON() ([]byte, error) {
 	type plain Contract
 	return withFields(plain(c), map[string]any{"customerName": customerName(c.Customer)})
-}
-func (p Project) MarshalJSON() ([]byte, error) {
-	type plain Project
-	number := ""
-	items := []QuoteLineItem{}
-	if p.Quote != nil {
-		number = p.Quote.QuoteNumber
-		items = rows(p.Quote.LineItems)
-	}
-	return withFields(plain(p), map[string]any{"customerName": customerName(p.Customer), "quoteNumber": number, "projectManager": userName(p.ProjectManager), "lineItems": items})
 }
 func (t Team) MarshalJSON() ([]byte, error) {
 	type plain Team
@@ -152,11 +147,11 @@ func (d Document) MarshalJSON() ([]byte, error) {
 }
 func (p PurchaseOrder) MarshalJSON() ([]byte, error) {
 	type plain PurchaseOrder
-	return withFields(plain(p), map[string]any{"items": rows(p.Items), "sourceQuoteNumber": quoteNumber(p.SourceQuote), "projectName": projectName(p.Project)})
+	return withFields(plain(p), map[string]any{"items": rows(p.Items), "sourceQuoteNumber": quoteNumber(p.SourceQuote), "opportunityTitle": opportunityTitle(p.Opportunity)})
 }
 func (s SupplierQuote) MarshalJSON() ([]byte, error) {
 	type plain SupplierQuote
-	return withFields(plain(s), map[string]any{"items": rows(s.Items), "sourceQuoteNumber": quoteNumber(s.SourceQuote), "projectName": projectName(s.Project)})
+	return withFields(plain(s), map[string]any{"items": rows(s.Items), "sourceQuoteNumber": quoteNumber(s.SourceQuote), "opportunityTitle": opportunityTitle(s.Opportunity)})
 }
 
 // The linked records are shown by their human reference, not their ID.
@@ -167,11 +162,11 @@ func quoteNumber(q *Quote) string {
 	return q.QuoteNumber
 }
 
-func projectName(p *Project) string {
-	if p == nil {
+func opportunityTitle(o *Opportunity) string {
+	if o == nil {
 		return ""
 	}
-	return p.Name
+	return o.Title
 }
 func (g GoodsReceipt) MarshalJSON() ([]byte, error) {
 	type plain GoodsReceipt

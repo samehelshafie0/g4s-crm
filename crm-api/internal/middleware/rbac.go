@@ -76,7 +76,8 @@ var rolePermissions = map[models.UserRole]map[string]bool{
 	},
 	models.RoleProjectManager: {
 		"projects:read": true, "projects:create": true, "projects:update": true,
-		"quotes:read": true, "procurement:read": true, "inventory:read": true,
+		"opportunities:read": true,
+		"quotes:read":        true, "procurement:read": true, "inventory:read": true,
 		"customers:read": true, "products:read": true,
 		"documents:read": true, "documents:create": true,
 		"dashboard:read": true, "users:read": true,

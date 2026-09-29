@@ -59,15 +59,17 @@ type StockReservation struct {
 	Source            ReservationSource `gorm:"not null" json:"source"`
 	SourceRef         string            `json:"sourceRef"`
 	SourceLabel       string            `json:"sourceLabel"`
-	CustomerName      string            `json:"customerName"`
-	ReservedByID      *uuid.UUID        `gorm:"type:uuid" json:"reservedById,omitempty"`
-	ReservedBy        *User             `gorm:"foreignKey:ReservedByID" json:"reservedBy,omitempty"`
-	ReservedAt        time.Time         `json:"reservedAt"`
-	ReleaseDate       *time.Time        `json:"releaseDate,omitempty"`
-	ReleasedByID      *uuid.UUID        `gorm:"type:uuid" json:"releasedById,omitempty"`
-	ReleaseReason     string            `json:"releaseReason"`
-	Status            ReservationStatus `gorm:"default:'active'" json:"status"`
-	Notes             string            `json:"notes"`
+	// QuoteLineItemID is the accepted quote line this stock is held for.
+	QuoteLineItemID *uuid.UUID        `gorm:"type:uuid" json:"quoteLineItemId,omitempty"`
+	CustomerName    string            `json:"customerName"`
+	ReservedByID    *uuid.UUID        `gorm:"type:uuid" json:"reservedById,omitempty"`
+	ReservedBy      *User             `gorm:"foreignKey:ReservedByID" json:"reservedBy,omitempty"`
+	ReservedAt      time.Time         `json:"reservedAt"`
+	ReleaseDate     *time.Time        `json:"releaseDate,omitempty"`
+	ReleasedByID    *uuid.UUID        `gorm:"type:uuid" json:"releasedById,omitempty"`
+	ReleaseReason   string            `json:"releaseReason"`
+	Status          ReservationStatus `gorm:"default:'active'" json:"status"`
+	Notes           string            `json:"notes"`
 }
 
 type InventoryMovement struct {

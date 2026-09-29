@@ -1,6 +1,6 @@
 # G4S CRM — current status and work plan
 
-**Last updated:** 2026-09-17
+**Last updated:** 2026-09-29
 **Current phase:** quote document appendices and combined PDF export implemented, following user/workflow controls. Broader M1–M5 acceptance remains.
 **Release state:** not ready for production.
 **Primary objective:** make customers → opportunities → quotes → contracts work end to end, then finish remaining modules and deploy to the owner's server.
@@ -96,6 +96,12 @@ M6 can follow M4 only if the owner chooses a sales-only first release and incomp
 | T25 | M6 | Full regression/UAT, role tests, migration upgrade/rollback, backup+upload restore and realistic load checks | All relevant findings | TODO |
 
 Dependencies: T03/T04 protect all mutations. T05 enables repeatable environments. T06 precedes live UI integration. T11 precedes T13/T14. T17 requires an accepted persisted quote revision. T21/T22 depend on agreed catalog/stock contracts. T24/T25 require actual server details. Work on those independent foundations need not wait for optional design decisions.
+
+## In progress — opportunity-centred flow, 2026-09-29
+
+**Backend DONE and tested, uncommitted; frontend TODO.** The opportunity becomes the project, each opportunity has one quote with retained versions, contracts hold quotes, sites and fulfilment links are recorded, and customer quotes are SAR/USD with a pinned rate. Migrations 000008–000014 are written and dry-run against a copy of live data but **not applied to the live database**. Do not deploy the backend without the frontend. Full detail, defaults taken and next steps: [docs/OPPORTUNITY_FLOW_PROGRESS.md](docs/OPPORTUNITY_FLOW_PROGRESS.md).
+
+Also shipped since 2026-09-17 (committed): dashboard redesign, nginx upload/timeout fix, Saudi catalog seed with rentals and live FX refresh, catalog visible in builder/price books, vendor-file product import, server-side PDF table extraction, supplier quote/PO customer links and record attachments, multipart upload fix.
 
 ## Latest batch — quote PDF appendices, 2026-09-17
 

@@ -252,3 +252,33 @@ func (h *ContractHandler) Expiring(c *gin.Context) {
 		Find(&items)
 	response.OK(c, items)
 }
+
+// Quotes lists what a contract holds: the quote it was created from, and every
+// quote raised inside its period since — each as its current version.
+func (h *ContractHandler) Quotes(c *gin.Context) {
+	var contract models.Contract
+	if err := h.db.First(&contract, "id = ?", c.Param("id")).Error; err != nil {
+		apiError(c, err)
+		return
+	}
+	quotes := []models.Quote{}
+	// The origin is matched by number, so the contract shows that quote's
+	// current version rather than the one row it was converted from.
+	scope := h.db.Where("contract_id = ?", contract.ID)
+	if contract.QuoteID != nil {
+		scope = scope.Or("quote_number = (SELECT quote_number FROM quotes WHERE id = ?)", contract.QuoteID)
+	}
+	if err := h.db.Where("is_current").Where(scope).Order("created_at").Find(&quotes).Error; err != nil {
+		apiError(c, err)
+		return
+	}
+	out := make([]gin.H, 0, len(quotes))
+	for _, quote := range quotes {
+		role := "raised-inside"
+		if quote.ContractID == nil {
+			role = "origin"
+		}
+		out = append(out, gin.H{"id": quote.ID, "quoteNumber": quote.QuoteNumber, "version": quote.Version, "status": quote.Status, "total": quote.Total, "currency": quote.Currency, "fxRate": quote.FXRate, "createdAt": quote.CreatedAt, "role": role})
+	}
+	response.OK(c, out)
+}

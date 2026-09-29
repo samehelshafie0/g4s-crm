@@ -4,7 +4,6 @@ import (
 	"g4s-crm/api/internal/models"
 	"g4s-crm/api/pkg/pagination"
 	"g4s-crm/api/pkg/response"
-	"g4s-crm/api/pkg/seqgen"
 	v "g4s-crm/api/pkg/validator"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -370,102 +369,6 @@ func (h *CatalogServiceHandler) save(c *gin.Context, create bool) {
 func (h *CatalogServiceHandler) Delete(c *gin.Context) {
 	deleteRecord(c, h.db, &models.CatalogService{})
 }
-
-type ProjectHandler struct{ db *gorm.DB }
-
-func NewProjectHandler(db *gorm.DB) *ProjectHandler { return &ProjectHandler{db: db} }
-func (h *ProjectHandler) List(c *gin.Context) {
-	params := pagination.GetParams(c, "name")
-	items := []models.Project{}
-	var total int64
-	q := h.db.Model(&models.Project{})
-	if search := c.Query("q"); search != "" {
-		q = q.Where("name ILIKE ?", "%"+search+"%")
-	}
-	if err := q.Count(&total).Error; err != nil {
-		apiError(c, err)
-		return
-	}
-	if err := q.Preload("Customer").Preload("Quote.LineItems").Preload("ProjectManager").Order(params.Sort + " " + params.Order).Scopes(pagination.Paginate(params)).Find(&items).Error; err != nil {
-		apiError(c, err)
-		return
-	}
-	response.OKWithMeta(c, items, pagination.BuildMeta(params, total))
-}
-func (h *ProjectHandler) Get(c *gin.Context) {
-	var item models.Project
-	if err := h.db.Preload("Customer").Preload("Quote.LineItems").Preload("ProjectManager").First(&item, "id = ?", c.Param("id")).Error; err != nil {
-		apiError(c, err)
-		return
-	}
-	response.OK(c, item)
-}
-func (h *ProjectHandler) Create(c *gin.Context) { h.save(c, true) }
-func (h *ProjectHandler) Update(c *gin.Context) { h.save(c, false) }
-func (h *ProjectHandler) save(c *gin.Context, create bool) {
-	item := models.Project{Status: models.ProjectStatusPlanning, Priority: models.PriorityMedium}
-	if !create {
-		if err := h.db.First(&item, "id = ?", c.Param("id")).Error; err != nil {
-			apiError(c, err)
-			return
-		}
-	}
-	if !bindFields(c, &item, map[string]string{"name": "required,max=200", "customerId": "required", "quoteId": "", "status": "required,oneof=planning in-progress on-hold completed cancelled", "priority": "required,oneof=low medium high critical", "startDate": "", "targetEndDate": "", "actualEndDate": "", "projectManagerId": "", "notes": "max=20000"}) {
-		return
-	}
-	err := h.db.Transaction(func(tx *gorm.DB) error {
-		if err := exists(tx, &models.Customer{}, item.CustomerID); err != nil {
-			return err
-		}
-		if err := optionalExists(tx, &models.User{}, item.ProjectManagerID); err != nil {
-			return err
-		}
-		if item.StartDate != nil && item.TargetEndDate != nil && item.TargetEndDate.Before(*item.StartDate) {
-			return invalid("Target end date must follow start date")
-		}
-		if item.QuoteID != nil {
-			var quote models.Quote
-			if err := tx.First(&quote, "id = ?", item.QuoteID).Error; err != nil {
-				return err
-			}
-			if quote.CustomerID != item.CustomerID {
-				return invalid("Quote belongs to another customer")
-			}
-			if quote.Status != models.QuoteStatusAccepted {
-				return invalid("Project requires an accepted quote")
-			}
-			item.Currency = quote.Currency
-			item.TotalValue = quote.Total
-			item.TotalCost = quote.TotalCost
-			item.MarginPercent = quote.MarginPercent
-		}
-		if create {
-			var err error
-			item.ProjectNumber, err = seqgen.NextNumber(tx, "project")
-			if err != nil {
-				return err
-			}
-		}
-		if err := tx.Omit(clause.Associations).Save(&item).Error; err != nil {
-			return err
-		}
-		return nil
-	})
-	if err != nil {
-		apiError(c, err)
-		return
-	}
-	if err := h.db.Preload("Customer").Preload("Quote.LineItems").Preload("ProjectManager").First(&item, "id = ?", item.ID).Error; err != nil {
-		apiError(c, err)
-		return
-	}
-	if create {
-		response.Created(c, item)
-	} else {
-		response.OK(c, item)
-	}
-}
-func (h *ProjectHandler) Delete(c *gin.Context) { deleteRecord(c, h.db, &models.Project{}) }
 
 func (h *TeamHandler) AddMember(c *gin.Context) {
 	var req struct {

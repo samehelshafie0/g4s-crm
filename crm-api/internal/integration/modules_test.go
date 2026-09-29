@@ -46,7 +46,7 @@ func testModuleAPIs(t *testing.T, db *gorm.DB, r *gin.Engine, token, customerID 
 		}
 		return result
 	}
-	var productID, mfrID, quoteID string
+	var productID, mfrID, quoteID, oppID string
 	t.Run("catalog nested writes and relationships", func(t *testing.T) {
 		manufacturer := call(t, "POST", "/manufacturers", m("name", "Integration Manufacturer", "code", "INTEGRATION", "vendorType", "both"), 201)
 		mfrID = manufacturer["id"].(string)
@@ -81,13 +81,20 @@ func testModuleAPIs(t *testing.T, db *gorm.DB, r *gin.Engine, token, customerID 
 			t.Fatal(opp)
 		}
 		call(t, "PATCH", "/opportunities/"+opp["id"].(string), m("notes", "Retain owners"), 200)
+		oppID = opp["id"].(string)
 	})
 	t.Run("builder save stale edit lifecycle revision and conversion", func(t *testing.T) {
 		service := call(t, "POST", "/services", m("sku", "SVC-TEST", "name", "Engineering", "unitCost", 10, "unitPrice", 30), 201)
-		quote := call(t, "POST", "/quotes", m("customerId", customerID, "vatPercent", 0), 201)
+		call(t, "POST", "/quotes", m("customerId", customerID, "vatPercent", 0), 400)
+		quote := call(t, "POST", "/quotes", m("customerId", customerID, "opportunityId", oppID, "vatPercent", 0), 201)
 		quoteID = quote["id"].(string)
+		if quote["version"] != float64(1) || quote["isCurrent"] != true {
+			t.Fatal(quote)
+		}
+		// One opportunity, one quote: a second is refused and names the first.
+		call(t, "POST", "/quotes", m("customerId", customerID, "opportunityId", oppID), 409)
 		rows := []any{m("rowType", "heading", "source", "write-in", "multiplier", 1, "headingText", "Equipment", "isPrintable", true), m("rowType", "item", "source", "product", "productId", productID, "description", "Camera", "quantity", 2.5, "multiplier", 2, "unitCost", 25, "unitPrice", 100, "discountPercent", 10, "isSelected", true, "isPrintable", true), m("rowType", "item", "source", "service", "serviceId", service["id"], "description", "Optional engineering", "quantity", 10, "multiplier", 1, "unitCost", 10, "unitPrice", 30, "isOptional", true, "isSelected", false, "isPrintable", false)}
-		payload := m("customerId", customerID, "lockVersion", quote["lockVersion"], "currency", "SAR", "vatPercent", 0, "discountPercent", 10, "rows", rows, "soldTo", m("company", "Saved address"), "paymentTerms", "Net 60")
+		payload := m("customerId", customerID, "opportunityId", oppID, "lockVersion", quote["lockVersion"], "currency", "SAR", "vatPercent", 0, "discountPercent", 10, "rows", rows, "soldTo", m("company", "Saved address"), "paymentTerms", "Net 60")
 		saved := call(t, "PUT", "/quotes/"+quoteID+"/builder", payload, 200)
 		if saved["total"] != float64(405) || saved["totalCost"] != float64(125) || saved["paymentTerms"] != "Net 60" {
 			t.Fatal(saved)
@@ -104,10 +111,41 @@ func testModuleAPIs(t *testing.T, db *gorm.DB, r *gin.Engine, token, customerID 
 		}
 		call(t, "PUT", "/quotes/"+quoteID+"/builder", payload, 422)
 		call(t, "PATCH", "/quotes/"+quoteID+"/send", m(), 200)
-		call(t, "PATCH", "/quotes/"+quoteID+"/accept", m(), 200)
-		revision := call(t, "POST", "/quotes/"+quoteID+"/revisions", m(), 201)
-		if revision["status"] != "draft" || revision["vatPercent"] != float64(0) {
+
+		// Revising keeps the number, raises the version and freezes the old one.
+		call(t, "POST", "/quotes/"+quoteID+"/revisions", m(), 400)
+		revision := call(t, "POST", "/quotes/"+quoteID+"/revisions", m("reason", "Customer asked for a second camera"), 201)
+		if revision["status"] != "draft" || revision["vatPercent"] != float64(0) || revision["version"] != float64(2) || revision["quoteNumber"] != quote["quoteNumber"] || revision["revisionReason"] != "Customer asked for a second camera" {
 			t.Fatal(revision)
+		}
+		call(t, "PATCH", "/quotes/"+quoteID+"/accept", m(), 422)
+		call(t, "POST", "/quotes/"+quoteID+"/revisions", m("reason", "again"), 422)
+		versions := call(t, "GET", "/quotes/"+quoteID+"/versions", nil, 200)
+		_ = versions
+		listed := call(t, "GET", "/quotes?opportunityId="+oppID, nil, 200)
+		_ = listed
+		oldID := quoteID
+		quoteID = revision["id"].(string)
+		call(t, "PATCH", "/quotes/"+quoteID+"/submit", m(), 200)
+		if current := call(t, "GET", "/quotes/"+quoteID, nil, 200); current["status"] == "pending-approval" {
+			call(t, "PATCH", "/quotes/"+quoteID+"/approve", m(), 200)
+		}
+		call(t, "PATCH", "/quotes/"+quoteID+"/send", m(), 200)
+		call(t, "PATCH", "/quotes/"+quoteID+"/accept", m(), 200)
+		// Accepting the job's quote wins the job and starts delivery.
+		won := call(t, "GET", "/opportunities/"+oppID, nil, 200)
+		if won["stage"] != "closed-won" || won["deliveryStatus"] != "planning" {
+			t.Fatal(won)
+		}
+		current := won["currentQuote"].(map[string]any)
+		if current["version"] != float64(2) || current["id"] != quoteID {
+			t.Fatal(current)
+		}
+		// The accepted version is the deal; it is not reopened.
+		call(t, "POST", "/quotes/"+quoteID+"/revisions", m("reason", "too late"), 422)
+		superseded := call(t, "GET", "/quotes/"+oldID, nil, 200)
+		if superseded["isCurrent"] != false || superseded["supersededAt"] == nil {
+			t.Fatal(superseded)
 		}
 		contractInput := m("title", "Converted contract", "type", "sales", "startDate", "2026-09-16", "endDate", "2027-09-16")
 		contract := call(t, "POST", "/quotes/"+quoteID+"/convert-to-contract", contractInput, 201)
@@ -123,26 +161,23 @@ func testModuleAPIs(t *testing.T, db *gorm.DB, r *gin.Engine, token, customerID 
 			t.Fatal(again)
 		}
 	})
-	t.Run("supplier quote carries its customer quote and project into the purchase order", func(t *testing.T) {
-		project := call(t, "POST", "/projects", m("name", "Link chain project", "customerId", customerID, "quoteId", quoteID), 201)
-		projectID := project["id"].(string)
-
+	t.Run("supplier quote carries its customer quote and opportunity into the purchase order", func(t *testing.T) {
 		sq := call(t, "POST", "/procurement/supplier-quotes", m(
 			"supplierId", mfrID, "supplierName", "Integration Manufacturer", "currency", "SAR",
-			"sourceQuoteId", quoteID, "projectId", projectID,
+			"sourceQuoteId", quoteID, "opportunityId", oppID,
 			"items", []any{m("productId", productID, "productName", "Camera", "quantity", 4, "unitCost", 30)}), 201)
-		if sq["sourceQuoteId"] != quoteID || sq["projectId"] != projectID {
+		if sq["sourceQuoteId"] != quoteID || sq["opportunityId"] != oppID {
 			t.Fatalf("supplier quote did not keep its customer links: %v", sq)
 		}
 		sqPath := "/procurement/supplier-quotes/" + sq["id"].(string)
 		call(t, "PATCH", sqPath+"/status", m("status", "accepted"), 200)
 
 		po := call(t, "POST", sqPath+"/convert-to-po", m(), 201)
-		if po["sourceQuoteId"] != quoteID || po["projectId"] != projectID {
-			t.Fatalf("conversion dropped the customer quote or project: %v", po)
+		if po["sourceQuoteId"] != quoteID || po["opportunityId"] != oppID {
+			t.Fatalf("conversion dropped the customer quote or opportunity: %v", po)
 		}
 		reloaded := call(t, "GET", "/procurement/purchase-orders/"+po["id"].(string), nil, 200)
-		if reloaded["sourceQuoteNumber"] == "" || reloaded["projectName"] != "Link chain project" {
+		if reloaded["sourceQuoteNumber"] == "" || reloaded["opportunityTitle"] != "API opportunity" {
 			t.Fatalf("purchase order does not report its links by name: %v", reloaded)
 		}
 
@@ -259,10 +294,16 @@ func testModuleAPIs(t *testing.T, db *gorm.DB, r *gin.Engine, token, customerID 
 		}
 		book := call(t, "POST", "/price-books", m("name", "Customer pricing", "type", "customer-specific", "customerId", customerID), 201)
 		call(t, "POST", "/price-books/"+book["id"].(string)+"/entries", m("productId", productID, "customPrice", 90), 200)
-		project := call(t, "POST", "/projects", m("name", "Delivery", "customerId", customerID, "quoteId", quoteID, "projectManagerId", user["id"]), 201)
-		if project["totalValue"] != float64(405) || project["projectManager"] != "Test Admin" {
-			t.Fatal(project)
+		// The won opportunity is the project: delivery is recorded on it directly.
+		delivery := call(t, "PATCH", "/opportunities/"+oppID+"/delivery", m("deliveryStatus", "in-progress", "projectManagerId", user["id"], "startDate", "2026-10-01", "targetEndDate", "2026-12-15"), 200)
+		if delivery["deliveryStatus"] != "in-progress" || delivery["projectManagerName"] != "Test Admin" {
+			t.Fatal(delivery)
 		}
+		call(t, "PATCH", "/opportunities/"+oppID+"/delivery", m("startDate", "2026-12-01", "targetEndDate", "2026-10-01"), 400)
+		open := call(t, "GET", "/delivery?open=true", nil, 200)
+		_ = open
+		lost := call(t, "POST", "/opportunities", m("title", "Not won", "customerId", customerID), 201)
+		call(t, "PATCH", "/opportunities/"+lost["id"].(string)+"/delivery", m("deliveryStatus", "planning"), 400)
 	})
 	t.Run("mixed price books recurring components inactive flags and reporting", func(t *testing.T) {
 		service := call(t, "POST", "/services", m("sku", "SVC-MIXED", "name", "Installation", "unitCost", 10, "unitPrice", 30), 201)
@@ -312,7 +353,7 @@ func testModuleAPIs(t *testing.T, db *gorm.DB, r *gin.Engine, token, customerID 
 		}
 	})
 	t.Run("frontend collection routes return arrays", func(t *testing.T) {
-		for _, path := range []string{"/customers", "/customers/lookup", "/opportunities", "/quotes", "/contracts", "/projects", "/manufacturers", "/products", "/services", "/price-books", "/recurring-services", "/exchange-rates", "/teams", "/users/lookup", "/documents", "/inventory/stock", "/inventory/reservations", "/inventory/movements", "/procurement/purchase-orders", "/procurement/supplier-quotes", "/procurement/goods-receipts", "/procurement/supplier-items"} {
+		for _, path := range []string{"/customers", "/customers/lookup", "/opportunities", "/quotes", "/contracts", "/delivery", "/manufacturers", "/products", "/services", "/price-books", "/recurring-services", "/exchange-rates", "/teams", "/users/lookup", "/documents", "/inventory/stock", "/inventory/reservations", "/inventory/movements", "/procurement/purchase-orders", "/procurement/supplier-quotes", "/procurement/goods-receipts", "/procurement/supplier-items"} {
 			result := call(t, "GET", path, nil, 200)
 			if _, ok := result["data"].([]any); !ok {
 				t.Fatalf("%s is not a collection: %#v", path, result)

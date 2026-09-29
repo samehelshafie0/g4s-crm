@@ -47,4 +47,15 @@ type Opportunity struct {
 	ExpectedCloseDate *time.Time       `json:"expectedCloseDate,omitempty"`
 	Notes             string           `json:"notes"`
 	Quotes            []Quote          `gorm:"foreignKey:OpportunityID" json:"quotes,omitempty"`
+	Sites             []CustomerSite   `gorm:"many2many:opportunity_sites;joinForeignKey:OpportunityID;joinReferences:SiteID" json:"sites"`
+
+	// Delivery: the opportunity is the project once it is won.
+	DeliveryStatus   *DeliveryStatus `json:"deliveryStatus,omitempty"`
+	ProjectManagerID *uuid.UUID      `gorm:"type:uuid" json:"projectManagerId,omitempty"`
+	ProjectManager   *User           `gorm:"foreignKey:ProjectManagerID" json:"projectManager,omitempty"`
+	StartDate        *time.Time      `json:"startDate,omitempty"`
+	TargetEndDate    *time.Time      `json:"targetEndDate,omitempty"`
+	ActualEndDate    *time.Time      `json:"actualEndDate,omitempty"`
+	ActualValue      *float64        `json:"actualValue,omitempty"`
+	ActualCost       *float64        `json:"actualCost,omitempty"`
 }

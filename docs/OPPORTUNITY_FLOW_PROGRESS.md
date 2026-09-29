@@ -1,0 +1,85 @@
+# Opportunity-centred flow — build progress
+
+**Last updated:** 2026-09-29
+**Design doc:** [Opportunity-Centred CRM Flow](https://claude.ai/code/artifact/5421df6f-acb3-4fe5-b2ef-9f10fd45b728) (Claude Doc — the plan, rules, diagrams, open questions)
+**State:** backend done and tested, **uncommitted on `main`**. Frontend not started. Nothing deployed; live database untouched.
+
+## Rules being implemented (confirmed by owner, 22 Sep 2026)
+
+1. The quote number is bound to the opportunity for the life of the job.
+2. One quote per opportunity, with many versions; every version is kept.
+3. The project **is** the opportunity. No separate project entity.
+4. A maintenance contract is a period; several quotes can be raised inside it.
+5. Sites belong to the customer; an opportunity chooses from its customer's sites.
+6. Customers record their KSA branches (city, region, type, contact).
+7. Customer quotes go out in SAR or USD only; supplier quotes arrive in any currency.
+
+## Defaults taken for the doc's open questions
+
+The owner had not answered these; each can be changed later.
+
+| Question | Default implemented |
+|---|---|
+| Two priced alternatives | Two opportunities (strict one-quote rule, enforced by a unique index) |
+| Contract quotes and the pipeline | A quote raised inside a contract has no opportunity |
+| Renewals | Unchanged: renewal creates a linked successor contract |
+| Existing 3 quotes | Kept; `QT-2026-0003` had no opportunity, so the migration creates one for it |
+| Delivery screen or filter | Separate `GET /delivery` list (screen still to build) |
+| Who sets delivery status | `projects:update` holders (admin, project manager); project managers gain `opportunities:read` |
+| USD rate | Live rate from the exchange-rate table, pinned to the version when the quote is created or its currency changed |
+
+## Done — backend (all 7 phases)
+
+### Migrations `crm-api/migrations/000008`–`000014`
+
+| # | File | Change |
+|---|---|---|
+| 8 | `customer_sites` | code, site_type, lat/long, site contact, is_active |
+| 9 | `opportunity_absorbs_project` | delivery_status (renamed `project_status` enum), project_manager_id, start/target/actual dates, actual value/cost; CHECK delivery only when won; SQ/PO `project_id` → `opportunity_id`; **drops `projects`** (refuses if it holds live rows) |
+| 10 | `opportunity_sites` | join table; `quote_line_items.site_id` |
+| 11 | `quote_versions` | orphan quotes get an opportunity; revision chains renumbered to the root's number with versions by depth; `is_current`, `revision_reason`, `superseded_at`; unique `(quote_number, version)`, one current version per number, one current quote per opportunity; refuses if an opportunity holds two chains |
+| 12 | `contract_quotes` | `quotes.contract_id`; CHECK a quote has exactly one parent (opportunity XOR contract); opportunity FK → RESTRICT |
+| 13 | `fulfilment_links` | `quote_line_items.fulfilment_source` (stock/purchase/service); `quote_line_item_id` on reservations and PO items |
+| 14 | `quote_currency` | `quotes.fx_rate` (SAR per unit, pinned); CHECK currency in SAR/USD (refuses if others exist) |
+
+**Verified:** applied cleanly to a copy of the live database, and to a synthetic copy with a 3-number revision chain, an orphan chain and a soft-deleted orphan — all renumbered and parented correctly. That test caught one ordering bug (renumbering before dropping the old unique key), since fixed.
+
+### API
+
+- **Sites:** `POST/PATCH /customers/:id/sites` take the new fields; deleting a site used by an opportunity or quote line is refused (deactivate instead).
+- **Opportunities:** `siteIds` on create/update (must belong to the customer, active when newly chosen); customer cannot change once a quote exists; stage and delivery kept consistent (`syncDelivery`); response includes `sites`, `projectManagerName`, `currentQuote`.
+- **Delivery:** `GET /delivery` (won opportunities, `?open=true`), `PATCH /opportunities/:id/delivery`, `GET /opportunities/:id/fulfilment` (per line: source, reserved, ordered, received, POs, state).
+- **Quotes:** create requires exactly one of `opportunityId` / `contractId`; second quote on an opportunity → 409 naming the existing one; currency SAR/USD with pinned `fxRate`; list shows current versions only (`?versions=all`, `?opportunityId`, `?contractId`); every mutation requires the current version; deleting a draft revision restores the previous version; accepting a job's quote moves the opportunity to closed-won + delivery planning.
+- **Versions:** `POST /quotes/:id/revisions` (reason required; only from approved/sent/declined/expired; same number, version+1, old one frozen); `GET /quotes/:id/versions`; `POST /quotes/:id/currency` converts all lines at old/new pinned rates. `/duplicate` removed.
+- **Builder:** cannot move a quote to another customer/opportunity or change currency (use the currency endpoint); rows accept `siteId` (must be a site the job covers) and `fulfilmentSource`.
+- **Contracts:** `GET /contracts/:id/quotes` (origin + quotes raised inside).
+- **Fulfilment links:** reservations and PO lines accept `quoteLineItemId` — only against an accepted version, product must match; PO takes the job's opportunity automatically.
+- **Dashboard:** current versions only, money converted with `total * fx_rate`, new `wonNotDelivered` KPI.
+- **PDF:** reference printed as `QT-2026-0001 v3`; filename `QT-2026-0001-v3.pdf`.
+- **Removed:** `ProjectHandler`, `/projects` routes, `Project` model; document links no longer accept `project`.
+- **Fix:** `recordActivity` truncates actions over 50 characters (column is `varchar(50)`); full text stays in the description.
+
+### Tests
+
+`./scripts/test-integration.sh` — **passing**. Updated: every test quote now has an opportunity; the revision test now revises a *sent* quote, checks the number is kept, the old version is frozen, accepting wins the job, and an accepted version cannot be revised; the project test is now a delivery test; the appendix test revises after approval. Frontend unit tests not yet re-run (frontend unchanged).
+
+## Not done — frontend (the next session)
+
+The frontend still calls removed or changed endpoints, so **do not deploy the backend alone.** Known breakages: Projects screen (`/projects`), quote creation without an opportunity, `/duplicate`, currency list of six, `projectId` on procurement forms.
+
+1. **Customers → Sites tab** with the KSA city list (city → region), site type, code, contact, active.
+2. **Opportunities:** site multi-select from the customer's sites; an opportunity page (overview, quote + versions, fulfilment, procurement, documents, activity).
+3. **Quotes list:** one row per job, version column; "New quote" starts from an opportunity (or contract).
+4. **Quote builder:** version banner and read-only superseded versions; "Revise" with reason; version history panel; SAR/USD switch via `POST /quotes/:id/currency` with the pinned rate shown; convert catalog SAR prices by `fxRate` when adding lines; site selector on lines; fulfilment source per line.
+5. **Delivery screen** replacing Projects (`/delivery`, `PATCH …/delivery`).
+6. **Contracts:** quotes tab + "Raise quote" (POST `/quotes` with `contractId`).
+7. **Procurement:** project selector → opportunity selector; PO/SQ payload whitelists (`opportunityId`, line `quoteLineItemId`).
+8. **Dashboard:** won-not-delivered tile.
+9. Remove `projectsService`, `ProjectsView`, `Project` types; update router + sidebar.
+10. Then: `npm test`, `npm run build`, update `docs/API_ENDPOINTS.md` / STATUS.md, commit in phases, rebuild images, run `migrate`, verify in the browser.
+
+## Before deploying
+
+- Back up the live database first; migration 9 drops a table and 11 renumbers quotes.
+- Rebuild the API image and run `./g4s-crm-api migrate`, then deploy the frontend in the same release.
+- Update the design doc if any default above is changed.

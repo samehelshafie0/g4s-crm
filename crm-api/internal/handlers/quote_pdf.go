@@ -115,6 +115,6 @@ func (h *DocumentHandler) ExportQuote(c *gin.Context) {
 	c.Header("Content-Type", "application/pdf")
 	c.Header("Cache-Control", "no-store")
 	c.Header("X-Content-Type-Options", "nosniff")
-	c.Header("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": quote.QuoteNumber + ".pdf"}))
+	c.Header("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": fmt.Sprintf("%s-v%d.pdf", quote.QuoteNumber, quote.Version)}))
 	c.File(output)
 }

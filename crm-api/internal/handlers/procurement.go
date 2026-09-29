@@ -26,7 +26,7 @@ func (h *ProcurementHandler) ListPOs(c *gin.Context) {
 	params := pagination.GetParams(c)
 	var items []models.PurchaseOrder
 	var total int64
-	query := h.db.Model(&models.PurchaseOrder{}).Preload("Items.Product.Manufacturer").Preload("ApprovedBy").Preload("SourceQuote").Preload("Project")
+	query := h.db.Model(&models.PurchaseOrder{}).Preload("Items.Product.Manufacturer").Preload("ApprovedBy").Preload("SourceQuote").Preload("Opportunity")
 	if status := c.Query("status"); status != "" {
 		query = query.Where("status = ?", status)
 	}
@@ -37,7 +37,7 @@ func (h *ProcurementHandler) ListPOs(c *gin.Context) {
 
 func (h *ProcurementHandler) GetPO(c *gin.Context) {
 	var item models.PurchaseOrder
-	if err := h.db.Preload("Items.Product.Manufacturer").Preload("ApprovedBy").Preload("SourceQuote").Preload("Project").First(&item, "id = ?", c.Param("id")).Error; err != nil {
+	if err := h.db.Preload("Items.Product.Manufacturer").Preload("ApprovedBy").Preload("SourceQuote").Preload("Opportunity").First(&item, "id = ?", c.Param("id")).Error; err != nil {
 		response.NotFound(c, "Purchase order not found")
 		return
 	}
@@ -45,10 +45,11 @@ func (h *ProcurementHandler) GetPO(c *gin.Context) {
 }
 
 type poLineInput struct {
-	ProductID    uuid.UUID `json:"productId" validate:"required"`
-	Quantity     int       `json:"quantity" validate:"required,gt=0,lte=100000000"`
-	UnitCost     float64   `json:"unitCost" validate:"gte=0,lte=100000000"`
-	LeadTimeDays int       `json:"leadTimeDays" validate:"gte=0,lte=3650"`
+	ProductID       uuid.UUID  `json:"productId" validate:"required"`
+	Quantity        int        `json:"quantity" validate:"required,gt=0,lte=100000000"`
+	UnitCost        float64    `json:"unitCost" validate:"gte=0,lte=100000000"`
+	LeadTimeDays    int        `json:"leadTimeDays" validate:"gte=0,lte=3650"`
+	QuoteLineItemID *uuid.UUID `json:"quoteLineItemId"`
 }
 type poInput struct {
 	SupplierID       *uuid.UUID      `json:"supplierId"`
@@ -58,7 +59,7 @@ type poInput struct {
 	CustomsDuty      float64         `json:"customsDuty" validate:"gte=0,lte=100000000"`
 	ExpectedDelivery *string         `json:"expectedDelivery"`
 	SourceQuoteID    *uuid.UUID      `json:"sourceQuoteId"`
-	ProjectID        *uuid.UUID      `json:"projectId"`
+	OpportunityID    *uuid.UUID      `json:"opportunityId"`
 	Notes            string          `json:"notes" validate:"max=20000"`
 	Items            []poLineInput   `json:"items" validate:"max=1000,dive"`
 }
@@ -93,7 +94,7 @@ func (h *ProcurementHandler) savePO(c *gin.Context, create bool) {
 		if err := optionalExists(tx, &models.Quote{}, req.SourceQuoteID); err != nil {
 			return err
 		}
-		if err := optionalExists(tx, &models.Project{}, req.ProjectID); err != nil {
+		if err := optionalExists(tx, &models.Opportunity{}, req.OpportunityID); err != nil {
 			return err
 		}
 		if create {
@@ -113,7 +114,7 @@ func (h *ProcurementHandler) savePO(c *gin.Context, create bool) {
 		po.CustomsDuty = req.CustomsDuty
 		po.ExpectedDelivery = date
 		po.SourceQuoteID = req.SourceQuoteID
-		po.ProjectID = req.ProjectID
+		po.OpportunityID = req.OpportunityID
 		po.Notes = req.Notes
 		po.Subtotal = 0
 		po.Items = nil
@@ -123,7 +124,25 @@ func (h *ProcurementHandler) savePO(c *gin.Context, create bool) {
 			}
 			total := models.RoundMoney(float64(line.Quantity) * line.UnitCost)
 			po.Subtotal += total
-			po.Items = append(po.Items, models.PurchaseOrderItem{ProductID: line.ProductID, Quantity: line.Quantity, UnitCost: line.UnitCost, Total: total, LeadTimeDays: line.LeadTimeDays})
+			// An order line bought for a job points at the quote line it fulfils,
+			// and the order takes that job's opportunity if it has none.
+			if line.QuoteLineItemID != nil {
+				_, quote, err := committedLine(tx, *line.QuoteLineItemID, line.ProductID)
+				if err != nil {
+					return err
+				}
+				if quote.OpportunityID != nil {
+					if po.OpportunityID == nil {
+						po.OpportunityID = quote.OpportunityID
+					} else if *po.OpportunityID != *quote.OpportunityID {
+						return invalid("An order line fulfils a quote from a different opportunity")
+					}
+				}
+				if po.SourceQuoteID == nil {
+					po.SourceQuoteID = &quote.ID
+				}
+			}
+			po.Items = append(po.Items, models.PurchaseOrderItem{ProductID: line.ProductID, Quantity: line.Quantity, UnitCost: line.UnitCost, Total: total, LeadTimeDays: line.LeadTimeDays, QuoteLineItemID: line.QuoteLineItemID})
 		}
 		po.Subtotal = models.RoundMoney(po.Subtotal)
 		po.Total = models.RoundMoney(po.Subtotal + po.ShippingCost + po.CustomsDuty)
@@ -147,7 +166,7 @@ func (h *ProcurementHandler) savePO(c *gin.Context, create bool) {
 		apiError(c, err)
 		return
 	}
-	if err := h.db.Preload("Items.Product.Manufacturer").Preload("ApprovedBy").Preload("SourceQuote").Preload("Project").First(&po, "id = ?", po.ID).Error; err != nil {
+	if err := h.db.Preload("Items.Product.Manufacturer").Preload("ApprovedBy").Preload("SourceQuote").Preload("Opportunity").First(&po, "id = ?", po.ID).Error; err != nil {
 		apiError(c, err)
 		return
 	}
@@ -230,7 +249,7 @@ func (h *ProcurementHandler) ListSQs(c *gin.Context) {
 	params := pagination.GetParams(c)
 	var items []models.SupplierQuote
 	var total int64
-	query := h.db.Model(&models.SupplierQuote{}).Preload("Items").Preload("SourceQuote").Preload("Project")
+	query := h.db.Model(&models.SupplierQuote{}).Preload("Items").Preload("SourceQuote").Preload("Opportunity")
 	if status := c.Query("status"); status != "" {
 		query = query.Where("status = ?", status)
 	}
@@ -241,7 +260,7 @@ func (h *ProcurementHandler) ListSQs(c *gin.Context) {
 
 func (h *ProcurementHandler) GetSQ(c *gin.Context) {
 	var item models.SupplierQuote
-	if err := h.db.Preload("Items.Product").Preload("SourceQuote").Preload("Project").First(&item, "id = ?", c.Param("id")).Error; err != nil {
+	if err := h.db.Preload("Items.Product").Preload("SourceQuote").Preload("Opportunity").First(&item, "id = ?", c.Param("id")).Error; err != nil {
 		response.NotFound(c, "Supplier quote not found")
 		return
 	}
@@ -269,7 +288,7 @@ func (h *ProcurementHandler) saveSQ(c *gin.Context, create bool) {
 		SupplierName  string          `json:"supplierName" validate:"required,max=255"`
 		SupplierRef   string          `json:"supplierRef" validate:"max=255"`
 		SourceQuoteID *uuid.UUID      `json:"sourceQuoteId"`
-		ProjectID     *uuid.UUID      `json:"projectId"`
+		OpportunityID *uuid.UUID      `json:"opportunityId"`
 		Currency      models.Currency `json:"currency" validate:"required,oneof=SAR USD EUR GBP AED CNY"`
 		ValidFrom     *string         `json:"validFrom"`
 		ValidUntil    *string         `json:"validUntil"`
@@ -314,7 +333,7 @@ func (h *ProcurementHandler) saveSQ(c *gin.Context, create bool) {
 		if err := optionalExists(tx, &models.Quote{}, req.SourceQuoteID); err != nil {
 			return err
 		}
-		if err := optionalExists(tx, &models.Project{}, req.ProjectID); err != nil {
+		if err := optionalExists(tx, &models.Opportunity{}, req.OpportunityID); err != nil {
 			return err
 		}
 		if create {
@@ -329,7 +348,7 @@ func (h *ProcurementHandler) saveSQ(c *gin.Context, create bool) {
 		sq.SupplierName = req.SupplierName
 		sq.SupplierRef = req.SupplierRef
 		sq.SourceQuoteID = req.SourceQuoteID
-		sq.ProjectID = req.ProjectID
+		sq.OpportunityID = req.OpportunityID
 		sq.Currency = req.Currency
 		sq.ValidFrom = from
 		sq.ValidUntil = until
@@ -452,7 +471,7 @@ func (h *ProcurementHandler) ConvertToPO(c *gin.Context) {
 			return err
 		}
 		user := middleware.GetCurrentUserID(c)
-		po = models.PurchaseOrder{PONumber: number, SupplierQuoteID: &sq.ID, SupplierID: sq.SupplierID, SupplierName: sq.SupplierName, Currency: sq.Currency, CreatedByID: &user, Status: models.POStatusDraft, Subtotal: sq.Subtotal, Total: sq.Subtotal, SourceQuoteID: sq.SourceQuoteID, ProjectID: sq.ProjectID}
+		po = models.PurchaseOrder{PONumber: number, SupplierQuoteID: &sq.ID, SupplierID: sq.SupplierID, SupplierName: sq.SupplierName, Currency: sq.Currency, CreatedByID: &user, Status: models.POStatusDraft, Subtotal: sq.Subtotal, Total: sq.Subtotal, SourceQuoteID: sq.SourceQuoteID, OpportunityID: sq.OpportunityID}
 		for _, line := range sq.Items {
 			if line.ProductID == nil {
 				return invalid("Link every supplier quote item to a catalog product before conversion")
@@ -472,7 +491,7 @@ func (h *ProcurementHandler) ConvertToPO(c *gin.Context) {
 		apiError(c, err)
 		return
 	}
-	if err := h.db.Preload("Items.Product.Manufacturer").Preload("ApprovedBy").Preload("SourceQuote").Preload("Project").First(&po, "id = ?", po.ID).Error; err != nil {
+	if err := h.db.Preload("Items.Product.Manufacturer").Preload("ApprovedBy").Preload("SourceQuote").Preload("Opportunity").First(&po, "id = ?", po.ID).Error; err != nil {
 		apiError(c, err)
 		return
 	}

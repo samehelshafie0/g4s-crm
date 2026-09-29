@@ -58,7 +58,6 @@ func Setup(db *gorm.DB, cfg *config.Config) *gin.Engine {
 	productH := handlers.NewProductHandler(db)
 	inventoryH := handlers.NewInventoryHandler(db)
 	quoteH := handlers.NewQuoteHandler(db)
-	projectH := handlers.NewProjectHandler(db)
 	priceBookH := handlers.NewPriceBookHandler(db)
 	fxH := handlers.NewExchangeRateHandler(db)
 	contractH := handlers.NewContractHandler(db)
@@ -153,6 +152,9 @@ func Setup(db *gorm.DB, cfg *config.Config) *gin.Engine {
 		opps.PATCH("/:id", middleware.Authorize("opportunities:update"), oppH.Update)
 		opps.DELETE("/:id", middleware.Authorize("opportunities:delete"), oppH.Delete)
 		opps.PATCH("/:id/stage", middleware.Authorize("opportunities:update"), oppH.UpdateStage)
+		// The opportunity is the project: delivery is set by whoever manages projects.
+		opps.PATCH("/:id/delivery", middleware.Authorize("projects:update"), oppH.UpdateDelivery)
+		opps.GET("/:id/fulfilment", middleware.AuthorizeAny("opportunities:read", "projects:read"), oppH.Fulfilment)
 	}
 
 	// ─── Manufacturers ──────────────────────────────────────
@@ -228,20 +230,15 @@ func Setup(db *gorm.DB, cfg *config.Config) *gin.Engine {
 		quotes.GET("/:id/pdf", middleware.Authorize("quotes:read"), docH.ExportQuote)
 		quotes.GET("/:id/builder", middleware.Authorize("quotes:read"), quoteH.Get)
 		quotes.PUT("/:id/builder", middleware.Authorize("quotes:update"), quoteH.SaveBuilder)
-		quotes.POST("/:id/duplicate", middleware.Authorize("quotes:create"), quoteH.Duplicate)
-		quotes.POST("/:id/revisions", middleware.Authorize("quotes:create"), quoteH.Duplicate)
+		quotes.GET("/:id/versions", middleware.Authorize("quotes:read"), quoteH.Versions)
+		quotes.POST("/:id/revisions", middleware.Authorize("quotes:create"), quoteH.Revise)
+		quotes.POST("/:id/currency", middleware.Authorize("quotes:update"), quoteH.ChangeCurrency)
 		quotes.POST("/:id/convert-to-contract", middleware.Authorize("contracts:create"), quoteH.ConvertToContract)
 	}
 
 	// ─── Projects ───────────────────────────────────────────
-	projects := protected.Group("/projects")
-	{
-		projects.GET("", middleware.Authorize("projects:read"), projectH.List)
-		projects.GET("/:id", middleware.Authorize("projects:read"), projectH.Get)
-		projects.POST("", middleware.Authorize("projects:create"), projectH.Create)
-		projects.PATCH("/:id", middleware.Authorize("projects:update"), projectH.Update)
-		projects.DELETE("/:id", middleware.Authorize("projects:delete"), projectH.Delete)
-	}
+	// Won opportunities being delivered; replaces the separate projects list.
+	protected.GET("/delivery", middleware.Authorize("projects:read"), oppH.Delivery)
 
 	// ─── Price Books ─────────────────────────────────────────
 	priceBooks := protected.Group("/price-books")
@@ -279,6 +276,7 @@ func Setup(db *gorm.DB, cfg *config.Config) *gin.Engine {
 		contracts.PATCH("/:id/activate", middleware.Authorize("contracts:approve"), contractH.Activate)
 		contracts.PATCH("/:id/terminate", middleware.Authorize("contracts:approve"), contractH.Terminate)
 		contracts.POST("/:id/renew", middleware.Authorize("contracts:create"), contractH.Renew)
+		contracts.GET("/:id/quotes", middleware.Authorize("contracts:read"), contractH.Quotes)
 	}
 
 	// ─── Recurring Services ──────────────────────────────────

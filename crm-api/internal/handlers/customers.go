@@ -224,7 +224,7 @@ func (h *CustomerHandler) parent(tx *gorm.DB, c *gin.Context) (models.Customer, 
 }
 func (h *CustomerHandler) ListSites(c *gin.Context) {
 	var customer models.Customer
-	if err := h.db.Preload("Sites.Contacts").First(&customer, "id = ?", c.Param("id")).Error; err != nil {
+	if err := h.db.Preload("Sites", func(db *gorm.DB) *gorm.DB { return db.Order("is_active DESC, city, name") }).Preload("Sites.Contacts").First(&customer, "id = ?", c.Param("id")).Error; err != nil {
 		apiError(c, err)
 		return
 	}
@@ -244,17 +244,26 @@ func (h *CustomerHandler) ListContacts(c *gin.Context) {
 	}
 	response.OK(c, customer.Contacts)
 }
+
+var siteRules = map[string]string{
+	"name": "required,max=255", "code": "max=50",
+	"siteType": "required,oneof=head-office branch warehouse plant retail other",
+	"address":  "max=2000", "city": "max=100", "region": "max=100",
+	"latitude": "omitempty,gte=-90,lte=90", "longitude": "omitempty,gte=-180,lte=180",
+	"contactName": "max=255", "contactPhone": "max=50", "isActive": "",
+}
+
 func (h *CustomerHandler) AddSite(c *gin.Context)    { h.saveSite(c, true) }
 func (h *CustomerHandler) UpdateSite(c *gin.Context) { h.saveSite(c, false) }
 func (h *CustomerHandler) saveSite(c *gin.Context, create bool) {
-	var site models.CustomerSite
+	site := models.CustomerSite{SiteType: "branch", IsActive: true}
 	if !create {
 		if err := h.db.First(&site, "id = ? AND customer_id = ?", c.Param("siteId"), c.Param("id")).Error; err != nil {
 			apiError(c, err)
 			return
 		}
 	}
-	if !bindFields(c, &site, map[string]string{"name": "required,max=255", "address": "max=2000", "city": "max=100", "region": "max=100"}) {
+	if !bindFields(c, &site, siteRules) {
 		return
 	}
 	err := h.db.Transaction(func(tx *gorm.DB) error {
@@ -263,7 +272,12 @@ func (h *CustomerHandler) saveSite(c *gin.Context, create bool) {
 			return err
 		}
 		site.CustomerID = customer.ID
-		return tx.Omit(clause.Associations).Save(&site).Error
+		active := site.IsActive
+		if err := tx.Omit(clause.Associations).Save(&site).Error; err != nil {
+			return err
+		}
+		// The column default would otherwise turn an explicit false into true.
+		return tx.Model(&site).Update("is_active", active).Error
 	})
 	if err != nil {
 		apiError(c, err)
@@ -284,6 +298,13 @@ func (h *CustomerHandler) DeleteSite(c *gin.Context) {
 		var site models.CustomerSite
 		if err := tx.First(&site, "id = ? AND customer_id = ?", c.Param("siteId"), customer.ID).Error; err != nil {
 			return err
+		}
+		var used int64
+		if err := tx.Raw("SELECT (SELECT count(*) FROM opportunity_sites WHERE site_id = ?) + (SELECT count(*) FROM quote_line_items WHERE site_id = ?)", site.ID, site.ID).Scan(&used).Error; err != nil {
+			return err
+		}
+		if used > 0 {
+			return invalid("This site is used by opportunities or quotes; deactivate it instead of deleting it")
 		}
 		if err := tx.Model(&models.CustomerContact{}).Where("site_id = ?", site.ID).Update("site_id", nil).Error; err != nil {
 			return err

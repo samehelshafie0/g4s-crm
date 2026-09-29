@@ -37,6 +37,11 @@ def para(value, style=STYLE):
     return Paragraph(escape(str(value or '')).replace('\n', '<br/>'), style)
 
 
+def ref(q):
+    # The customer sees one reference for the whole negotiation: number and version.
+    return f"{q['quoteNumber']} v{q.get('version') or 1}"
+
+
 def money(value):
     return f'{float(value or 0):,.2f}'
 
@@ -47,8 +52,8 @@ def address(value, fallback=''):
 
 def quote_pdf(q, appendices, quote_pages=0):
     output = io.BytesIO()
-    doc = SimpleDocTemplate(output, pagesize=A4, leftMargin=36, rightMargin=36, topMargin=42, bottomMargin=42, title=q['quoteNumber'], author='G4S CRM')
-    story = [para('G4S | Security Solutions', HEADING), para('Quotation ' + q['quoteNumber'], HEADING)]
+    doc = SimpleDocTemplate(output, pagesize=A4, leftMargin=36, rightMargin=36, topMargin=42, bottomMargin=42, title=ref(q), author='G4S CRM')
+    story = [para('G4S | Security Solutions', HEADING), para('Quotation ' + ref(q), HEADING)]
     story.append(para(f"Status: {q['status']}   |   Currency: {q['currency']}   |   Valid until: {(q.get('validUntil') or '')[:10] or '-'}", SMALL))
     sold = q.get('soldTo') or {}
     ship = q.get('shipTo') or {}
@@ -198,7 +203,7 @@ def render(job, destination):
     if len(base.pages) + page_count > MAX_PAGES: raise ValueError('Combined quote exceeds the 500-page export limit.')
     writer = PdfWriter()
     writer.append(base, import_outline=False)
-    writer.add_outline_item('Quotation ' + q['quoteNumber'],0)
+    writer.add_outline_item('Quotation ' + ref(q),0)
     labels = [None] * len(base.pages)
     for index,(item,reader) in enumerate(zip(appendices,readers),1):
         reader.add_form_topname(f'appendix_{index}')
@@ -213,8 +218,8 @@ def render(job, destination):
             index,item,n = info
             title = f"Appendix {index}: {item['label']}"
             detail = f"Version {item['version']} | Document page {n} of {item['pages']}"
-        label_page(page,title,detail,f"{q['quoteNumber']} | Page {i} of {total}",info is not None)
-    writer.add_metadata({'/Title': q['quoteNumber']+' with supporting documents','/Author':'G4S CRM'})
+        label_page(page,title,detail,f"{ref(q)} | Page {i} of {total}",info is not None)
+    writer.add_metadata({'/Title': ref(q)+' with supporting documents','/Author':'G4S CRM'})
     with open(destination,'wb') as out: writer.write(out)
 
 

@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
+	"strconv"
 	"time"
 )
 
@@ -34,9 +35,24 @@ func (h *QuoteHandler) List(c *gin.Context) {
 	if cid := c.Query("customerId"); cid != "" {
 		query = query.Where("customer_id = ?", cid)
 	}
+	if oid := c.Query("opportunityId"); oid != "" {
+		query = query.Where("opportunity_id = ?", oid)
+	}
+	if kid := c.Query("contractId"); kid != "" {
+		query = query.Where("contract_id = ?", kid)
+	}
+	if c.Query("versions") != "all" {
+		query = query.Where("is_current")
+	}
 
-	query.Count(&total)
-	query.Order(params.Sort + " " + params.Order).Scopes(pagination.Paginate(params)).Find(&quotes)
+	if err := query.Count(&total).Error; err != nil {
+		apiError(c, err)
+		return
+	}
+	if err := query.Preload("Opportunity").Order(params.Sort + " " + params.Order).Scopes(pagination.Paginate(params)).Find(&quotes).Error; err != nil {
+		apiError(c, err)
+		return
+	}
 	response.OKWithMeta(c, quotes, pagination.BuildMeta(params, total))
 }
 
@@ -63,7 +79,8 @@ type createQuoteRequest struct {
 	PriceBookID     *uuid.UUID         `json:"priceBookId"`
 	CustomerID      uuid.UUID          `json:"customerId" validate:"required"`
 	OpportunityID   *uuid.UUID         `json:"opportunityId"`
-	Currency        models.Currency    `json:"currency" validate:"omitempty,oneof=SAR USD EUR GBP AED CNY"`
+	ContractID      *uuid.UUID         `json:"contractId"`
+	Currency        models.Currency    `json:"currency" validate:"omitempty,oneof=SAR USD"`
 	ValidUntil      *string            `json:"validUntil" validate:"omitempty,datetime=2006-01-02"`
 	DiscountPercent float64            `json:"discountPercent" validate:"gte=0,lte=100"`
 	VATPercent      *float64           `json:"vatPercent" validate:"omitempty,gte=0,lte=100"`
@@ -88,10 +105,31 @@ func (h *QuoteHandler) Create(c *gin.Context) {
 		if err := tx.First(&customer, "id = ?", req.CustomerID).Error; err != nil {
 			return errInvalidRelationship
 		}
+		if (req.OpportunityID == nil) == (req.ContractID == nil) {
+			return invalid("A quote belongs to exactly one opportunity or one contract")
+		}
 		if req.OpportunityID != nil {
 			var opportunity models.Opportunity
-			if err := tx.First(&opportunity, "id = ? AND customer_id = ?", req.OpportunityID, req.CustomerID).Error; err != nil {
+			if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&opportunity, "id = ? AND customer_id = ?", req.OpportunityID, req.CustomerID).Error; err != nil {
 				return errInvalidRelationship
+			}
+			// One opportunity, one quote: further pricing is a new version of it.
+			var existing models.Quote
+			err := tx.Where("opportunity_id = ? AND is_current", opportunity.ID).First(&existing).Error
+			if err == nil {
+				return errQuoteExists{number: existing.QuoteNumber, id: existing.ID}
+			}
+			if !errors.Is(err, gorm.ErrRecordNotFound) {
+				return err
+			}
+		}
+		if req.ContractID != nil {
+			var contract models.Contract
+			if err := tx.First(&contract, "id = ? AND customer_id = ?", req.ContractID, req.CustomerID).Error; err != nil {
+				return errInvalidRelationship
+			}
+			if contract.Status == models.ContractStatusTerminated || contract.Status == models.ContractStatusExpired {
+				return invalid("Quotes cannot be raised inside a terminated or expired contract")
 			}
 		}
 		if err := eligiblePriceBook(tx, req.PriceBookID, req.CustomerID); err != nil {
@@ -102,10 +140,15 @@ func (h *QuoteHandler) Create(c *gin.Context) {
 			return err
 		}
 		userID := middleware.GetCurrentUserID(c)
-		quote = models.Quote{PriceBookID: req.PriceBookID, QuoteNumber: number, CustomerID: req.CustomerID, OpportunityID: req.OpportunityID, Status: models.QuoteStatusDraft, Currency: req.Currency, DiscountPercent: req.DiscountPercent, VATPercent: 15, Notes: req.Notes, CreatedByID: &userID}
+		quote = models.Quote{PriceBookID: req.PriceBookID, QuoteNumber: number, Version: 1, IsCurrent: true, CustomerID: req.CustomerID, OpportunityID: req.OpportunityID, ContractID: req.ContractID, Status: models.QuoteStatusDraft, Currency: req.Currency, DiscountPercent: req.DiscountPercent, VATPercent: 15, Notes: req.Notes, CreatedByID: &userID}
 		if quote.Currency == "" {
 			quote.Currency = models.CurrencySAR
 		}
+		rate, err := pinRate(tx, quote.Currency)
+		if err != nil {
+			return err
+		}
+		quote.FXRate = rate
 		if req.VATPercent != nil {
 			quote.VATPercent = *req.VATPercent
 		}
@@ -135,18 +178,32 @@ func (h *QuoteHandler) Create(c *gin.Context) {
 		}
 		return nil
 	})
+	var exists errQuoteExists
+	if errors.As(err, &exists) {
+		c.JSON(409, gin.H{"success": false, "error": gin.H{"message": "This opportunity already has quote " + exists.number + "; revise it instead of starting another", "quoteId": exists.id}})
+		return
+	}
 	if errors.Is(err, errInvalidRelationship) {
-		response.BadRequest(c, "Customer, opportunity or product does not exist or does not belong to this quote")
+		response.BadRequest(c, "Customer, opportunity, contract or product does not exist or does not belong to this quote")
 		return
 	}
 	if err != nil {
-		response.InternalError(c, "Failed to create quote")
+		apiError(c, err)
 		return
 	}
 	response.Created(c, quote)
 }
 
 var errInvalidRelationship = errors.New("invalid relationship")
+
+// errQuoteExists names the quote an opportunity already has.
+type errQuoteExists struct {
+	number string
+	id     uuid.UUID
+}
+
+func (e errQuoteExists) Error() string { return "opportunity already has quote " + e.number }
+
 var errQuoteState = errors.New("invalid quote state")
 
 // Every mutation locks the same quote row so edits cannot race approval/send.
@@ -155,6 +212,9 @@ func (h *QuoteHandler) mutate(c *gin.Context, expected models.QuoteStatus, fn fu
 	err := h.db.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Preload("LineItems").First(&quote, "id = ?", c.Param("id")).Error; err != nil {
 			return err
+		}
+		if !quote.IsCurrent {
+			return errQuoteSuperseded
 		}
 		if quote.Status != expected {
 			return errQuoteState
@@ -169,12 +229,16 @@ func (h *QuoteHandler) mutate(c *gin.Context, expected models.QuoteStatus, fn fu
 		response.NotFound(c, "Quote not found")
 		return
 	}
+	if errors.Is(err, errQuoteSuperseded) {
+		response.UnprocessableEntity(c, "This version is superseded and read-only")
+		return
+	}
 	if errors.Is(err, errQuoteState) {
 		response.UnprocessableEntity(c, "Quote cannot be changed in its current state")
 		return
 	}
 	if err != nil {
-		response.InternalError(c, "Failed to update quote")
+		apiError(c, err)
 		return
 	}
 	response.OK(c, quote)
@@ -204,7 +268,15 @@ func (h *QuoteHandler) Update(c *gin.Context) {
 	})
 }
 func (h *QuoteHandler) Delete(c *gin.Context) {
-	h.mutate(c, models.QuoteStatusDraft, func(tx *gorm.DB, quote *models.Quote) error { return tx.Delete(quote).Error })
+	h.mutate(c, models.QuoteStatusDraft, func(tx *gorm.DB, quote *models.Quote) error {
+		if err := tx.Delete(quote).Error; err != nil {
+			return err
+		}
+		if quote.ParentQuoteID == nil {
+			return nil
+		}
+		return tx.Model(&models.Quote{}).Where("id = ?", quote.ParentQuoteID).Updates(map[string]any{"is_current": true, "superseded_at": nil}).Error
+	})
 }
 func (h *QuoteHandler) Submit(c *gin.Context) {
 	h.changeStatus(c, models.QuoteStatusDraft, models.QuoteStatusPendingApproval)
@@ -261,6 +333,24 @@ func (h *QuoteHandler) changeStatus(c *gin.Context, from, to models.QuoteStatus)
 			quote.ApprovedByID = nil
 			quote.ApprovedAt = nil
 		}
-		return tx.Omit(clause.Associations).Save(quote).Error
+		if err := tx.Omit(clause.Associations).Save(quote).Error; err != nil {
+			return err
+		}
+		if to == models.QuoteStatusAccepted && quote.OpportunityID != nil {
+			var opportunity models.Opportunity
+			if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&opportunity, "id = ?", quote.OpportunityID).Error; err != nil {
+				return err
+			}
+			if opportunity.Stage != models.StageClosedWon {
+				previous := opportunity.Stage
+				opportunity.Stage = models.StageClosedWon
+				syncDelivery(&opportunity)
+				if err := tx.Omit(clause.Associations).Save(&opportunity).Error; err != nil {
+					return err
+				}
+				return recordActivity(tx, c, "opportunity", opportunity.ID, "stage: "+string(previous)+" → closed-won (quote "+quote.QuoteNumber+" v"+strconv.Itoa(quote.Version)+" accepted)")
+			}
+		}
+		return nil
 	})
 }

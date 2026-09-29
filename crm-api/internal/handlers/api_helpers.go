@@ -164,8 +164,14 @@ func optionalExists(tx *gorm.DB, model any, id *uuid.UUID) error {
 }
 func recordActivity(tx *gorm.DB, c *gin.Context, entity string, id uuid.UUID, action string) error {
 	userID := middleware.GetCurrentUserID(c)
-	return tx.Create(&models.ActivityLog{UserID: &userID, EntityType: entity, EntityID: id, Action: action, Description: fmt.Sprintf("%s %s", action, entity)}).Error
+	// activity_logs.action is varchar(50); keep the full text in the description.
+	description := fmt.Sprintf("%s %s", action, entity)
+	if runes := []rune(action); len(runes) > 50 {
+		action = string(runes[:49]) + "…"
+	}
+	return tx.Create(&models.ActivityLog{UserID: &userID, EntityType: entity, EntityID: id, Action: action, Description: description}).Error
 }
+
 func deleteRecord(c *gin.Context, db *gorm.DB, model any) {
 	result := db.Delete(model, "id = ?", c.Param("id"))
 	if result.Error != nil {

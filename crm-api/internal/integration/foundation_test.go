@@ -182,18 +182,25 @@ func TestFoundation(t *testing.T) {
 
 	var quoteID string
 	t.Run("atomic quote create, nested validation and explicit zero VAT", func(t *testing.T) {
-		body := fmt.Sprintf(`{"customerId":%q,"vatPercent":0,"lineItems":[{"category":"materials","description":"Test item","quantity":2,"unitCost":25,"unitPrice":100}]}`, customerID)
-		code, res := call("POST", "/api/v1/quotes", body, salesToken)
+		code, res := call("POST", "/api/v1/opportunities", fmt.Sprintf(`{"title":"Foundation job","customerId":%q}`, customerID), salesToken)
+		expect(t, code, 201, res)
+		oppID := res["data"].(map[string]any)["id"].(string)
+		body := fmt.Sprintf(`{"customerId":%q,"opportunityId":%q,"vatPercent":0,"lineItems":[{"category":"materials","description":"Test item","quantity":2,"unitCost":25,"unitPrice":100}]}`, customerID, oppID)
+		code, res = call("POST", "/api/v1/quotes", body, salesToken)
 		expect(t, code, 201, res)
 		q := res["data"].(map[string]any)
 		quoteID = q["id"].(string)
 		if q["total"] != float64(200) || q["vatPercent"] != float64(0) {
 			t.Fatal(q)
 		}
-		invalid := fmt.Sprintf(`{"customerId":%q,"lineItems":[{"category":"materials","description":"Bad qty","quantity":0}]}`, customerID)
+		invalid := fmt.Sprintf(`{"customerId":%q,"opportunityId":%q,"lineItems":[{"category":"materials","description":"Bad qty","quantity":0}]}`, customerID, oppID)
 		code, res = call("POST", "/api/v1/quotes", invalid, salesToken)
 		expect(t, code, 400, res)
-		invalid = fmt.Sprintf(`{"customerId":%q,"lineItems":[{"category":"materials","description":"Bad FK","quantity":1,"productId":%q}]}`, customerID, uuid.New().String())
+		// A fresh job, so the product check is reached rather than the one-quote rule.
+		code, res = call("POST", "/api/v1/opportunities", fmt.Sprintf(`{"title":"Second job","customerId":%q}`, customerID), salesToken)
+		expect(t, code, 201, res)
+		secondOpp := res["data"].(map[string]any)["id"].(string)
+		invalid = fmt.Sprintf(`{"customerId":%q,"opportunityId":%q,"lineItems":[{"category":"materials","description":"Bad FK","quantity":1,"productId":%q}]}`, customerID, secondOpp, uuid.New().String())
 		code, res = call("POST", "/api/v1/quotes", invalid, salesToken)
 		expect(t, code, 400, res)
 		var count int64

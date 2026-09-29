@@ -45,14 +45,22 @@ type Customer struct {
 	Contacts    []CustomerContact `gorm:"foreignKey:CustomerID" json:"contacts,omitempty"`
 }
 
+// CustomerSite is one of a customer's branches or locations across the Kingdom.
 type CustomerSite struct {
 	Base
-	CustomerID uuid.UUID         `gorm:"type:uuid;not null;index" json:"customerId"`
-	Name       string            `gorm:"not null" json:"name"`
-	Address    string            `json:"address"`
-	City       string            `json:"city"`
-	Region     string            `json:"region"`
-	Contacts   []CustomerContact `gorm:"foreignKey:SiteID" json:"contacts,omitempty"`
+	CustomerID   uuid.UUID         `gorm:"type:uuid;not null;index" json:"customerId"`
+	Name         string            `gorm:"not null" json:"name"`
+	Code         string            `json:"code"`
+	SiteType     string            `gorm:"default:'branch'" json:"siteType"`
+	Address      string            `json:"address"`
+	City         string            `json:"city"`
+	Region       string            `json:"region"`
+	Latitude     *float64          `json:"latitude,omitempty"`
+	Longitude    *float64          `json:"longitude,omitempty"`
+	ContactName  string            `json:"contactName"`
+	ContactPhone string            `json:"contactPhone"`
+	IsActive     bool              `gorm:"default:true" json:"isActive"`
+	Contacts     []CustomerContact `gorm:"foreignKey:SiteID" json:"contacts,omitempty"`
 }
 
 type CustomerContact struct {

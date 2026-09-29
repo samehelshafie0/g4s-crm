@@ -23,7 +23,7 @@ func (h *OpportunityHandler) List(c *gin.Context) {
 	if term := c.Query("q"); term != "" {
 		q = q.Where("title ILIKE ?", "%"+term+"%")
 	}
-	for param, column := range map[string]string{"stage": "stage", "customerId": "customer_id", "salesExecutiveId": "sales_executive_id", "preSalesId": "pre_sales_id"} {
+	for param, column := range map[string]string{"stage": "stage", "customerId": "customer_id", "salesExecutiveId": "sales_executive_id", "preSalesId": "pre_sales_id", "deliveryStatus": "delivery_status", "projectManagerId": "project_manager_id"} {
 		if value := c.Query(param); value != "" {
 			q = q.Where(column+" = ?", value)
 		}
@@ -32,7 +32,7 @@ func (h *OpportunityHandler) List(c *gin.Context) {
 		apiError(c, err)
 		return
 	}
-	if err := q.Preload("Customer").Preload("SalesExecutive").Preload("PreSales").Preload("Quotes").Order(params.Sort + " " + params.Order).Scopes(pagination.Paginate(params)).Find(&items).Error; err != nil {
+	if err := q.Preload("Customer").Preload("SalesExecutive").Preload("PreSales").Preload("ProjectManager").Preload("Sites").Preload("Quotes", currentFirst).Order(params.Sort + " " + params.Order).Scopes(pagination.Paginate(params)).Find(&items).Error; err != nil {
 		apiError(c, err)
 		return
 	}
@@ -40,7 +40,7 @@ func (h *OpportunityHandler) List(c *gin.Context) {
 }
 func (h *OpportunityHandler) Get(c *gin.Context) {
 	var item models.Opportunity
-	if err := h.db.Preload("Customer").Preload("SalesExecutive").Preload("PreSales").Preload("Quotes").First(&item, "id = ?", c.Param("id")).Error; err != nil {
+	if err := h.db.Preload("Customer").Preload("SalesExecutive").Preload("PreSales").Preload("ProjectManager").Preload("Sites").Preload("Quotes", currentFirst).First(&item, "id = ?", c.Param("id")).Error; err != nil {
 		apiError(c, err)
 		return
 	}
@@ -59,9 +59,63 @@ type opportunityInput struct {
 	PreSalesID        *uuid.UUID              `json:"preSalesId"`
 	ExpectedCloseDate *string                 `json:"expectedCloseDate"`
 	Notes             string                  `json:"notes"`
+	SiteIDs           []uuid.UUID             `json:"siteIds"`
 }
 
-var opportunityRules = map[string]string{"title": "required,max=255", "customerId": "required", "stage": "required,oneof=qualification proposal negotiation closed-won closed-lost", "serviceTypes": "max=10,dive,oneof=cctv access-control intrusion-detection fire-alarm networking it-solutions guarding monitoring maintenance consulting", "estimatedValue": moneyRule, "estimatedCost": moneyRule, "winProbability": "gte=0,lte=100", "salesExecutiveId": "", "preSalesId": "", "expectedCloseDate": "", "notes": "max=20000"}
+// currentFirst orders an opportunity's quote versions newest first.
+func currentFirst(db *gorm.DB) *gorm.DB { return db.Order("is_current DESC, version DESC") }
+
+// syncDelivery keeps delivery in step with the sale: a won opportunity is a
+// project being delivered, and nothing else has a delivery status.
+func syncDelivery(item *models.Opportunity) {
+	if item.Stage != models.StageClosedWon {
+		item.DeliveryStatus = nil
+		return
+	}
+	if item.DeliveryStatus == nil {
+		planning := models.DeliveryPlanning
+		item.DeliveryStatus = &planning
+	}
+}
+
+// replaceSites records which of the customer's sites the opportunity covers.
+// A site keeps its place once chosen even if later deactivated, but a newly
+// chosen site must be active and belong to this customer.
+func replaceSites(tx *gorm.DB, item *models.Opportunity, siteIDs []uuid.UUID) error {
+	var existing []uuid.UUID
+	if err := tx.Raw("SELECT site_id FROM opportunity_sites WHERE opportunity_id = ?", item.ID).Scan(&existing).Error; err != nil {
+		return err
+	}
+	kept := map[uuid.UUID]bool{}
+	for _, id := range existing {
+		kept[id] = true
+	}
+	seen := map[uuid.UUID]bool{}
+	for _, id := range siteIDs {
+		if seen[id] {
+			continue
+		}
+		seen[id] = true
+		var site models.CustomerSite
+		if err := tx.First(&site, "id = ? AND customer_id = ?", id, item.CustomerID).Error; err != nil {
+			return invalid("A chosen site does not belong to this customer")
+		}
+		if !site.IsActive && !kept[id] {
+			return invalid("Site " + site.Name + " is inactive")
+		}
+	}
+	if err := tx.Exec("DELETE FROM opportunity_sites WHERE opportunity_id = ?", item.ID).Error; err != nil {
+		return err
+	}
+	for id := range seen {
+		if err := tx.Exec("INSERT INTO opportunity_sites (opportunity_id, site_id) VALUES (?, ?)", item.ID, id).Error; err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+var opportunityRules = map[string]string{"title": "required,max=255", "customerId": "required", "stage": "required,oneof=qualification proposal negotiation closed-won closed-lost", "serviceTypes": "max=10,dive,oneof=cctv access-control intrusion-detection fire-alarm networking it-solutions guarding monitoring maintenance consulting", "estimatedValue": moneyRule, "estimatedCost": moneyRule, "winProbability": "gte=0,lte=100", "salesExecutiveId": "", "preSalesId": "", "expectedCloseDate": "", "notes": "max=20000", "siteIds": "max=100"}
 
 func (h *OpportunityHandler) Create(c *gin.Context) { h.save(c, true) }
 func (h *OpportunityHandler) Update(c *gin.Context) { h.save(c, false) }
@@ -76,6 +130,10 @@ func (h *OpportunityHandler) save(c *gin.Context, create bool) {
 			return
 		}
 		input = opportunityInput{Title: item.Title, CustomerID: item.CustomerID, Stage: item.Stage, ServiceTypes: item.ServiceTypes, EstimatedValue: item.EstimatedValue, EstimatedCost: item.EstimatedCost, WinProbability: item.WinProbability, SalesExecutiveID: item.SalesExecutiveID, PreSalesID: item.PreSalesID, Notes: item.Notes}
+		if err := h.db.Raw("SELECT site_id FROM opportunity_sites WHERE opportunity_id = ?", item.ID).Scan(&input.SiteIDs).Error; err != nil {
+			apiError(c, err)
+			return
+		}
 		if item.ExpectedCloseDate != nil {
 			date := item.ExpectedCloseDate.Format("2006-01-02")
 			input.ExpectedCloseDate = &date
@@ -106,7 +164,16 @@ func (h *OpportunityHandler) save(c *gin.Context, create bool) {
 				return err
 			}
 		}
-		oldStage := item.Stage
+		oldStage, oldCustomer := item.Stage, item.CustomerID
+		if !create && oldCustomer != input.CustomerID {
+			var quotes int64
+			if err := tx.Model(&models.Quote{}).Where("opportunity_id = ?", item.ID).Count(&quotes).Error; err != nil {
+				return err
+			}
+			if quotes > 0 {
+				return invalid("The customer cannot change once the opportunity has a quote")
+			}
+		}
 		item.Title = input.Title
 		item.CustomerID = input.CustomerID
 		item.Stage = input.Stage
@@ -122,7 +189,11 @@ func (h *OpportunityHandler) save(c *gin.Context, create bool) {
 		if item.EstimatedValue > 0 {
 			item.EstimatedMargin = (item.EstimatedValue - item.EstimatedCost) / item.EstimatedValue * 100
 		}
+		syncDelivery(&item)
 		if err := tx.Omit(clause.Associations).Save(&item).Error; err != nil {
+			return err
+		}
+		if err := replaceSites(tx, &item, input.SiteIDs); err != nil {
 			return err
 		}
 		action := "updated"
@@ -137,7 +208,10 @@ func (h *OpportunityHandler) save(c *gin.Context, create bool) {
 		apiError(c, err)
 		return
 	}
-	h.db.Preload("Customer").Preload("SalesExecutive").Preload("PreSales").Preload("Quotes").First(&item, "id = ?", item.ID)
+	if err := h.db.Preload("Customer").Preload("SalesExecutive").Preload("PreSales").Preload("ProjectManager").Preload("Sites").Preload("Quotes", currentFirst).First(&item, "id = ?", item.ID).Error; err != nil {
+		apiError(c, err)
+		return
+	}
 	if create {
 		response.Created(c, item)
 	} else {
@@ -163,6 +237,7 @@ func (h *OpportunityHandler) UpdateStage(c *gin.Context) {
 		if req.Notes != "" {
 			item.Notes += "\n" + req.Notes
 		}
+		syncDelivery(&item)
 		if err := tx.Omit(clause.Associations).Save(&item).Error; err != nil {
 			return err
 		}

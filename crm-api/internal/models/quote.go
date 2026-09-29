@@ -40,9 +40,17 @@ type Quote struct {
 	SoldTo           QuoteAddress `gorm:"serializer:json;type:jsonb" json:"soldTo"`
 	ShipTo           QuoteAddress `gorm:"serializer:json;type:jsonb" json:"shipTo"`
 
-	QuoteNumber           string          `gorm:"uniqueIndex;not null" json:"quoteNumber"`
-	OpportunityID         *uuid.UUID      `gorm:"type:uuid" json:"opportunityId,omitempty"`
-	Opportunity           *Opportunity    `gorm:"foreignKey:OpportunityID" json:"opportunity,omitempty"`
+	// The number is bound to the opportunity (or contract) for the life of the
+	// quote; versions share it, and (number, version) is unique.
+	QuoteNumber    string       `gorm:"not null" json:"quoteNumber"`
+	OpportunityID  *uuid.UUID   `gorm:"type:uuid" json:"opportunityId,omitempty"`
+	Opportunity    *Opportunity `gorm:"foreignKey:OpportunityID" json:"opportunity,omitempty"`
+	ContractID     *uuid.UUID   `gorm:"type:uuid" json:"contractId,omitempty"`
+	IsCurrent      bool         `gorm:"default:true" json:"isCurrent"`
+	RevisionReason string       `json:"revisionReason"`
+	SupersededAt   *time.Time   `json:"supersededAt,omitempty"`
+	// FXRate is SAR per unit of Currency, pinned to this version so it reads as sent.
+	FXRate                float64         `gorm:"default:1" json:"fxRate"`
 	CustomerID            uuid.UUID       `gorm:"type:uuid;not null;index" json:"customerId"`
 	Customer              *Customer       `gorm:"foreignKey:CustomerID" json:"customer,omitempty"`
 	Version               int             `gorm:"default:1" json:"version"`
@@ -119,6 +127,8 @@ type QuoteLineItem struct {
 	RecurringServiceID *uuid.UUID `gorm:"type:uuid" json:"recurringServiceId,omitempty"`
 
 	QuoteID          uuid.UUID         `gorm:"type:uuid;not null;index" json:"quoteId"`
+	SiteID           *uuid.UUID        `gorm:"type:uuid" json:"siteId,omitempty"`
+	FulfilmentSource *string           `json:"fulfilmentSource,omitempty"`
 	Category         QuoteLineCategory `gorm:"not null" json:"category"`
 	ProductID        *uuid.UUID        `gorm:"type:uuid" json:"productId,omitempty"`
 	Product          *Product          `gorm:"foreignKey:ProductID" json:"product,omitempty"`

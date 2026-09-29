@@ -48,8 +48,8 @@ type PurchaseOrder struct {
 	SupplierQuoteID  *uuid.UUID          `gorm:"type:uuid" json:"supplierQuoteId,omitempty"`
 	SourceQuoteID    *uuid.UUID          `gorm:"type:uuid" json:"sourceQuoteId,omitempty"`
 	SourceQuote      *Quote              `gorm:"foreignKey:SourceQuoteID" json:"sourceQuote,omitempty"`
-	ProjectID        *uuid.UUID          `gorm:"type:uuid" json:"projectId,omitempty"`
-	Project          *Project            `gorm:"foreignKey:ProjectID" json:"project,omitempty"`
+	OpportunityID    *uuid.UUID          `gorm:"type:uuid" json:"opportunityId,omitempty"`
+	Opportunity      *Opportunity        `gorm:"foreignKey:OpportunityID" json:"opportunity,omitempty"`
 	Notes            string              `json:"notes"`
 	ApprovedByID     *uuid.UUID          `gorm:"type:uuid" json:"approvedById,omitempty"`
 	ApprovedBy       *User               `gorm:"foreignKey:ApprovedByID" json:"approvedBy,omitempty"`
@@ -67,6 +67,8 @@ type PurchaseOrderItem struct {
 	Total           float64   `json:"total"`
 	ReceivedQty     int       `gorm:"default:0" json:"receivedQty"`
 	LeadTimeDays    int       `json:"leadTimeDays"`
+	// QuoteLineItemID is the customer quote line this order line fulfils.
+	QuoteLineItemID *uuid.UUID `gorm:"type:uuid" json:"quoteLineItemId,omitempty"`
 }
 
 type SupplierQuote struct {
@@ -78,8 +80,8 @@ type SupplierQuote struct {
 	SupplierRef   string              `json:"supplierRef"`
 	SourceQuoteID *uuid.UUID          `gorm:"type:uuid" json:"sourceQuoteId,omitempty"`
 	SourceQuote   *Quote              `gorm:"foreignKey:SourceQuoteID" json:"sourceQuote,omitempty"`
-	ProjectID     *uuid.UUID          `gorm:"type:uuid" json:"projectId,omitempty"`
-	Project       *Project            `gorm:"foreignKey:ProjectID" json:"project,omitempty"`
+	OpportunityID *uuid.UUID          `gorm:"type:uuid" json:"opportunityId,omitempty"`
+	Opportunity   *Opportunity        `gorm:"foreignKey:OpportunityID" json:"opportunity,omitempty"`
 	Status        SupplierQuoteStatus `gorm:"default:'received'" json:"status"`
 	Items         []SupplierQuoteItem `gorm:"foreignKey:SupplierQuoteID" json:"items,omitempty"`
 	Subtotal      float64             `json:"subtotal"`

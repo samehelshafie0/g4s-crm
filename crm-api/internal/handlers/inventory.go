@@ -105,7 +105,7 @@ func (h *InventoryHandler) ListReservations(c *gin.Context) {
 }
 func (h *InventoryHandler) CreateReservation(c *gin.Context) {
 	item := models.StockReservation{Source: models.ReservationSourceManual, Status: models.ReservationStatusActive, ReservedAt: time.Now()}
-	if !bindFields(c, &item, map[string]string{"productId": "required", "warehouseLocation": warehouseRule, "qty": "required,gt=0,lte=100000000", "source": "required,oneof=quote project manual", "sourceRef": "max=200", "sourceLabel": "max=200", "customerName": "max=200", "notes": "max=5000"}) {
+	if !bindFields(c, &item, map[string]string{"productId": "required", "warehouseLocation": warehouseRule, "qty": "required,gt=0,lte=100000000", "source": "required,oneof=quote project manual", "sourceRef": "max=200", "sourceLabel": "max=200", "customerName": "max=200", "notes": "max=5000", "quoteLineItemId": ""}) {
 		return
 	}
 	user := middleware.GetCurrentUserID(c)
@@ -113,6 +113,19 @@ func (h *InventoryHandler) CreateReservation(c *gin.Context) {
 	err := h.db.Transaction(func(tx *gorm.DB) error {
 		if err := lockProduct(tx, item.ProductID); err != nil {
 			return err
+		}
+		// Held for a job: the reference comes from the quote line, not free text.
+		if item.QuoteLineItemID != nil {
+			line, quote, err := committedLine(tx, *item.QuoteLineItemID, item.ProductID)
+			if err != nil {
+				return err
+			}
+			item.Source = models.ReservationSourceQuote
+			item.SourceRef = quoteRef(quote)
+			item.SourceLabel = line.Description
+			if quote.Customer != nil {
+				item.CustomerName = quote.Customer.CompanyName
+			}
 		}
 		stock, err := stockRow(tx, item.ProductID, item.WarehouseLocation)
 		if err != nil {

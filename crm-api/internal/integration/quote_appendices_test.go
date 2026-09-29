@@ -46,7 +46,8 @@ func testQuoteAppendices(t *testing.T, db *gorm.DB, r *gin.Engine, token, custom
 		must(t, db.Create(&doc2).Error)
 		version2 := models.DocumentVersion{DocumentID: doc2.ID, Version: "1", FileName: doc2.FileName, FilePath: doc2.FilePath, FileType: doc2.FileType, FileSize: doc2.FileSize}
 		must(t, db.Create(&version2).Error)
-		q := call("POST", "/quotes", map[string]any{"customerId": customerID}, 201)
+		opp := call("POST", "/opportunities", map[string]any{"title": "Appendix job", "customerId": customerID}, 201)
+		q := call("POST", "/quotes", map[string]any{"customerId": customerID, "opportunityId": opp["id"]}, 201)
 		path := "/quotes/" + q["id"].(string)
 		payload := map[string]any{"lockVersion": q["lockVersion"], "customerId": customerID, "currency": "SAR", "vatPercent": 15, "rows": []any{map[string]any{"rowType": "item", "source": "write-in", "description": "Installation", "quantity": 2, "multiplier": 1, "unitPrice": 100, "unitCost": 50, "isPrintable": true, "isSelected": true}}, "appendices": []any{map[string]any{"documentVersionId": version2.ID, "label": "Customer agreement"}, map[string]any{"documentVersionId": version.ID, "label": "Technical specification"}}}
 		saved := call("PUT", path+"/builder", payload, 200)
@@ -75,15 +76,21 @@ func testQuoteAppendices(t *testing.T, db *gorm.DB, r *gin.Engine, token, custom
 		if pinned["version"] != "1" || pinned["documentName"] != "Customer specification" {
 			t.Fatal(pinned)
 		}
-		clone := call("POST", path+"/revisions", nil, 201)
-		cloned := call("GET", "/quotes/"+clone["id"].(string)+"/builder", nil, 200)
-		if len(cloned["appendices"].([]any)) != 2 {
-			t.Fatal(cloned)
-		}
+		// A draft is edited, not revised.
+		call("POST", path+"/revisions", map[string]any{"reason": "too early"}, 422)
 		call("PATCH", path+"/submit", nil, 200)
 		payload["appendices"] = []any{}
 		payload["lockVersion"] = saved["lockVersion"]
 		call("PUT", path+"/builder", payload, 422)
+		if current := call("GET", path, nil, 200); current["status"] == "pending-approval" {
+			call("PATCH", path+"/approve", nil, 200)
+		}
+		// The next version carries the pinned appendices; the old one stays readable.
+		clone := call("POST", path+"/revisions", map[string]any{"reason": "Carry the appendices forward"}, 201)
+		cloned := call("GET", "/quotes/"+clone["id"].(string)+"/builder", nil, 200)
+		if len(cloned["appendices"].([]any)) != 2 || cloned["version"] != float64(2) {
+			t.Fatal(cloned)
+		}
 		call("GET", path+"/pdf?lockVersion=1", nil, 409)
 		// Library soft deletion does not invalidate files in an approved quote snapshot.
 		must(t, db.Delete(&doc).Error)

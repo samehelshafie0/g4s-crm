@@ -11,14 +11,22 @@ type DashboardHandler struct{ db *gorm.DB }
 
 func NewDashboardHandler(db *gorm.DB) *DashboardHandler { return &DashboardHandler{db: db} }
 
+// Money on the dashboard is SAR. A USD quote counts at the rate pinned to its
+// version, and only a quote's current version counts, so a revised quote is
+// never counted twice.
 func (h *DashboardHandler) KPIs(c *gin.Context) {
-	var totalRevenue, openQuotesValue float64
-	var activeOpps, openQuotes, activeContracts, expiringContracts int64
+	var totalRevenue, openQuotesValue, undeliveredValue float64
+	var activeOpps, openQuotes, activeContracts, expiringContracts, undelivered int64
 
-	h.db.Model(&models.Quote{}).Where("status = 'accepted' AND currency = 'SAR'").Select("COALESCE(SUM(total), 0)").Scan(&totalRevenue)
+	h.db.Model(&models.Quote{}).Where("status = 'accepted'").Select("COALESCE(SUM(total * fx_rate), 0)").Scan(&totalRevenue)
 	h.db.Model(&models.Opportunity{}).Where("stage NOT IN ('closed-won','closed-lost')").Count(&activeOpps)
-	h.db.Model(&models.Quote{}).Where("status IN ('draft','pending-approval','approved','sent')").Count(&openQuotes)
-	h.db.Model(&models.Quote{}).Where("status IN ('draft','pending-approval','approved','sent') AND currency = 'SAR'").Select("COALESCE(SUM(total), 0)").Scan(&openQuotesValue)
+	h.db.Model(&models.Quote{}).Where("is_current AND status IN ('draft','pending-approval','approved','sent')").Count(&openQuotes)
+	h.db.Model(&models.Quote{}).Where("is_current AND status IN ('draft','pending-approval','approved','sent')").Select("COALESCE(SUM(total * fx_rate), 0)").Scan(&openQuotesValue)
+	// Won but not yet handed over: what the business owes its customers.
+	h.db.Model(&models.Opportunity{}).Where("stage = 'closed-won' AND delivery_status NOT IN ('completed','cancelled')").Count(&undelivered)
+	h.db.Model(&models.Quote{}).Joins("JOIN opportunities o ON o.id = quotes.opportunity_id AND o.deleted_at IS NULL").
+		Where("quotes.status = 'accepted' AND o.stage = 'closed-won' AND o.delivery_status NOT IN ('completed','cancelled')").
+		Select("COALESCE(SUM(quotes.total * quotes.fx_rate), 0)").Scan(&undeliveredValue)
 	h.db.Model(&models.Contract{}).Where("status = 'active'").Count(&activeContracts)
 	h.db.Model(&models.Contract{}).Where("status = 'active' AND end_date >= CURRENT_DATE AND end_date <= CURRENT_DATE + INTERVAL '30 days'").Count(&expiringContracts)
 
@@ -27,6 +35,7 @@ func (h *DashboardHandler) KPIs(c *gin.Context) {
 		"activeOpportunities": gin.H{"value": activeOpps},
 		"openQuotes":          gin.H{"value": openQuotes, "totalValue": openQuotesValue},
 		"activeContracts":     gin.H{"value": activeContracts, "expiringIn30Days": expiringContracts},
+		"wonNotDelivered":     gin.H{"value": undelivered, "totalValue": undeliveredValue},
 	})
 }
 
@@ -60,9 +69,9 @@ func (h *DashboardHandler) TopCustomers(c *gin.Context) {
 	}
 	var results []TopCustomer
 	h.db.Model(&models.Quote{}).
-		Select("customer_id, customers.company_name, SUM(total) as total_revenue, COUNT(*) as quote_count").
+		Select("customer_id, customers.company_name, SUM(total * fx_rate) as total_revenue, COUNT(*) as quote_count").
 		Joins("JOIN customers ON customers.id = quotes.customer_id").
-		Where("quotes.status = 'accepted' AND quotes.currency = 'SAR' AND customers.deleted_at IS NULL").
+		Where("quotes.status = 'accepted' AND customers.deleted_at IS NULL").
 		Group("quotes.customer_id, customers.company_name").
 		Order("total_revenue DESC").
 		Limit(10).
@@ -85,7 +94,7 @@ func (h *DashboardHandler) Alerts(c *gin.Context) {
 	}
 
 	var pendingApprovals int64
-	h.db.Model(&models.Quote{}).Where("status = 'pending-approval'").Count(&pendingApprovals)
+	h.db.Model(&models.Quote{}).Where("is_current AND status = 'pending-approval'").Count(&pendingApprovals)
 	if pendingApprovals > 0 {
 		alerts = append(alerts, gin.H{
 			"type": "pending_approvals", "severity": "action",
@@ -101,7 +110,7 @@ func (h *DashboardHandler) Alerts(c *gin.Context) {
 
 func (h *DashboardHandler) RecentQuotes(c *gin.Context) {
 	items := []models.Quote{}
-	if err := h.db.Preload("Customer").Order("created_at DESC").Limit(10).Find(&items).Error; err != nil {
+	if err := h.db.Preload("Customer").Where("is_current").Order("updated_at DESC").Limit(10).Find(&items).Error; err != nil {
 		apiError(c, err)
 		return
 	}
@@ -109,7 +118,7 @@ func (h *DashboardHandler) RecentQuotes(c *gin.Context) {
 }
 func (h *DashboardHandler) ExpiringQuotes(c *gin.Context) {
 	items := []models.Quote{}
-	if err := h.db.Preload("Customer").Where("status IN ('approved','sent') AND valid_until >= CURRENT_DATE AND valid_until <= CURRENT_DATE + INTERVAL '30 days'").Order("valid_until").Find(&items).Error; err != nil {
+	if err := h.db.Preload("Customer").Where("is_current AND status IN ('approved','sent') AND valid_until >= CURRENT_DATE AND valid_until <= CURRENT_DATE + INTERVAL '30 days'").Order("valid_until").Find(&items).Error; err != nil {
 		apiError(c, err)
 		return
 	}
@@ -124,7 +133,7 @@ func (h *DashboardHandler) SalesPerformance(c *gin.Context) {
 		WinRate       float64 `json:"winRate"`
 	}
 	items := []entry{}
-	err := h.db.Model(&models.Quote{}).Select("users.first_name || ' ' || users.last_name AS name, COUNT(*) AS quotes_created, COUNT(*) FILTER (WHERE quotes.status = 'accepted') AS quotes_won, COALESCE(SUM(quotes.total) FILTER (WHERE quotes.status = 'accepted' AND quotes.currency = 'SAR'),0) AS revenue").Joins("JOIN users ON users.id=quotes.created_by_id AND users.deleted_at IS NULL").Where("quotes.created_at >= date_trunc('quarter', CURRENT_DATE)").Group("users.id,users.first_name,users.last_name").Order("revenue DESC").Scan(&items).Error
+	err := h.db.Model(&models.Quote{}).Select("users.first_name || ' ' || users.last_name AS name, COUNT(*) AS quotes_created, COUNT(*) FILTER (WHERE quotes.status = 'accepted') AS quotes_won, COALESCE(SUM(quotes.total * quotes.fx_rate) FILTER (WHERE quotes.status = 'accepted'),0) AS revenue").Joins("JOIN users ON users.id=quotes.created_by_id AND users.deleted_at IS NULL").Where("quotes.is_current AND quotes.created_at >= date_trunc('quarter', CURRENT_DATE)").Group("users.id,users.first_name,users.last_name").Order("revenue DESC").Scan(&items).Error
 	if err != nil {
 		apiError(c, err)
 		return

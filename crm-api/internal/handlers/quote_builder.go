@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"errors"
-	"g4s-crm/api/internal/middleware"
 	"g4s-crm/api/internal/models"
 	"g4s-crm/api/pkg/response"
 	"g4s-crm/api/pkg/seqgen"
@@ -38,6 +37,8 @@ type builderRow struct {
 	CommentText        string     `json:"commentText" validate:"max=20000"`
 	RateType           string     `json:"rateType" validate:"max=100"`
 	BillingCycle       string     `json:"billingCycle" validate:"max=100"`
+	SiteID             *uuid.UUID `json:"siteId"`
+	FulfilmentSource   *string    `json:"fulfilmentSource" validate:"omitempty,oneof=stock purchase service"`
 }
 
 var errStaleQuote = errors.New("quote changed")
@@ -48,7 +49,7 @@ func (h *QuoteHandler) SaveBuilder(c *gin.Context) {
 		LockVersion      int                 `json:"lockVersion" validate:"required,gt=0"`
 		CustomerID       uuid.UUID           `json:"customerId" validate:"required"`
 		OpportunityID    *uuid.UUID          `json:"opportunityId"`
-		Currency         models.Currency     `json:"currency" validate:"required,oneof=SAR USD EUR GBP AED CNY"`
+		Currency         models.Currency     `json:"currency" validate:"required,oneof=SAR USD"`
 		ValidUntil       *string             `json:"validUntil"`
 		DiscountPercent  float64             `json:"discountPercent" validate:"gte=0,lte=100"`
 		VATPercent       float64             `json:"vatPercent" validate:"gte=0,lte=100"`
@@ -77,20 +78,28 @@ func (h *QuoteHandler) SaveBuilder(c *gin.Context) {
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&quote, "id = ?", c.Param("id")).Error; err != nil {
 			return err
 		}
+		if !quote.IsCurrent {
+			return errQuoteSuperseded
+		}
 		if quote.Status != models.QuoteStatusDraft {
 			return errQuoteState
 		}
 		if quote.LockVersion != req.LockVersion {
 			return errStaleQuote
 		}
-		if err := exists(tx, &models.Customer{}, req.CustomerID); err != nil {
-			return err
+		// The quote is bound to its job and customer; the builder cannot move it.
+		if req.CustomerID != quote.CustomerID {
+			return invalid("A quote cannot move to another customer")
 		}
-		if req.OpportunityID != nil {
-			var opp models.Opportunity
-			if err := tx.First(&opp, "id = ? AND customer_id = ?", req.OpportunityID, req.CustomerID).Error; err != nil {
-				return invalid("Opportunity must belong to the customer")
-			}
+		if req.OpportunityID != nil && (quote.OpportunityID == nil || *req.OpportunityID != *quote.OpportunityID) {
+			return invalid("A quote cannot move to another opportunity")
+		}
+		if req.Currency != quote.Currency {
+			return invalid("Change the currency with the currency switch, so prices are converted at a pinned rate")
+		}
+		allowedSites, err := quoteSites(tx, &quote)
+		if err != nil {
+			return err
 		}
 		if req.Appendices != nil {
 			if err := replaceAppendices(tx, c, &quote, *req.Appendices); err != nil {
@@ -114,13 +123,16 @@ func (h *QuoteHandler) SaveBuilder(c *gin.Context) {
 			if err := optionalExists(tx, &models.RecurringService{}, row.RecurringServiceID); err != nil {
 				return err
 			}
+			if row.SiteID != nil && !allowedSites[*row.SiteID] {
+				return invalid("A line names a site this job does not cover")
+			}
 			category := models.QuoteLineMaterials
 			if row.Source == "service" {
 				category = models.QuoteLineManpower
 			} else if row.Source != "product" {
 				category = models.QuoteLineMiscellaneous
 			}
-			line := models.QuoteLineItem{QuoteID: quote.ID, Category: category, RowType: row.RowType, Source: row.Source, ProductID: row.ProductID, ServiceID: row.ServiceID, RecurringServiceID: row.RecurringServiceID, SKU: row.SKU, Description: row.Description, ManufacturerName: row.Manufacturer, Quantity: row.Quantity, Multiplier: row.Multiplier, UnitCost: row.UnitCost, UnitPrice: row.UnitPrice, DiscountPercent: row.DiscountPercent, IsOptional: row.IsOptional, IsSelected: row.IsSelected, IsPrintable: row.IsPrintable, HeadingText: row.HeadingText, CommentText: row.CommentText, RateType: row.RateType, BillingCycle: row.BillingCycle, LeadTimeDays: row.LeadTimeDays, SortOrder: index}
+			line := models.QuoteLineItem{QuoteID: quote.ID, Category: category, RowType: row.RowType, Source: row.Source, ProductID: row.ProductID, ServiceID: row.ServiceID, RecurringServiceID: row.RecurringServiceID, SKU: row.SKU, Description: row.Description, ManufacturerName: row.Manufacturer, Quantity: row.Quantity, Multiplier: row.Multiplier, UnitCost: row.UnitCost, UnitPrice: row.UnitPrice, DiscountPercent: row.DiscountPercent, IsOptional: row.IsOptional, IsSelected: row.IsSelected, IsPrintable: row.IsPrintable, HeadingText: row.HeadingText, CommentText: row.CommentText, RateType: row.RateType, BillingCycle: row.BillingCycle, LeadTimeDays: row.LeadTimeDays, SortOrder: index, SiteID: row.SiteID, FulfilmentSource: row.FulfilmentSource}
 			line.Calculate()
 			lines = append(lines, line)
 		}
@@ -139,9 +151,6 @@ func (h *QuoteHandler) SaveBuilder(c *gin.Context) {
 			lines[i].IsSelected = selected
 			lines[i].IsPrintable = printable
 		}
-		quote.CustomerID = req.CustomerID
-		quote.OpportunityID = req.OpportunityID
-		quote.Currency = req.Currency
 		quote.ValidUntil = date
 		quote.DiscountPercent = req.DiscountPercent
 		quote.VATPercent = req.VATPercent
@@ -163,6 +172,10 @@ func (h *QuoteHandler) SaveBuilder(c *gin.Context) {
 		}
 		return recordActivity(tx, c, "quote", quote.ID, "saved builder")
 	})
+	if errors.Is(err, errQuoteSuperseded) {
+		response.UnprocessableEntity(c, "This version is superseded and read-only; edit the current version")
+		return
+	}
 	if errors.Is(err, errQuoteState) {
 		response.UnprocessableEntity(c, "Only draft quotes can be edited")
 		return
@@ -176,74 +189,6 @@ func (h *QuoteHandler) SaveBuilder(c *gin.Context) {
 		return
 	}
 	h.Get(c)
-}
-func (h *QuoteHandler) Duplicate(c *gin.Context) {
-	var result models.Quote
-	err := h.db.Transaction(func(tx *gorm.DB) error {
-		var source models.Quote
-		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Preload("LineItems", func(db *gorm.DB) *gorm.DB { return db.Order("sort_order ASC") }).Preload("Appendices", func(db *gorm.DB) *gorm.DB { return db.Order("sort_order ASC") }).Preload("Customer").First(&source, "id = ?", c.Param("id")).Error; err != nil {
-			return err
-		}
-		number, err := seqgen.NextNumber(tx, "quote")
-		if err != nil {
-			return err
-		}
-		result = source
-		result.Base = models.Base{}
-		result.QuoteNumber = number
-		result.ParentQuoteID = &source.ID
-		result.Version = source.Version + 1
-		result.LockVersion = 1
-		result.Status = models.QuoteStatusDraft
-		result.ApprovedByID = nil
-		result.ApprovedAt = nil
-		result.ApprovedBy = nil
-		result.Customer = nil
-		result.Opportunity = nil
-		result.CreatedBy = nil
-		userID := middleware.GetCurrentUserID(c)
-		result.CreatedByID = &userID
-		appendices := result.Appendices
-		result.Appendices = nil
-		lines := result.LineItems
-		result.LineItems = nil
-		if err := tx.Omit(clause.Associations).Create(&result).Error; err != nil {
-			return err
-		}
-		if err := tx.Model(&result).Update("vat_percent", source.VATPercent).Error; err != nil {
-			return err
-		}
-		result.VATPercent = source.VATPercent
-		for _, appendix := range appendices {
-			appendix.Base = models.Base{}
-			appendix.QuoteID = result.ID
-			if err := tx.Create(&appendix).Error; err != nil {
-				return err
-			}
-			result.Appendices = append(result.Appendices, appendix)
-		}
-		for _, line := range lines {
-			selected, printable := line.IsSelected, line.IsPrintable
-			line.Base = models.Base{}
-			line.QuoteID = result.ID
-			line.Product = nil
-			if err := tx.Create(&line).Error; err != nil {
-				return err
-			}
-			if err := tx.Model(&line).Updates(map[string]any{"is_selected": selected, "is_printable": printable}).Error; err != nil {
-				return err
-			}
-			line.IsSelected = selected
-			line.IsPrintable = printable
-			result.LineItems = append(result.LineItems, line)
-		}
-		return recordActivity(tx, c, "quote", result.ID, "revised from "+source.QuoteNumber)
-	})
-	if err != nil {
-		apiError(c, err)
-		return
-	}
-	response.Created(c, result)
 }
 func (h *QuoteHandler) ConvertToContract(c *gin.Context) {
 	var req struct {
