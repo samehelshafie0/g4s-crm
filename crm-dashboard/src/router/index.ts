@@ -99,10 +99,14 @@ const router = createRouter({
       meta: { title: 'Recurring Services' },
     },
     {
+      path: '/delivery',
+      name: 'delivery',
+      component: () => import('@/views/DeliveryView.vue'),
+      meta: { title: 'Delivery', permission: 'projects:read' },
+    },
+    {
       path: '/projects',
-      name: 'projects',
-      component: () => import('@/views/ProjectsView.vue'),
-      meta: { title: 'Projects' },
+      redirect: '/delivery',
     },
     {
       path: '/procurement',

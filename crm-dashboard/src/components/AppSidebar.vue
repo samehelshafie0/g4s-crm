@@ -49,7 +49,7 @@ const navGroups = computed(() => [
       { name: 'Opportunities', path: '/leads', icon: Target },
       { name: 'Quotations', path: '/quotes', icon: FileText },
       { name: 'Contracts', path: '/contracts', icon: ScrollText },
-      { name: 'Projects', path: '/projects', icon: FolderKanban },
+      { name: 'Delivery', path: '/delivery', icon: FolderKanban },
     ],
   },
   {
@@ -76,7 +76,7 @@ const navGroups = computed(() => [
   },
 ].map(group => ({...group, items: group.items.filter(item => {
   if (item.path === '/profile') return true
-  const resource = item.path === '/leads' ? 'opportunities' : item.path === '/services' ? 'products' : item.path.slice(1)
+  const resource = item.path === '/leads' ? 'opportunities' : item.path === '/services' ? 'products' : item.path === '/delivery' ? 'projects' : item.path.slice(1)
   return auth.can(`${resource}:${resource === 'users' ? 'update' : 'read'}`)
 })})).filter(group => group.items.length))
 
