@@ -1,11 +1,11 @@
 # G4S CRM — current status and work plan
 
-**Last updated:** 2026-09-29
-**Current phase:** quote document appendices and combined PDF export implemented, following user/workflow controls. Broader M1–M5 acceptance remains.
+**Last updated:** 2026-10-07
+**Current phase:** opportunity-centred flow and procurement fixes built on `feature/opportunity-flow` and tested on a copy of live data; awaiting the owner's choice on a duplicate quote before the live migration. Broader M1–M5 acceptance remains.
 **Release state:** not ready for production.
 **Primary objective:** make customers → opportunities → quotes → contracts work end to end, then finish remaining modules and deploy to the owner's server.
 **Detailed findings:** [docs/CRM_REVIEW.md](docs/CRM_REVIEW.md).
-**Current API coverage:** [docs/API_COVERAGE.md](docs/API_COVERAGE.md); [183-route inventory](docs/API_ENDPOINTS.md).
+**Current API coverage:** [docs/API_COVERAGE.md](docs/API_COVERAGE.md); [182-route inventory](docs/API_ENDPOINTS.md).
 
 ## Start here each work session
 
@@ -97,9 +97,24 @@ M6 can follow M4 only if the owner chooses a sales-only first release and incomp
 
 Dependencies: T03/T04 protect all mutations. T05 enables repeatable environments. T06 precedes live UI integration. T11 precedes T13/T14. T17 requires an accepted persisted quote revision. T21/T22 depend on agreed catalog/stock contracts. T24/T25 require actual server details. Work on those independent foundations need not wait for optional design decisions.
 
-## In progress — opportunity-centred flow, 2026-09-29
+## In progress — opportunity-centred flow, updated 2026-10-07
 
-**Backend and frontend DONE and committed on `feature/opportunity-flow`; not merged, not migrated, not deployed.** The opportunity becomes the project, each opportunity has one quote with retained versions, contracts hold quotes, sites and fulfilment links are recorded, and customer quotes are SAR/USD with a pinned rate. Migrations 000008–000014 are written and dry-run against a copy of live data but **not applied to the live database**. Do not deploy the backend without the frontend. Full detail, defaults taken and next steps: [docs/OPPORTUNITY_FLOW_PROGRESS.md](docs/OPPORTUNITY_FLOW_PROGRESS.md).
+**Backend and frontend DONE and committed on `feature/opportunity-flow`; not merged, not migrated, not deployed.** The opportunity becomes the project, each opportunity has one quote with retained versions, contracts hold quotes, sites and fulfilment links are recorded, and customer quotes are SAR/USD with a pinned rate. Migrations 000008–000015 are written but **not applied to the live database**. Do not deploy the backend without the frontend. Full detail, defaults taken and next steps: [docs/OPPORTUNITY_FLOW_PROGRESS.md](docs/OPPORTUNITY_FLOW_PROGRESS.md).
+
+- **Tested on live data (2026-09-29):** the live database was dumped (read-only) and restored into a separate container, migrated, and run through customer → sites → opportunity → quote versions → win → procurement (supplier quote, direct PO, stock PO from catalog SKUs) → USD receipts → holds → issue → delivery → contract. 18/18 checks pass; backend integration tests and frontend tests/build pass.
+- **Procurement fixes (committed):**
+  - The PO wizard pulls a won job's remaining lines, prices them from supplier quotes or product vendor prices, searches the whole catalog, offers catalog vendors as suppliers, and supports currencies other than SAR.
+  - Good receipts for a job are held for it automatically; fulfilment counts only held stock and reports damaged units separately.
+  - Supplier quote → PO keeps the job link.
+  - Migration 000015 backfills the opportunity on existing POs and supplier quotes.
+- **Blocker for the live migration:** opportunity *op2* has two quotes, QT-2026-0002 (22 Sep) and QT-2026-0004 (29 Sep), both empty drafts. Migration 11 stops until the owner picks one and the other is deleted. Back up the live database before migrating.
+- **Open, not yet fixed:**
+  - Holds created on the Inventory screen are not linked to quote lines.
+  - Nothing caps ordering or holding beyond a line's quantity.
+  - Damaged receipts raise no return or reorder.
+  - The Inventory screen's manufacturer and category columns are blank for real products.
+  - Catalog data: a vendor named "in", and duplicate "alfanar Electric" vendor names.
+- **Proposed next:** upgrade the bulk product importer: per-row manufacturer, category and currency, a column-mapping step, vendor and manufacturer name matching, and a fuller template. 29 of 98 live products have no manufacturer or category.
 
 Also shipped since 2026-09-17 (committed): dashboard redesign, nginx upload/timeout fix, Saudi catalog seed with rentals and live FX refresh, catalog visible in builder/price books, vendor-file product import, server-side PDF table extraction, supplier quote/PO customer links and record attachments, multipart upload fix.
 
@@ -137,7 +152,7 @@ Also shipped since 2026-09-17 (committed): dashboard redesign, nginx upload/time
 
 ### Next active work
 
-Complete **T16** CSV accuracy and unsaved-change protection; quote PDF appendices are now implemented, then money/FX policy, scalable table pagination, remaining procurement/project exceptions and release gates. Contacts/sites stay deferred until resumed by owner. Use the [sales UAT checklist](docs/SALES_ACCEPTANCE.md). Deployment awaits server/provider/domain/access details. This batch is local and has not been pushed or deployed.
+Owner decision on the op2 duplicate quote, then back up and migrate live and deploy API and frontend together (on approval). Then the bulk product importer upgrade and the open procurement/inventory items above. Earlier queue: complete **T16** CSV accuracy and unsaved-change protection, money/FX policy, scalable table pagination, remaining procurement/project exceptions and release gates. Contacts/sites stay deferred until resumed by owner. Use the [sales UAT checklist](docs/SALES_ACCEPTANCE.md). Deployment awaits server/provider/domain/access details. This batch is local and has not been pushed or deployed.
 
 ## Earlier foundation batch — historical evidence, 2026-09-16
 
