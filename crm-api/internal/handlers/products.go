@@ -51,6 +51,14 @@ func (h *ProductHandler) Get(c *gin.Context) {
 var productRules = map[string]string{"sku": "required,max=100", "name": "required,max=255", "description": "max=20000", "manufacturerId": "", "categoryId": "", "productType": "required,oneof=import local", "originCurrency": currencyRule, "unitCostOrigin": moneyRule, "fxRate": "gt=0,lte=1000000", "freightPercent": percentRule, "customsPercent": percentRule, "clearancePercent": percentRule, "targetMarginPercent": "gte=0,lt=100", "sellingPrice": moneyRule, "leadTimeDays": "gte=0,lte=3650", "supplierName": "max=255", "isActive": ""}
 
 func validateProduct(tx *gorm.DB, p *models.Product) error {
+	if p.ProductType == models.ProductTypeLocal {
+		p.OriginCurrency, p.FXRate = models.CurrencySAR, 1
+	}
+	name, err := vendorName(p.SupplierName)
+	if err != nil {
+		return err
+	}
+	p.SupplierName = name
 	if err := optionalExists(tx, &models.Manufacturer{}, p.ManufacturerID); err != nil {
 		return err
 	}
@@ -76,7 +84,7 @@ func (h *ProductHandler) save(c *gin.Context, create bool) {
 			return
 		}
 	}
-	oldCost := item.UnitCostOrigin
+	oldCost, oldCurrency, oldLanded := item.UnitCostOrigin, item.OriginCurrency, item.LandedCostSAR
 	if !bindFields(c, &item, productRules) {
 		return
 	}
@@ -92,7 +100,7 @@ func (h *ProductHandler) save(c *gin.Context, create bool) {
 			return err
 		}
 
-		if create || oldCost != item.UnitCostOrigin {
+		if create || oldCost != item.UnitCostOrigin || oldCurrency != item.OriginCurrency || oldLanded != item.LandedCostSAR {
 			if err := tx.Create(&models.ProductPriceRecord{ProductID: item.ID, Date: time.Now(), Source: models.PriceSourceManual, UnitCost: item.UnitCostOrigin, Currency: item.OriginCurrency, LandingCost: item.LandedCostSAR, Qty: 1, VendorName: item.SupplierName}).Error; err != nil {
 				return err
 			}
@@ -161,6 +169,16 @@ func (h *ProductHandler) SaveVendor(c *gin.Context) {
 	if !bindFields(c, &item, map[string]string{"vendorName": "required,max=255", "vendorSku": "max=100", "unitCost": moneyRule, "currency": currencyRule, "moq": "gte=1", "leadTimeDays": "gte=0", "catalogSource": "max=255", "notes": "max=20000"}) {
 		return
 	}
+	name, err := vendorName(item.VendorName)
+	if err != nil {
+		apiError(c, err)
+		return
+	}
+	if name == "" {
+		response.BadRequest(c, "A vendor name is required")
+		return
+	}
+	item.VendorName = name
 	now := time.Now()
 	item.LastQuoteDate = &now
 	if err := h.db.Save(&item).Error; err != nil {

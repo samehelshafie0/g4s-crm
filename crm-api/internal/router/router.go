@@ -293,6 +293,8 @@ func Setup(db *gorm.DB, cfg *config.Config) *gin.Engine {
 	// ─── Procurement ─────────────────────────────────────────
 	proc := protected.Group("/procurement")
 	{
+		proc.GET("/job-demands", middleware.AuthorizeAny("procurement:read", "inventory:read"), procurementH.JobDemands)
+		proc.GET("/job-demands/:id", middleware.AuthorizeAny("procurement:read", "inventory:read"), procurementH.JobDemands)
 		proc.GET("/supplier-items", middleware.Authorize("procurement:read"), procurementH.SupplierItems)
 		proc.POST("/supplier-items", middleware.Authorize("procurement:create"), procurementH.SaveSupplierItem)
 		proc.PATCH("/supplier-items/:id", middleware.Authorize("procurement:update"), procurementH.SaveSupplierItem)
@@ -323,7 +325,8 @@ func Setup(db *gorm.DB, cfg *config.Config) *gin.Engine {
 		{
 			grs.GET("", middleware.Authorize("procurement:read"), procurementH.ListGRs)
 			grs.GET("/:id", middleware.Authorize("procurement:read"), procurementH.GetGR)
-			grs.POST("", middleware.Authorize("procurement:create"), procurementH.CreateGR)
+			grs.POST("", middleware.AuthorizeAny("procurement:create", "inventory:update"), procurementH.CreateGR)
+			grs.PATCH("/:id/items/:itemId/return", middleware.AuthorizeAny("procurement:update", "inventory:update"), procurementH.ReturnDamaged)
 		}
 	}
 
@@ -345,7 +348,7 @@ func Setup(db *gorm.DB, cfg *config.Config) *gin.Engine {
 
 	// ─── Dashboard ───────────────────────────────────────────
 	dash := protected.Group("/dashboard")
-	dash.Use(middleware.Authorize("dashboard:read"))
+	dash.Use(middleware.Authorize("dashboard:read"), middleware.Authorize("quotes:read"))
 	{
 		dash.GET("/recent-quotes", dashH.RecentQuotes)
 		dash.GET("/expiring-quotes", dashH.ExpiringQuotes)

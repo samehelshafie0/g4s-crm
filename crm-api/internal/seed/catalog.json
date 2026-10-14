@@ -1381,7 +1381,7 @@
       "clearancePercent": 0,
       "targetMarginPercent": 28,
       "leadTimeDays": 10,
-      "supplierName": "alfanar Electric (Riyadh)"
+      "supplierName": "alfanar Electric"
     },
     {
       "sku": "ALF-POLE-6M-HDG",
@@ -1397,7 +1397,7 @@
       "clearancePercent": 0,
       "targetMarginPercent": 28,
       "leadTimeDays": 14,
-      "supplierName": "alfanar Electric (Riyadh)"
+      "supplierName": "alfanar Electric"
     }
   ],
   "services": [

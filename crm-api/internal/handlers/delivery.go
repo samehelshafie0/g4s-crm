@@ -225,7 +225,7 @@ func (h *OpportunityHandler) Fulfilment(c *gin.Context) {
 		}
 		var rows []row
 		if err := h.db.Table("purchase_order_items").Select("purchase_orders.id AS purchase_order_id, purchase_orders.po_number, purchase_orders.status, purchase_order_items.quantity, purchase_order_items.received_qty, purchase_orders.expected_delivery, "+
-			"(SELECT COALESCE(SUM(gri.received_qty), 0) FROM goods_receipt_items gri WHERE gri.po_item_id = purchase_order_items.id AND gri.condition = 'good' AND gri.deleted_at IS NULL) AS good_qty").
+			"(SELECT COALESCE(SUM(gri.received_qty - gri.damaged_qty), 0) FROM goods_receipt_items gri WHERE gri.po_item_id = purchase_order_items.id AND gri.deleted_at IS NULL) AS good_qty").
 			Joins("JOIN purchase_orders ON purchase_orders.id = purchase_order_items.purchase_order_id AND purchase_orders.deleted_at IS NULL").
 			Where("purchase_order_items.quote_line_item_id = ? AND purchase_order_items.deleted_at IS NULL AND purchase_orders.status <> 'cancelled'", item.ID).Scan(&rows).Error; err != nil {
 			apiError(c, err)

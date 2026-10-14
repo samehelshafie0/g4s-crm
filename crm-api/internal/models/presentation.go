@@ -115,12 +115,18 @@ func (e ExchangeRate) MarshalJSON() ([]byte, error) {
 }
 func (w WarehouseStock) MarshalJSON() ([]byte, error) {
 	type plain WarehouseStock
-	sku, name := "", ""
+	sku, name, manufacturer, category := "", "", "", ""
 	if w.Product != nil {
 		sku = w.Product.SKU
 		name = w.Product.Name
+		if w.Product.Manufacturer != nil {
+			manufacturer = w.Product.Manufacturer.Name
+		}
+		if w.Product.Category != nil {
+			category = w.Product.Category.Name
+		}
 	}
-	return withFields(plain(w), map[string]any{"productSku": sku, "productName": name})
+	return withFields(plain(w), map[string]any{"productSku": sku, "productName": name, "manufacturerName": manufacturer, "categoryName": category})
 }
 func (r StockReservation) MarshalJSON() ([]byte, error) {
 	type plain StockReservation

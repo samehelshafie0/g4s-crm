@@ -18,6 +18,11 @@ import (
 	"time"
 )
 
+type conflictError string
+
+func (e conflictError) Error() string { return string(e) }
+func conflict(message string) error   { return conflictError(message) }
+
 type inputError string
 
 func (e inputError) Error() string { return string(e) }
@@ -25,8 +30,11 @@ func invalid(message string) error { return inputError(message) }
 
 func apiError(c *gin.Context, err error) {
 	var input inputError
+	var stale conflictError
 	var sqlState interface{ SQLState() string }
 	switch {
+	case errors.As(err, &stale):
+		response.Conflict(c, string(stale))
 	case errors.As(err, &input):
 		response.BadRequest(c, string(input))
 	case errors.Is(err, gorm.ErrRecordNotFound):

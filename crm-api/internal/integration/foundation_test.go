@@ -251,10 +251,12 @@ func TestFoundation(t *testing.T) {
 	})
 
 	testModuleAPIs(t, db, r, adminToken, customerID)
+	testFulfilmentCloseout(t, db, r, adminToken, customerID)
 	testRoleWorkflows(t, db, r, adminToken)
 	testQuoteAppendices(t, db, r, adminToken, customerID, dir)
 	testSeedCatalog(t, db, r, adminToken)
 	testProductImport(t, db, r, adminToken)
+	testFullCycle(t, db, r, adminToken)
 	testPDFExtract(t, r, adminToken)
 	t.Run("current role and deactivation take effect for existing access token", func(t *testing.T) {
 		must(t, db.Model(&sales).Update("role", models.RoleViewer).Error)

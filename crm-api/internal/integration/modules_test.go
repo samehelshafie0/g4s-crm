@@ -191,6 +191,7 @@ func testModuleAPIs(t *testing.T, db *gorm.DB, r *gin.Engine, token, customerID 
 		if listed["data"] == nil {
 			t.Fatalf("documents could not be listed by linked record: %v", listed)
 		}
+		call(t, "PATCH", "/procurement/purchase-orders/"+po["id"].(string)+"/status", m("status", "cancelled"), 200)
 	})
 	t.Run("procurement lines conversion partial receipts and stock", func(t *testing.T) {
 		sq := call(t, "POST", "/procurement/supplier-quotes", m("supplierId", mfrID, "supplierName", "Integration Manufacturer", "currency", "SAR", "items", []any{m("productId", productID, "productName", "Camera", "quantity", 10, "unitCost", 25)}), 201)

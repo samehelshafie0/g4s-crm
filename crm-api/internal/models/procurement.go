@@ -130,6 +130,8 @@ type SupplierItemCatalog struct {
 
 type GoodsReceipt struct {
 	Base
+	ReplacementPOID  *uuid.UUID         `gorm:"type:uuid" json:"replacementPoId,omitempty"`
+	ReplacementPO    *PurchaseOrder     `gorm:"foreignKey:ReplacementPOID" json:"replacementPo,omitempty"`
 	FXRate           float64            `json:"fxRate"`
 	GRNumber         string             `gorm:"uniqueIndex;not null" json:"grNumber"`
 	POID             uuid.UUID          `gorm:"type:uuid;not null;index" json:"poId"`
@@ -146,6 +148,10 @@ type GoodsReceipt struct {
 
 type GoodsReceiptItem struct {
 	Base
+	DamagedQty      int            `json:"damagedQty"`
+	ReturnStatus    string         `json:"returnStatus"`
+	ReturnReference string         `json:"returnReference"`
+	ReturnedAt      *time.Time     `json:"returnedAt,omitempty"`
 	GoodsReceiptID  uuid.UUID      `gorm:"type:uuid;not null;index" json:"goodsReceiptId"`
 	POItemID        uuid.UUID      `gorm:"type:uuid;not null" json:"poItemId"`
 	ProductID       uuid.UUID      `gorm:"type:uuid;not null" json:"productId"`

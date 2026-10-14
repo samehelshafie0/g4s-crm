@@ -17,13 +17,18 @@ import (
 // parses the file and maps its columns; the server owns validation, costing and
 // the audit trail so an import cannot write prices the product editor rejects.
 type importRow struct {
-	SKU          string  `json:"sku" validate:"required,max=100"`
-	Name         string  `json:"name" validate:"required,max=255"`
-	Description  string  `json:"description" validate:"max=20000"`
-	UnitCost     float64 `json:"unitCost" validate:"gte=0,lte=1000000000"`
-	Qty          int     `json:"qty" validate:"gte=0,lte=1000000"`
-	LeadTimeDays int     `json:"leadTimeDays" validate:"gte=0,lte=3650"`
-	VendorSKU    string  `json:"vendorSku" validate:"max=100"`
+	VendorName       string          `json:"vendorName" validate:"max=255"`
+	ManufacturerName string          `json:"manufacturerName" validate:"max=255"`
+	CategoryName     string          `json:"categoryName" validate:"max=255"`
+	Currency         models.Currency `json:"currency" validate:"omitempty,oneof=SAR USD EUR GBP AED CNY"`
+	FXRate           *float64        `json:"fxRate" validate:"omitempty,gt=0,lte=1000000"`
+	SKU              string          `json:"sku" validate:"required,max=100"`
+	Name             string          `json:"name" validate:"required,max=255"`
+	Description      string          `json:"description" validate:"max=20000"`
+	UnitCost         float64         `json:"unitCost" validate:"gte=0,lte=1000000000"`
+	Qty              int             `json:"qty" validate:"gte=0,lte=1000000"`
+	LeadTimeDays     int             `json:"leadTimeDays" validate:"gte=0,lte=3650"`
+	VendorSKU        string          `json:"vendorSku" validate:"max=100"`
 }
 
 type importRequest struct {
@@ -32,7 +37,7 @@ type importRequest struct {
 	// SourceRef names the file the rows came from; it is stored on every price
 	// record so a later price question can be traced back to the vendor document.
 	SourceRef           string             `json:"sourceRef" validate:"max=255"`
-	VendorName          string             `json:"vendorName" validate:"required,max=255"`
+	VendorName          string             `json:"vendorName" validate:"max=255"`
 	Source              models.PriceSource `json:"source" validate:"required,oneof=vendor-catalog supplier-quote manual"`
 	ProductType         models.ProductType `json:"productType" validate:"required,oneof=import local"`
 	OriginCurrency      models.Currency    `json:"originCurrency" validate:"required,oneof=SAR USD EUR GBP AED CNY"`
@@ -65,6 +70,12 @@ func (h *ProductHandler) ImportProducts(c *gin.Context) {
 		return
 	}
 
+	name, nameErr := vendorName(req.VendorName)
+	if nameErr != nil {
+		apiError(c, nameErr)
+		return
+	}
+	req.VendorName = name
 	outcomes := make([]importOutcome, 0, len(req.Rows))
 	var created, updated, skipped, failed int
 
@@ -88,6 +99,8 @@ func (h *ProductHandler) ImportProducts(c *gin.Context) {
 		seen := map[string]bool{}
 		var firstImported uuid.UUID
 		for _, row := range req.Rows {
+			// File defaults remain compatible with older clients; explicit row fields win.
+			req := req
 			sku := strings.TrimSpace(row.SKU)
 			name := strings.TrimSpace(row.Name)
 			if sku == "" || name == "" {
@@ -103,8 +116,7 @@ func (h *ProductHandler) ImportProducts(c *gin.Context) {
 			seen[strings.ToUpper(sku)] = true
 
 			var item models.Product
-			// Lock the row so two concurrent imports of the same price list cannot
-			// both decide the SKU is new.
+			// Serialize existing product updates. New SKUs are also protected by the DB unique constraint.
 			err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("sku = ?", sku).First(&item).Error
 			isNew := err == gorm.ErrRecordNotFound
 			if err != nil && !isNew {
@@ -116,13 +128,68 @@ func (h *ProductHandler) ImportProducts(c *gin.Context) {
 				continue
 			}
 
-			previousCost := item.UnitCostOrigin
+			if strings.TrimSpace(row.VendorName) != "" {
+				req.VendorName, err = vendorName(row.VendorName)
+				if err != nil {
+					return invalid(sku + ": " + err.Error())
+				}
+			}
+			if req.VendorName == "" {
+				return invalid(sku + ": a vendor name is required (in the row or file defaults)")
+			}
+			if strings.TrimSpace(row.ManufacturerName) != "" {
+				var matches []models.Manufacturer
+				if err := tx.Where("lower(trim(name)) = lower(?) OR lower(trim(code)) = lower(?)", strings.TrimSpace(row.ManufacturerName), strings.TrimSpace(row.ManufacturerName)).Find(&matches).Error; err != nil {
+					return err
+				}
+				if len(matches) != 1 {
+					return invalid(sku + ": manufacturer must match one existing name or code; add it in Manufacturers first")
+				}
+				if req.ManufacturerID == nil || *req.ManufacturerID != matches[0].ID {
+					req.CategoryID = nil
+				}
+				req.ManufacturerID = &matches[0].ID
+			}
+			if strings.TrimSpace(row.CategoryName) != "" {
+				manufacturerID := req.ManufacturerID
+				if manufacturerID == nil {
+					manufacturerID = item.ManufacturerID
+				}
+				var matches []models.ManufacturerCategory
+				if err := tx.Where("manufacturer_id = ? AND lower(trim(name)) = lower(?)", manufacturerID, strings.TrimSpace(row.CategoryName)).Find(&matches).Error; err != nil {
+					return err
+				}
+				if len(matches) != 1 {
+					return invalid(sku + ": category must match one existing category for this manufacturer")
+				}
+				req.ManufacturerID, req.CategoryID = manufacturerID, &matches[0].ID
+			}
+			if row.Currency != "" && row.Currency != req.OriginCurrency {
+				req.OriginCurrency = row.Currency
+				if row.Currency != models.CurrencySAR && row.FXRate == nil {
+					return invalid(sku + ": an exchange rate to SAR is required for this row's currency")
+				}
+			}
+			if row.FXRate != nil {
+				req.FXRate = *row.FXRate
+			}
+			if req.OriginCurrency == models.CurrencySAR {
+				req.ProductType, req.FXRate = models.ProductTypeLocal, 1
+			} else {
+				req.ProductType = models.ProductTypeImport
+			}
+			previousCost, previousCurrency, previousLanded := item.UnitCostOrigin, item.OriginCurrency, item.LandedCostSAR
 			item.SKU, item.Name = sku, name
 			if row.Description != "" {
 				item.Description = strings.TrimSpace(row.Description)
 			}
 			if req.ManufacturerID != nil {
-				item.ManufacturerID, item.CategoryID = req.ManufacturerID, req.CategoryID
+				// A blank category is not a request to erase a known classification.
+				// Clear it only when the manufacturer changes, since categories belong to a maker.
+				if req.CategoryID != nil || item.ManufacturerID == nil || *item.ManufacturerID != *req.ManufacturerID {
+					item.CategoryID = req.CategoryID
+				}
+				item.ManufacturerID = req.ManufacturerID
 			}
 			item.ProductType, item.OriginCurrency, item.UnitCostOrigin = req.ProductType, req.OriginCurrency, row.UnitCost
 			item.FXRate = req.FXRate
@@ -148,7 +215,7 @@ func (h *ProductHandler) ImportProducts(c *gin.Context) {
 				vendorSKU = sku
 			}
 			var vendor models.ProductVendorEntry
-			vendorErr := tx.Where("product_id = ? AND vendor_name = ?", item.ID, req.VendorName).First(&vendor).Error
+			vendorErr := tx.Where("product_id = ? AND lower(trim(vendor_name)) = lower(?)", item.ID, req.VendorName).First(&vendor).Error
 			if vendorErr != nil && vendorErr != gorm.ErrRecordNotFound {
 				return vendorErr
 			}
@@ -162,7 +229,7 @@ func (h *ProductHandler) ImportProducts(c *gin.Context) {
 				return err
 			}
 
-			if isNew || previousCost != item.UnitCostOrigin {
+			if isNew || previousCost != item.UnitCostOrigin || previousCurrency != item.OriginCurrency || previousLanded != item.LandedCostSAR {
 				qty := row.Qty
 				if qty < 1 {
 					qty = 1
@@ -187,7 +254,7 @@ func (h *ProductHandler) ImportProducts(c *gin.Context) {
 		}
 
 		if created+updated == 0 {
-			return invalid("No rows could be imported; check the part number, description and price columns")
+			return nil // A repeated file with updates disabled is a valid all-skipped import.
 		}
 		// The log points at the first imported product so the entry links somewhere real.
 		return recordActivity(tx, c, "product", firstImported, "imported "+req.VendorName+" price list")

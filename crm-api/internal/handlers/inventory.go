@@ -71,7 +71,7 @@ func (h *InventoryHandler) ListStock(c *gin.Context) {
 		apiError(c, err)
 		return
 	}
-	if err := q.Preload("Product").Order("created_at DESC").Scopes(pagination.Paginate(params)).Find(&items).Error; err != nil {
+	if err := q.Preload("Product.Manufacturer").Preload("Product.Category").Order("created_at DESC").Scopes(pagination.Paginate(params)).Find(&items).Error; err != nil {
 		apiError(c, err)
 		return
 	}
@@ -79,7 +79,7 @@ func (h *InventoryHandler) ListStock(c *gin.Context) {
 }
 func (h *InventoryHandler) LowStock(c *gin.Context) {
 	items := []models.WarehouseStock{}
-	if err := h.db.Preload("Product").Where("reorder_level IS NOT NULL AND available_qty <= reorder_level").Find(&items).Error; err != nil {
+	if err := h.db.Preload("Product.Manufacturer").Preload("Product.Category").Where("reorder_level IS NOT NULL AND available_qty <= reorder_level").Find(&items).Error; err != nil {
 		apiError(c, err)
 		return
 	}
@@ -114,11 +114,21 @@ func (h *InventoryHandler) CreateReservation(c *gin.Context) {
 		if err := lockProduct(tx, item.ProductID); err != nil {
 			return err
 		}
+		if item.Source != models.ReservationSourceManual && item.QuoteLineItemID == nil {
+			return invalid("Choose an accepted quote line for a job hold, or use a manual hold")
+		}
 		// Held for a job: the reference comes from the quote line, not free text.
 		if item.QuoteLineItemID != nil {
 			line, quote, err := committedLine(tx, *item.QuoteLineItemID, item.ProductID)
 			if err != nil {
 				return err
+			}
+			remaining, err := lineRemaining(tx, line, uuid.Nil)
+			if err != nil {
+				return err
+			}
+			if item.Qty > remaining {
+				return invalid("Hold exceeds the quote line's remaining quantity after existing holds and orders")
 			}
 			item.Source = models.ReservationSourceQuote
 			item.SourceRef = quoteRef(quote)
