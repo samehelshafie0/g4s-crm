@@ -1,0 +1,67 @@
+# Full-cycle acceptance and bulk product entry
+
+Date: 2026-10-07. Branch: `feature/opportunity-flow`. Changes are local and uncommitted; nothing was deployed or migrated on the live database.
+
+Latest follow-up: [role-based business acceptance](BUSINESS_ACCEPTANCE.md) now also passes the sales-to-delivery cycle in the browser with separate operational accounts and fresh data. This document retains the earlier workbook/import evidence.
+
+## Result
+
+The continuous API scenario passes from a newly created customer through manual/imported products, opportunity and accepted quote, mixed stock/purchasing, partial receipts, damage return/replacement, dispatch, contract activation and delivery completion. All business records and state transitions in this scenario use authenticated public API requests against disposable PostgreSQL. Database reads reconcile the result; they do not bypass the workflow.
+
+The new Excel template and import review support different vendors, manufacturers, categories and currencies in one file. Browser checks passed for customer creation, manual product creation/editing, template download, column mapping, mixed-row paste import and missing-FX validation. Automated Chrome file selection was blocked by the extension's file-access setting; the exact delivered XLSX was filled in memory and tested through the production parser instead. This is not a claim that every screen in the full cycle was manually clicked in a browser.
+
+## Continuous acceptance scenario
+
+| Step | Evidence / expected result |
+|---|---|
+| Create customer | New company, site and primary contact persist through the API. A separate customer was also created through the browser. |
+| Set up catalog | Create manufacturer/category, manually enter a recorder, and import cameras/sensors with two vendors and SAR/EUR currencies. Name or code matching is case-insensitive. |
+| Cost and classification | EUR 20 × 4.2 = SAR 84. Manufacturer/category persist. Repricing with a blank category preserves the existing classification. Local products save as SAR at rate 1. |
+| Repeat/invalid import | Existing rows are skipped when refresh is off. Unknown manufacturer rolls back the whole batch. A differing foreign currency without its FX rate is rejected. An FX-only price change adds a history entry. |
+| Prepare existing stock | Stock PO for 3 cameras → submit → approve → order → receive 3 good units. No direct DB stock seeding. |
+| Opportunity and quote | Quote 5 cameras at SAR 150 and 2 recorders at SAR 100. Subtotal SAR 950; VAT SAR 142.50; total SAR 1,092.50. Submit, approve when required, send and accept. Acceptance wins the opportunity. |
+| Use stock | Hold 3 cameras against the precise quote line. Release and recreate the hold. |
+| Buy shortfall | Accepted supplier quotation → PO for 2 cameras. Direct linked PO for 2 recorders. Further hold attempts are rejected once demand is committed. |
+| Partial receiving | Receive the recorders in two deliveries of 1; PO moves through partial-received to received. Good units automatically become job holds. |
+| Damage | Receive 2 cameras: 1 good, 1 damaged. Only the good unit enters usable stock. A pending return and 1-unit replacement draft are created. |
+| Return and replacement | Record return reference; approve/order the replacement draft; receive 1 good replacement. No automatic supplier purchase or payment occurs. |
+| Dispatch | Fulfil all active holds: 5 cameras and 2 recorders. Both products finish with on-hand, reserved and available quantities of zero. |
+| Close delivery | Convert the accepted quote to a sales contract, activate it, and set delivery in progress then completed. |
+
+The existing closeout regressions also cover duplicate request lines, concurrent hold-versus-order writes, quantity multipliers, over-receiving, repeat return rejection, and legacy unlinked job orders. See [the earlier closeout report](PROCUREMENT_CLOSEOUT.md).
+
+## What changed during this test
+
+- **Bulk entry:** installed `crm-dashboard/public/templates/g4s-product-import.xlsx`, with a blank Products sheet, separate Instructions sheet, text-formatted SKUs, frozen identifiers/headers, numeric validation and currency choices. Two hundred rows are formatted; API limit remains 2,000 rows per import.
+- **Import review:** editable per-row vendor, manufacturer, category, currency and FX; explicit column mapping; wider dialog; accessible row input labels; per-row SAR landed/selling previews and missing-rate blocking. Vendor columns no longer map to manufacturer.
+- **Import API:** row fields override file defaults. Manufacturer names/codes and categories resolve to existing masters; unknown/ambiguous references reject the batch with the affected SKU. New master records must be added in Manufacturers first. A repeated all-skipped import returns its summary normally.
+- **Audit:** changing currency, FX or landed cost at the same nominal unit cost now records price history, both for manual edits and imports.
+- **Lead time:** fixed the UI's mismatched parser field name, which previously discarded imported lead times. Browser-imported rows persisted 21 and 7 days.
+- **Manual local pricing:** switching to Local previously hid import charges but saved them and could retain USD/3.75. The browser reproduced SAR 200 preview versus SAR 230 saved landed cost. Switching to Local now selects SAR/1 and clears inherited charges; any existing charges remain visible/editable. Preview and save both use them. Retest saved SAR 200 landed / SAR 285.71 selling at a 30% target margin.
+- **Product editing:** selecting an existing product no longer clears a valid category when its manufacturer is loaded into the form.
+
+## How to use the workbook
+
+1. Products → Import from vendor file → Download the Excel template.
+2. Fill Products, one product per row. Part Number, Description and Unit Cost are required. Enter Vendor Name or supply a default during review. Use existing manufacturer names/codes and categories.
+3. Specify each currency and, where needed, its rate to SAR. SAR always uses 1. A foreign row matching the file's default currency may use the default FX; another foreign currency needs its own rate.
+4. Upload the saved workbook, or paste the rows with their headers. Check mapping, selected rows, default landing charges and margin. Disable refresh to leave existing SKUs unchanged.
+5. Import and review the created/updated/skipped summary. This creates catalog and price records, **not inventory stock**. Receive a purchase to add stock; then hold/dispatch against accepted quote lines.
+
+Freight, customs, clearance and margin remain file-level defaults and apply to all selected rows, including SAR rows. Split imports if different products need different percentages. Unknown classifications are not guessed. A blank category keeps a known category when the manufacturer is unchanged; changing manufacturer requires a matching category or leaves it unassigned. Historical misclassified/unclassified records are not automatically repaired.
+
+## Verification and limitations
+
+- `./scripts/test-integration.sh`: **PASS**, final run 79.266 seconds against disposable PostgreSQL 16, with Go race detector; includes `full_cycle_test.go` and prior closeout coverage.
+- `npm test`: 23 passing, including a filled copy of the shipped XLSX, preserved leading-zero SKU, correct vendor/manufacturer distinction, currencies, FX and lead time; Instructions are never imported even when the sheets are reordered.
+- `npm run build`: production build and Vue/TypeScript checks pass. Existing ~509 kB file-parser chunk warning remains.
+- `go vet ./...` and `git diff --check`: pass.
+- Workbook: both sheets rendered and visually inspected; error scan clean; exported XML confirms frozen first row/two identifier columns and four validation ranges.
+- Browser: isolated clone `g4s_cycle_20261007`, API on loopback 18108 and frontend 5178. Test data did not reach the original copy or live CRM. Preview services and the disposable clone were removed after verification.
+- Not covered by this run: full mobile/multi-browser UAT, every role's visual path, load testing, supplier credit notes/refunds, finance settlement, or operational backup/restore rehearsal. Delivery completion remains an operator-set status, not an enforced material-dispatch gate.
+
+## Remaining before release
+
+1. Resolve the live `op2` duplicate quote: owner must choose between empty drafts `QT-2026-0002` and `QT-2026-0004` before migration 11. Neither was deleted.
+2. Identify vendor `in` for SKU `NSI- Prod`; classify the 29 products missing manufacturer/category. These are data decisions, not something to infer from this test fixture.
+3. Review/commit changes, finish the remaining business/role and operational acceptance gates in [STATUS.md](../STATUS.md), and confirm deployment details. Back up and deploy API/frontend with the required migrations together. This report does not mark the whole project production-ready.

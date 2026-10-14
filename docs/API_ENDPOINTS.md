@@ -1,6 +1,6 @@
 # Backend endpoint inventory
 
-Updated 2026-09-29 from `crm-api/internal/router/router.go`. 182 registered routes. This is a route inventory, not a claim that every role or edge case is tested. See [API coverage](API_COVERAGE.md) for behavior and remaining gaps. Password email recovery routes return 501 until configured.
+Updated 2026-10-07 from `crm-api/internal/router/router.go`. 187 registered routes. This is a route inventory, not a claim that every role or edge case is tested. See [API coverage](API_COVERAGE.md) for behavior and remaining gaps. Password email recovery routes return 501 until configured.
 
 | Method | Path | Permission |
 |---|---|---|
@@ -39,14 +39,14 @@ Updated 2026-09-29 from `crm-api/internal/router/router.go`. 182 registered rout
 | PATCH | `/api/v1/customers/:id/sites/:siteId` | `customers:update` |
 | GET | `/api/v1/customers/lookup` | `customers:read` |
 | GET | `/api/v1/delivery` | `projects:read` |
-| GET | `/api/v1/dashboard/alerts` | `dashboard:read` |
-| GET | `/api/v1/dashboard/expiring-quotes` | `dashboard:read` |
-| GET | `/api/v1/dashboard/kpis` | `dashboard:read` |
-| GET | `/api/v1/dashboard/pipeline` | `dashboard:read` |
-| GET | `/api/v1/dashboard/recent-activity` | `dashboard:read` |
-| GET | `/api/v1/dashboard/recent-quotes` | `dashboard:read` |
-| GET | `/api/v1/dashboard/sales-performance` | `dashboard:read` |
-| GET | `/api/v1/dashboard/top-customers` | `dashboard:read` |
+| GET | `/api/v1/dashboard/alerts` | `dashboard:read` AND `quotes:read` |
+| GET | `/api/v1/dashboard/expiring-quotes` | `dashboard:read` AND `quotes:read` |
+| GET | `/api/v1/dashboard/kpis` | `dashboard:read` AND `quotes:read` |
+| GET | `/api/v1/dashboard/pipeline` | `dashboard:read` AND `quotes:read` |
+| GET | `/api/v1/dashboard/recent-activity` | `dashboard:read` AND `quotes:read` |
+| GET | `/api/v1/dashboard/recent-quotes` | `dashboard:read` AND `quotes:read` |
+| GET | `/api/v1/dashboard/sales-performance` | `dashboard:read` AND `quotes:read` |
+| GET | `/api/v1/dashboard/top-customers` | `dashboard:read` AND `quotes:read` |
 | GET | `/api/v1/documents` | `documents:read` |
 | POST | `/api/v1/documents` | `documents:create` |
 | DELETE | `/api/v1/documents/:id` | `documents:delete` |
@@ -105,8 +105,9 @@ Updated 2026-09-29 from `crm-api/internal/router/router.go`. 182 registered rout
 | DELETE | `/api/v1/price-books/:id/entries/:entryId` | `price-books:update` |
 | PATCH | `/api/v1/price-books/:id/entries/:entryId` | `price-books:update` |
 | GET | `/api/v1/procurement/goods-receipts` | `procurement:read` |
-| POST | `/api/v1/procurement/goods-receipts` | `procurement:create` |
+| POST | `/api/v1/procurement/goods-receipts` | `procurement:create` OR `inventory:update` |
 | GET | `/api/v1/procurement/goods-receipts/:id` | `procurement:read` |
+| PATCH | `/api/v1/procurement/goods-receipts/:id/items/:itemId/return` | `procurement:update` OR `inventory:update` |
 | GET | `/api/v1/procurement/purchase-orders` | `procurement:read` |
 | POST | `/api/v1/procurement/purchase-orders` | `procurement:create` |
 | DELETE | `/api/v1/procurement/purchase-orders/:id` | `procurement:delete` |
@@ -114,6 +115,8 @@ Updated 2026-09-29 from `crm-api/internal/router/router.go`. 182 registered rout
 | PATCH | `/api/v1/procurement/purchase-orders/:id` | `procurement:update` |
 | PATCH | `/api/v1/procurement/purchase-orders/:id/approve` | `procurement:approve` |
 | PATCH | `/api/v1/procurement/purchase-orders/:id/status` | `procurement:update` |
+| GET | `/api/v1/procurement/job-demands` | `procurement:read` OR `inventory:read` |
+| GET | `/api/v1/procurement/job-demands/:id` | `procurement:read` OR `inventory:read` |
 | GET | `/api/v1/procurement/supplier-items` | `procurement:read` |
 | POST | `/api/v1/procurement/supplier-items` | `procurement:create` |
 | DELETE | `/api/v1/procurement/supplier-items/:id` | `procurement:delete` |

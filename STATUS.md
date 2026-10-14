@@ -1,11 +1,32 @@
 # G4S CRM — current status and work plan
 
 **Last updated:** 2026-10-07
-**Current phase:** opportunity-centred flow and procurement fixes built on `feature/opportunity-flow` and tested on a copy of live data; awaiting the owner's choice on a duplicate quote before the live migration. Broader M1–M5 acceptance remains.
+**Current phase:** fresh-data sales-to-delivery functional acceptance **PASS** locally on `feature/opportunity-flow`, with separate API/browser roles. Latest batch is uncommitted. [Business acceptance report](docs/BUSINESS_ACCEPTANCE.md). Live-data decisions and wider release gates remain.
 **Release state:** not ready for production.
 **Primary objective:** make customers → opportunities → quotes → contracts work end to end, then finish remaining modules and deploy to the owner's server.
 **Detailed findings:** [docs/CRM_REVIEW.md](docs/CRM_REVIEW.md).
-**Current API coverage:** [docs/API_COVERAGE.md](docs/API_COVERAGE.md); [182-route inventory](docs/API_ENDPOINTS.md).
+**Current API coverage:** [docs/API_COVERAGE.md](docs/API_COVERAGE.md); [187-route inventory](docs/API_ENDPOINTS.md).
+
+## Current task — role-based business acceptance
+
+**DONE locally (2026-10-07):** fresh API fixtures and a separate-role browser cycle through accepted quote, existing-stock hold, shortfall PO, partial/damaged receipts, return/replacement, dispatch, active contract and completed delivery. [Report](docs/BUSINESS_ACCEPTANCE.md) and [reconciled final state](docs/business-acceptance-20261007.json).
+
+- Fixed operational accepted-job access, warehouse receiving/returns, role-aware procurement controls/loading, and sales-dashboard data exposure to purchasing/warehouse users.
+- Receiving now uses a validated form. Hold planner selects available units by default; shortage rows remain visible for purchasing. Fixed stale stock detail totals, history lookups, missing expiry display and false stock-ready message.
+- Browser: **5 cameras + 2 recorders dispatched**, 5 fulfilled holds, 3 received POs, 4 GRs, one returned damaged unit, active **CNT-2026-0001 / SAR 1,092.50**, delivery **Completed**. Both stocks and remaining demand reconcile to zero.
+- Verification: full PostgreSQL/race suite **PASS (132.381s)**; **24 frontend tests PASS**; checked build, Go vet and whitespace checks **PASS**.
+- Fresh isolated `business_uat` environment retained for review at `http://127.0.0.1:5179`, API loopback 18109; accounts in ignored `crm-api/tmp/business-uat/LOGIN.txt`. No live records reset/migrated; no deployment, commit or push.
+- Native Excel file-picker check still requires extension file access/manual verification; exact populated workbook parser and paste import have passed. Whole-project release and owner policy signoff are separate from this functional-cycle acceptance.
+
+## Previous task — full-cycle acceptance and bulk product template
+
+**DONE locally (2026-10-07):** customer → manual/imported products → opportunity → accepted quote → existing-stock holds + shortfall purchase → partial/damaged receipt → return/replacement → dispatch → contract/delivery. [Full-cycle report and workbook instructions](docs/FULL_CYCLE_ACCEPTANCE.md).
+
+- Full disposable-PostgreSQL suite **PASS** (79.266s, race detector), including the continuous API scenario, mixed-currency imports, rollback, re-import, FX history, local currency normalization and category preservation. The scenario dispatches 5 cameras + 2 recorders and reconciles both stocks to zero.
+- **23 frontend tests PASS**, production build/type checks **PASS**, `go vet` and whitespace checks **PASS**. Workbook rendered/verified; populated copy passed through the real XLSX parser.
+- Fillable workbook installed at `crm-dashboard/public/templates/g4s-product-import.xlsx`, available from Products → Import from vendor file. Per-row vendor/manufacturer/category/currency/FX, column mapping, lead-time fix and cost preview implemented. Unknown classifications require existing masters; file-level landing percentages/margin remain shared defaults.
+- Browser **PASS**: customer creation, manual product create/edit, template download, mixed-row paste import, mapping, missing-FX blocking, lead-time persistence. Fixed local manual pricing (SAR 200 preview previously saved as SAR 230) and valid category being cleared on edit. Local preview/save now agree. Chrome file-picker automation was blocked by extension file access; native upload UI remains to recheck after that setting is enabled.
+- Temporary API/frontend and `g4s_cycle_20261007` test clone removed. No live records, migrations, deployments, commits or pushes were changed by this acceptance run. Whole-project release gates remain open.
 
 ## Start here each work session
 
@@ -93,9 +114,21 @@ M6 can follow M4 only if the owner chooses a sales-only first release and incomp
 | T22 | M5 | Stock receipt/reserve/release/fulfill/transfer/adjustment with concurrency, availability and movement reconciliation | R12, R14 | PARTIAL |
 | T23 | M5 | Complete projects, teams/user management, price books, FX history and recurring service behavior | R02, R10, R11, R14 | PARTIAL |
 | T24 | M6 | Server runbook/configuration/TLS/secrets/networking/readiness/logging; repeatable deploy and rollback | R16, R18, R24 | TODO |
-| T25 | M6 | Full regression/UAT, role tests, migration upgrade/rollback, backup+upload restore and realistic load checks | All relevant findings | TODO |
+| T25 | M6 | Full regression/UAT, role tests, migration upgrade/rollback, backup+upload restore and realistic load checks | All relevant findings | PARTIAL — fresh-data role cycle passed; operational release checks remain |
 
 Dependencies: T03/T04 protect all mutations. T05 enables repeatable environments. T06 precedes live UI integration. T11 precedes T13/T14. T17 requires an accepted persisted quote revision. T21/T22 depend on agreed catalog/stock contracts. T24/T25 require actual server details. Work on those independent foundations need not wait for optional design decisions.
+
+## Active closeout batch — 2026-10-07
+
+**Code fixes DONE locally; catalog cleanup PARTIAL — T21/T22 remain PARTIAL overall.** [Full closeout and flow report](docs/PROCUREMENT_CLOSEOUT.md).
+
+- Inventory job holds retain accepted quote-line IDs and calculate remaining demand across warehouses; manual holds remain separate.
+- Server enforces combined active/fulfilled holds plus outstanding POs, including drafts, on direct orders, edits, supplier-quote conversion and submission/ordering. Concurrent hold/order regression passes; legacy unlinked job orders cannot bypass the limit.
+- Damaged receipts now persist pending returns and linked replacement draft POs. Partial damage records exact good/damaged quantities. Return dispatch records reference/time/audit; replacements still require normal approval. Historical damage gets a pending return without speculative retrospective orders.
+- Inventory uses real manufacturer/category relations, with “Not assigned” for missing catalog fields. Receipt unit prices show the actual PO currency.
+- alfanar catalog alias normalized and supplier options deduplicated. `in` is traced to `NSI- Prod` / `ZGT- Card printing.xlsx`; original data preserved pending vendor identification, excluded from suggestions and rejected in new writes. 29 of 98 live products still need manufacturer/category assignments.
+- **Evidence:** full PostgreSQL integration suite with race detector PASS; 22 frontend tests PASS; checked build and Go vet PASS. Migrations 16–17 applied twice successfully to a separate clone. Browser verified classifications, persisted linked hold, pending → returned workflow, USD labeling and one alfanar option. See report for limits.
+- **Release:** new migration files 16–17; changes uncommitted/unmerged. Live data inspected read-only, no live migration/deployment. `op2` still has both empty quote drafts; owner choice remains required.
 
 ## In progress — opportunity-centred flow, updated 2026-10-07
 
@@ -108,13 +141,8 @@ Dependencies: T03/T04 protect all mutations. T05 enables repeatable environments
   - Supplier quote → PO keeps the job link.
   - Migration 000015 backfills the opportunity on existing POs and supplier quotes.
 - **Blocker for the live migration:** opportunity *op2* has two quotes, QT-2026-0002 (22 Sep) and QT-2026-0004 (29 Sep), both empty drafts. Migration 11 stops until the owner picks one and the other is deleted. Back up the live database before migrating.
-- **Open, not yet fixed:**
-  - Holds created on the Inventory screen are not linked to quote lines.
-  - Nothing caps ordering or holding beyond a line's quantity.
-  - Damaged receipts raise no return or reorder.
-  - The Inventory screen's manufacturer and category columns are blank for real products.
-  - Catalog data: a vendor named "in", and duplicate "alfanar Electric" vendor names.
-- **Proposed next:** upgrade the bulk product importer: per-row manufacturer, category and currency, a column-mapping step, vendor and manufacturer name matching, and a fuller template. 29 of 98 live products have no manufacturer or category.
+- **September 29 open issues:** the hold linkage, quantity caps, damaged-receipt follow-up and Inventory display defects are addressed by the October 7 batch above. Vendor identity and missing classifications remain open; alfanar deduplication is implemented locally.
+- **Completed in the full-cycle batch:** per-row manufacturer, category, vendor and currency/FX import, column mapping, existing-master matching and a fillable Excel template. 29 of 98 live products still need their actual manufacturer/category assigned; the template does not guess historical data.
 
 Also shipped since 2026-09-17 (committed): dashboard redesign, nginx upload/timeout fix, Saudi catalog seed with rentals and live FX refresh, catalog visible in builder/price books, vendor-file product import, server-side PDF table extraction, supplier quote/PO customer links and record attachments, multipart upload fix.
 
@@ -152,7 +180,7 @@ Also shipped since 2026-09-17 (committed): dashboard redesign, nginx upload/time
 
 ### Next active work
 
-Owner decision on the op2 duplicate quote, then back up and migrate live and deploy API and frontend together (on approval). Then the bulk product importer upgrade and the open procurement/inventory items above. Earlier queue: complete **T16** CSV accuracy and unsaved-change protection, money/FX policy, scalable table pagination, remaining procurement/project exceptions and release gates. Contacts/sites stay deferred until resumed by owner. Use the [sales UAT checklist](docs/SALES_ACCEPTANCE.md). Deployment awaits server/provider/domain/access details. This batch is local and has not been pushed or deployed.
+Review the fresh accepted cycle and verified local changes. Finish **T16** export accuracy/unsaved-edit protection and remaining release checks. For existing-data launch, resolve the op2 duplicate quote, identify the incomplete vendor and classify the imported products; no live cleanup was inferred from permission to use fresh test data. Confirm permissions/approval and money/FX policy plus server/provider/domain/access details before deployment. Back up and rehearse migrations, restore and rollback, then release API/frontend together. Contacts/sites UI expansion remains deferred; basic API creation passed. [Business acceptance](docs/BUSINESS_ACCEPTANCE.md) records current evidence and [sales UAT](docs/SALES_ACCEPTANCE.md) retains wider scope. This batch is local and has not been pushed or deployed.
 
 ## Earlier foundation batch — historical evidence, 2026-09-16
 

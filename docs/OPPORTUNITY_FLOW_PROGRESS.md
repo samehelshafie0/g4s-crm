@@ -1,8 +1,8 @@
 # Opportunity-centred flow — build progress
 
-**Last updated:** 2026-09-29
+**Last updated:** 2026-10-07
 **Design doc:** [Opportunity-Centred CRM Flow](https://claude.ai/code/artifact/5421df6f-acb3-4fe5-b2ef-9f10fd45b728) (Claude Doc — the plan, rules, diagrams, open questions)
-**State:** backend done and tested, **uncommitted on `main`**. Frontend not started. Nothing deployed; live database untouched.
+**State:** backend and frontend committed on `feature/opportunity-flow`; additional October 7 procurement/inventory and full-cycle/import fixes are verified locally and uncommitted. Nothing deployed or migrated on the live database. See [full-cycle acceptance](FULL_CYCLE_ACCEPTANCE.md) and [closeout report](PROCUREMENT_CLOSEOUT.md) for current results and remaining data/release blockers.
 
 ## Rules being implemented (confirmed by owner, 22 Sep 2026)
 
@@ -76,7 +76,7 @@ The owner had not answered these; each can be changed later.
 
 `npm test` (18 pass) and `npm run build` (vue-tsc clean) pass. `docs/API_ENDPOINTS.md` is updated.
 
-**Still to do:** browser check against a migrated copy, rebuild images, then the release below. Nothing has been migrated or deployed.
+**Still to do:** rebuild release images, complete broader UAT/operational gates, then the release below. Browser checks against a migrated copy are recorded in the closeout report. Nothing has been migrated or deployed.
 
 ## Procurement fixes from the live-data test (2026-09-29)
 

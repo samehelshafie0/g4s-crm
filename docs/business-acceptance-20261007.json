@@ -1,0 +1,81 @@
+{
+  "result": "PASS",
+  "date": "2026-10-07",
+  "environment": "isolated business_uat database",
+  "quote": {
+    "id": "7628aacd-4b02-43ae-804b-5d5481b5d8d0",
+    "quoteNumber": "QT-2026-0001",
+    "status": "accepted",
+    "subtotal": 950,
+    "vatAmount": 142.5,
+    "total": 1092.5
+  },
+  "contract": {
+    "contractNumber": "CNT-2026-0001",
+    "status": "active",
+    "value": 1092.5
+  },
+  "delivery": "completed",
+  "stock": [
+    {
+      "productSku": "UAT-RECORDER",
+      "manufacturerName": "UAT Maker",
+      "categoryName": "Security Cameras",
+      "onHandQty": 0,
+      "reservedQty": 0,
+      "availableQty": 0
+    },
+    {
+      "productSku": "UAT-CAMERA",
+      "manufacturerName": "UAT Maker",
+      "categoryName": "Security Cameras",
+      "onHandQty": 0,
+      "reservedQty": 0,
+      "availableQty": 0
+    }
+  ],
+  "holds": {
+    "count": 5,
+    "fulfilledUnits": 7
+  },
+  "orders": [
+    {
+      "poNumber": "PO-2026-0003",
+      "status": "received",
+      "total": 100
+    },
+    {
+      "poNumber": "PO-2026-0002",
+      "status": "received",
+      "total": 300
+    },
+    {
+      "poNumber": "PO-2026-0001",
+      "status": "received",
+      "total": 300
+    }
+  ],
+  "receipts": [
+    "GR-2026-0004",
+    "GR-2026-0003",
+    "GR-2026-0002",
+    "GR-2026-0001"
+  ],
+  "returns": [
+    {
+      "reference": "UAT-RETURN-001",
+      "status": "returned",
+      "damagedQty": 1
+    }
+  ],
+  "remainingDemand": [
+    {
+      "sku": "UAT-CAMERA",
+      "remainingQty": 0
+    },
+    {
+      "sku": "UAT-RECORDER",
+      "remainingQty": 0
+    }
+  ]
+}

@@ -45,3 +45,7 @@ This batch inspected administrator user/service editors and profile forms on des
 Existing SAR/15% defaults, approval policy, money/FX rounding and data visibility still require business confirmation. Current role grants are authoritative but are not a newly approved policy. Access tokens can survive password changes until expiry; refresh sessions are revoked, and deactivation blocks requests immediately. Recovery email is not configured.
 
 Next work: quote print/CSV and unsaved-change protection, remaining module exceptions, scalable table pagination, then target-server configuration, migration upgrade/rollback, backup restore, load checks and production UAT. No production deployment was performed.
+
+## 2026-10-07 follow-up
+
+The fresh-data sales → purchasing → warehouse → delivery cycle passed with separate role sessions. See [business acceptance evidence](BUSINESS_ACCEPTANCE.md) for precise API/browser coverage and remaining release gates. The older checklist above is retained as historical scope; this does not claim that every administrative/device scenario was retested in the browser.
