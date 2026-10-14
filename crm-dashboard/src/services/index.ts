@@ -102,6 +102,9 @@ export const inventoryService = {
 
 // ─── Procurement ────────────────────────────────────────────
 export const procurementService = {
+  jobDemands: (params?: PaginationParams) => http.get<ApiResponse<import('./jobDemands').JobDemand[]>>('/procurement/job-demands', { params }).then(r => r.data),
+  jobDemand: (id: string) => http.get<ApiResponse<import('./jobDemands').JobDemand>>(`/procurement/job-demands/${id}`).then(r => r.data),
+  returnDamaged: (id: string, itemId: string, reference: string) => http.patch(`/procurement/goods-receipts/${id}/items/${itemId}/return`, { reference }),
   supplierItems: (params?: {productId?:string; supplierId?:string}) => http.get<ApiResponse<import('@/types').SupplierItemEntry[]>>('/procurement/supplier-items', { params }).then(r => r.data),
   saveSupplierItem: (data: Record<string, unknown>, id?: string) => http.request({method:id ? 'PATCH' : 'POST', url:`/procurement/supplier-items${id ? '/' + id : ''}`, data:editable(data, ['supplierId', 'productId', 'latestCost', 'moq', 'leadTimeDays', 'reliability'])}).then(r => r.data),
   deleteSupplierItem: (id: string) => http.delete(`/procurement/supplier-items/${id}`),
@@ -231,7 +234,7 @@ export function sqPayload(data: Record<string, unknown>) {
  return { ...editable(data, ['supplierId', 'supplierName', 'supplierRef', 'sourceQuoteId', 'opportunityId', 'currency', 'validFrom', 'validUntil', 'contactName', 'contactEmail', 'paymentTerms', 'deliveryTerms', 'notes']), items: linePayloads(data, ['productId', 'productSku', 'productName', 'manufacturerName', 'quantity', 'unitCost', 'leadTimeDays', 'moq', 'validUntil', 'notes']) }
 }
 export function grPayload(data: Record<string, unknown>) {
- return { ...editable(data, ['poId', 'receiveDate', 'notes']), items: linePayloads(data, ['poItemId', 'productId', 'receivedQty', 'storageLocation', 'condition', 'notes']) }
+ return { ...editable(data, ['poId', 'receiveDate', 'notes']), items: linePayloads(data, ['poItemId', 'productId', 'receivedQty', 'storageLocation', 'condition', 'damagedQty', 'notes']) }
 }
 export const catalogServicesService = {
  list: (params?: PaginationParams) => http.get<ApiResponse<ServiceItem[]>>('/services', { params }).then(r => r.data),

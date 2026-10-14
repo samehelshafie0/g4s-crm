@@ -11,7 +11,7 @@ import {
   Plus, Check, Unlock, ArrowRightLeft, ClipboardList, User, ShoppingBag,
 } from 'lucide-vue-next'
 import { useProcurementStore } from '@/stores/procurement'
-import { useQuotesStore } from '@/stores/quotes'
+import type { JobDemand } from '@/services/jobDemands'
 import { useManufacturersStore } from '@/stores/manufacturers'
 import { useWarehouseStockStore } from '@/stores/warehouseStock'
 import type {
@@ -25,17 +25,18 @@ import type {
   Quote,
 } from '@/types'
 
-import { inventoryService, manufacturersService, quotesService } from '@/services'
+import { inventoryService, manufacturersService, procurementService } from '@/services'
+import { planQuoteHolds, type HoldPlanItem } from '@/services/fulfilmentPlanning'
 import { allPages } from '@/services/collections'
 import { errorMessage } from '@/services/payload'
 
 const procStore = useProcurementStore()
-const quotesStore = useQuotesStore()
+const jobQuotes = ref<JobDemand[]>([])
 const mfrStore = useManufacturersStore()
 const stockStore = useWarehouseStockStore()
 
 async function reloadStock() { const [stock, holds, moves] = await Promise.all([allPages(inventoryService.listStock),inventoryService.listReservations(),allPages(inventoryService.listMovements)]);stockItems.value=stock;reservations.value=holds.data;movements.value=moves }
-onMounted(async () => {try {await reloadStock();if (auth.can('procurement:read')) await Promise.all([procStore.fetchPurchaseOrders(),procStore.fetchSupplierQuotes(),procStore.fetchGoodsReceipts()]);if (auth.can('quotes:read')) quotesStore.quotes=await allPages(quotesService.list);if (auth.can('manufacturers:read')) mfrStore.manufacturers=await allPages(manufacturersService.list)}catch(e){window.alert(errorMessage(e))}})
+onMounted(async () => {try {await reloadStock();if (auth.can('procurement:read')) await Promise.all([procStore.fetchPurchaseOrders(),procStore.fetchSupplierQuotes(),procStore.fetchGoodsReceipts()]);jobQuotes.value=await allPages(procurementService.jobDemands);if (auth.can('manufacturers:read')) mfrStore.manufacturers=await allPages(manufacturersService.list)}catch(e){window.alert(errorMessage(e))}})
 
 function formatSAR(v: number): string {
   return v.toLocaleString('en-SA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -57,27 +58,6 @@ const warehouseBadge: Record<WarehouseLocation, string> = {
 
 // ── Stock Data ───────────────────────────────────────────────
 const stockItems = ref<WarehouseStock[]>([])
-// ── Manufacturer Mapping ─────────────────────────────────────
-const productManufacturer: Record<string, string> = {
-  'HIK-DS2CD2143': 'Hikvision', 'HIK-DS2CD2T87': 'Hikvision', 'HIK-DS7732NI': 'Hikvision',
-  'DH-IPC-HFW5442': 'Dahua', 'DH-NVR5432-EI': 'Dahua', 'DH-ASI7214Y': 'Dahua',
-  'AXIS-P3265LVE': 'Axis', 'AXIS-Q6135LE': 'Axis',
-  'HON-MNPDS2': 'Honeywell', 'HON-MAXPRO': 'Honeywell',
-  'ZKT-INBIO460': 'ZKTeco', 'ZKT-SPEEDFACE': 'ZKTeco',
-  'BOSCH-FPA5000': 'Bosch', 'BOSCH-NDV3503': 'Bosch',
-  'CBL-CAT6A-305': 'Belden', 'CBL-FIBER-OM3': 'Corning',
-}
-
-const productCategory: Record<string, string> = {
-  'HIK-DS2CD2143': 'CCTV', 'HIK-DS2CD2T87': 'CCTV', 'HIK-DS7732NI': 'NVR',
-  'DH-IPC-HFW5442': 'CCTV', 'DH-NVR5432-EI': 'NVR', 'DH-ASI7214Y': 'Access Control',
-  'AXIS-P3265LVE': 'CCTV', 'AXIS-Q6135LE': 'CCTV',
-  'HON-MNPDS2': 'Fire Alarm', 'HON-MAXPRO': 'Access Control',
-  'ZKT-INBIO460': 'Access Control', 'ZKT-SPEEDFACE': 'Access Control',
-  'BOSCH-FPA5000': 'Fire Alarm', 'BOSCH-NDV3503': 'CCTV',
-  'CBL-CAT6A-305': 'Cabling', 'CBL-FIBER-OM3': 'Cabling',
-}
-
 // ── Stock Reservations (Holds) ───────────────────────────────
 const reservations = ref<StockReservation[]>([])
 // ── Inventory Movements ──────────────────────────────────────
@@ -134,8 +114,8 @@ const aggregatedProducts = computed<AggregatedProduct[]>(() => {
       productId: first.productId,
       productSku: sku,
       productName: first.productName,
-      manufacturer: productManufacturer[sku] || '',
-      category: productCategory[sku] || '',
+      manufacturer: first.manufacturerName || 'Not assigned',
+      category: first.categoryName || 'Not assigned',
       totalOnHand, totalReserved, totalAvailable,
       avgUnitCost, totalValue,
       reorderLevel: maxReorder,
@@ -203,7 +183,11 @@ function stockPercent(onHand: number, available: number): number {
 
 // ── Item Detail Modal ────────────────────────────────────────
 const showDetailModal = ref(false)
-const detailProduct = ref<AggregatedProduct | null>(null)
+const detailProductSku = ref('')
+const detailProduct = computed<AggregatedProduct | null>({
+  get: () => aggregatedProducts.value.find(p => p.productSku === detailProductSku.value) ?? null,
+  set: product => { detailProductSku.value = product?.productSku ?? '' },
+})
 type DetailTab = 'overview' | 'reservations' | 'price-history' | 'orders' | 'supplier-quotes' | 'receiving' | 'suppliers' | 'movements'
 const detailTab = ref<DetailTab>('overview')
 
@@ -452,14 +436,7 @@ async function saveReorder() {
 // ── Bulk Create Hold ─────────────────────────────────────────
 const showCreateHoldModal = ref(false)
 
-interface BulkHoldItem {
-  productId: string; productSku: string; productName: string
-  warehouseLocation: WarehouseLocation
-  availableQty: number
-  holdQty: number
-  selected: boolean
-  poCreated?: string
-}
+type BulkHoldItem = HoldPlanItem
 
 const holdMeta = ref({
   source: 'quote' as ReservationSource,
@@ -474,9 +451,12 @@ const showHoldItemDropdown = ref(false)
 
 function openCreateHold(product?: AggregatedProduct) {
   holdMeta.value = { source: 'quote', sourceRef: '', sourceLabel: '', customerName: '', notes: '' }
+  selectedQuote.value = null
+  quoteSearchQuery.value = ''
   holdItems.value = []
   holdItemSearch.value = ''
   if (product) {
+    holdMeta.value.source = 'manual'
     for (const ws of product.warehouseStock) {
       if (ws.availableQty > 0) {
         holdItems.value.push({
@@ -492,6 +472,8 @@ function openCreateHold(product?: AggregatedProduct) {
 
 function openBulkHold() {
   holdMeta.value = { source: 'quote', sourceRef: '', sourceLabel: '', customerName: '', notes: '' }
+  selectedQuote.value = null
+  quoteSearchQuery.value = ''
   holdItems.value = []
   holdItemSearch.value = ''
   quoteSearchQuery.value = ''
@@ -502,9 +484,9 @@ function openBulkHold() {
 // ── Quote search for hold ────────────────────────────────────
 const quoteSearchQuery = ref('')
 const showQuoteDropdown = ref(false)
-const selectedQuote = ref<Quote | null>(null)
+const selectedQuote = ref<JobDemand | null>(null)
 
-const acceptedQuotes = computed(() => quotesStore.quotes.filter(q => q.status === 'accepted'))
+const acceptedQuotes = computed(() => jobQuotes.value.filter(q => q.status === 'accepted'))
 
 const quoteSearchResults = computed(() => {
   const q = quoteSearchQuery.value.toLowerCase().trim()
@@ -512,45 +494,23 @@ const quoteSearchResults = computed(() => {
   return acceptedQuotes.value.filter(qt =>
     qt.quoteNumber.toLowerCase().includes(q) ||
     qt.customerName.toLowerCase().includes(q) ||
-    qt.notes.toLowerCase().includes(q),
+    qt.opportunityTitle.toLowerCase().includes(q),
   ).slice(0, 8)
 })
 
-function selectQuoteForHold(quote: Quote) {
-  selectedQuote.value = quote
-  holdMeta.value.sourceRef = quote.quoteNumber
-  holdMeta.value.sourceLabel = `${quote.customerName} — ${quote.notes.slice(0, 60)}`
-  holdMeta.value.customerName = quote.customerName
-  quoteSearchQuery.value = ''
-  showQuoteDropdown.value = false
-  loadItemsFromQuote(quote)
-}
-
-function loadItemsFromQuote(quote: Quote) {
-  holdItems.value = []
-  const materialItems = quote.lineItems.filter(li => li.category === 'materials' && li.sku)
-  for (const li of materialItems) {
-    const matchingStock = stockItems.value.filter(ws => ws.productSku === li.sku && ws.availableQty > 0)
-    if (matchingStock.length > 0) {
-      let remaining = li.quantity
-      for (const ws of matchingStock) {
-        if (remaining <= 0) break
-        const holdQty = Math.min(remaining, ws.availableQty)
-        holdItems.value.push({
-          productId: ws.productId, productSku: ws.productSku, productName: ws.productName,
-          warehouseLocation: ws.warehouseLocation, availableQty: ws.availableQty,
-          holdQty, selected: true,
-        })
-        remaining -= holdQty
-      }
-    } else {
-      holdItems.value.push({
-        productId: li.productId || '', productSku: li.sku || '', productName: li.description,
-        warehouseLocation: 'riyadh-main', availableQty: 0,
-        holdQty: li.quantity, selected: true,
-      })
-    }
-  }
+async function selectQuoteForHold(quote: JobDemand) {
+  try {
+    await reloadStock()
+    if (auth.can('procurement:read')) await procStore.fetchPurchaseOrders()
+    const current = (await procurementService.jobDemand(quote.id)).data
+    selectedQuote.value = current
+    holdMeta.value.sourceRef = `${current.quoteNumber} v${current.version}`
+    holdMeta.value.sourceLabel = current.customerName
+    holdMeta.value.customerName = current.customerName
+    quoteSearchQuery.value = ''
+    showQuoteDropdown.value = false
+    holdItems.value = planQuoteHolds(current.lineItems, stockItems.value, reservations.value, procStore.purchaseOrders)
+  } catch (e) { window.alert(errorMessage(e)) }
 }
 
 function clearSelectedQuote() {
@@ -565,7 +525,7 @@ function delayHideQuoteDropdown() { window.setTimeout(() => { showQuoteDropdown.
 
 const holdSearchResults = computed(() => {
   const q = holdItemSearch.value.toLowerCase().trim()
-  if (!q) return []
+  if (!q || holdMeta.value.source === 'quote') return []
   const existingKeys = new Set(holdItems.value.map(i => i.productSku + '|' + i.warehouseLocation))
   return stockItems.value
     .filter(ws => {
@@ -590,15 +550,18 @@ function removeHoldItem(idx: number) { holdItems.value.splice(idx, 1) }
 
 const holdSelectedItems = computed(() => holdItems.value.filter(i => i.selected && i.holdQty > 0))
 const holdTotalUnits = computed(() => holdSelectedItems.value.reduce((s, i) => s + i.holdQty, 0))
-const holdHasErrors = computed(() => holdSelectedItems.value.some(i => i.holdQty > i.availableQty && !i.poCreated))
+const holdHasErrors = computed(() => holdSelectedItems.value.some(i =>
+  !Number.isInteger(i.holdQty) || i.holdQty > i.availableQty ||
+  (holdMeta.value.source === 'quote' && (!i.quoteLineItemId || holdSelectedItems.value.filter(row => row.quoteLineItemId === i.quoteLineItemId).reduce((sum, row) => sum + row.holdQty, 0) > (i.remainingQty ?? 0)))
+))
 
 const stockSaving = ref(false)
 async function confirmBulkHold() {
- if (stockSaving.value || holdSelectedItems.value.length===0) return
+ if (stockSaving.value || holdHasErrors.value || holdSelectedItems.value.length===0) return
  stockSaving.value=true
  try {for (const item of holdSelectedItems.value) {
  if (item.holdQty>item.availableQty) throw new Error('Receive purchased goods before reserving their stock.')
- await inventoryService.createReservation({productId:item.productId,warehouseLocation:item.warehouseLocation,qty:item.holdQty,source:holdMeta.value.source,sourceRef:holdMeta.value.sourceRef,sourceLabel:holdMeta.value.sourceLabel,customerName:holdMeta.value.customerName,notes:holdMeta.value.notes});item.selected=false
+ await inventoryService.createReservation({productId:item.productId,warehouseLocation:item.warehouseLocation,qty:item.holdQty,quoteLineItemId:item.quoteLineItemId,source:holdMeta.value.source,sourceRef:holdMeta.value.sourceRef,sourceLabel:holdMeta.value.sourceLabel,customerName:holdMeta.value.customerName,notes:holdMeta.value.notes});item.selected=false
  };await reloadStock();showCreateHoldModal.value=false}catch(e){window.alert(errorMessage(e));await reloadStock()}finally{stockSaving.value=false}
 }
 
@@ -608,6 +571,7 @@ function delayHideHoldDropdown() { window.setTimeout(() => { showHoldItemDropdow
 const showQuickPOModal = ref(false)
 
 interface QuickPOItem {
+  quoteLineItemId?: string
   productId: string; productSku: string; productName: string
   manufacturerName: string
   orderQty: number; unitCost: number; leadTimeDays: number
@@ -636,7 +600,7 @@ function openQuickPO(singleItem?: BulkHoldItem) {
     return {
       productId: i.productId, productSku: i.productSku, productName: i.productName,
       manufacturerName: siMatch?.manufacturerName || '',
-      orderQty: getShortfall(i), unitCost: siMatch?.latestCost || 0, leadTimeDays: siMatch?.leadTimeDays || 21,
+      quoteLineItemId: i.quoteLineItemId, orderQty: getShortfall(i), unitCost: siMatch?.latestCost || 0, leadTimeDays: siMatch?.leadTimeDays || 21,
     }
   })
 
@@ -669,7 +633,7 @@ async function confirmQuickPO() {
   const poItems: PurchaseOrderItem[] = quickPOItems.value.map(i => ({
     id: uid(), productId: i.productId, productSku: i.productSku,
     productName: i.productName, manufacturerName: i.manufacturerName,
-    quantity: i.orderQty, unitCost: i.unitCost, total: i.orderQty * i.unitCost,
+    quoteLineItemId: i.quoteLineItemId, quantity: i.orderQty, unitCost: i.unitCost, total: i.orderQty * i.unitCost,
     receivedQty: 0, leadTimeDays: i.leadTimeDays,
   }))
   const subtotal = poItems.reduce((s, i) => s + i.total, 0)
@@ -693,9 +657,10 @@ async function confirmQuickPO() {
   const savedPO = await procStore.addPurchaseOrder(po)
 
   for (const item of quickPOItems.value) {
-    const holdItem = holdItems.value.find(hi => hi.productSku === item.productSku && hi.holdQty > hi.availableQty && !hi.poCreated)
+    const holdItem = holdItems.value.find(hi => hi.quoteLineItemId === item.quoteLineItemId && hi.productSku === item.productSku && hi.holdQty > hi.availableQty && !hi.poCreated)
     if (holdItem) {
       holdItem.poCreated = savedPO.poNumber
+      holdItem.selected = false
     }
   }
 
@@ -1528,9 +1493,8 @@ function delayHideMoveDropdown() { window.setTimeout(() => { showMoveItemDropdow
             <div class="create-form-row">
               <div class="form-group" style="width:160px">
                 <label class="form-label">Source <span class="text-danger">*</span></label>
-                <select v-model="holdMeta.source" class="form-select" @change="clearSelectedQuote()">
+                <select v-model="holdMeta.source" class="select form-select" @change="clearSelectedQuote()">
                   <option value="quote">Won Quote</option>
-                  <option value="project">Project</option>
                   <option value="manual">Manual</option>
                 </select>
               </div>
@@ -1544,11 +1508,11 @@ function delayHideMoveDropdown() { window.setTimeout(() => { showMoveItemDropdow
                     <input v-model="quoteSearchQuery" type="text" class="form-input" placeholder="Search by quote #, customer, or description..." @focus="showQuoteDropdown = true" @blur="delayHideQuoteDropdown" @input="showQuoteDropdown = true" />
                   </div>
                   <div v-if="showQuoteDropdown && quoteSearchResults.length" class="inv-quote-dropdown">
-                    <button v-for="qt in quoteSearchResults" :key="qt.id" class="inv-quote-dd-item" @mousedown.prevent="selectQuoteForHold(qt)">
+                    <button v-for="qt in quoteSearchResults" :key="qt.id" class="inv-quote-dd-item" @click="selectQuoteForHold(qt)">
                       <div class="inv-quote-dd-top">
                         <span class="text-mono font-bold">{{ qt.quoteNumber }}</span>
                         <span class="badge badge-success" style="font-size:0.62rem">Accepted</span>
-                        <span class="font-medium" style="font-size:0.78rem">SAR {{ formatSAR(qt.total) }}</span>
+
                       </div>
                       <div class="inv-quote-dd-bottom">
                         <span class="font-medium">{{ qt.customerName }}</span>
@@ -1563,7 +1527,7 @@ function delayHideMoveDropdown() { window.setTimeout(() => { showMoveItemDropdow
                   <div class="inv-sq-card-left">
                     <span class="text-mono font-bold">{{ selectedQuote.quoteNumber }}</span>
                     <span class="font-medium">{{ selectedQuote.customerName }}</span>
-                    <span class="text-muted" style="font-size:0.72rem">{{ selectedQuote.lineItems.filter(l => l.category === 'materials').length }} material items &middot; SAR {{ formatSAR(selectedQuote.total) }}</span>
+                    <span class="text-muted" style="font-size:0.72rem">{{ selectedQuote.lineItems.filter(l => l.category === 'materials').length }} material items</span>
                   </div>
                   <button class="btn btn-ghost btn-sm" @click="clearSelectedQuote"><X :size="14" /> Change</button>
                 </div>
@@ -1597,7 +1561,7 @@ function delayHideMoveDropdown() { window.setTimeout(() => { showMoveItemDropdow
             <div class="inv-bulk-items-header">
               <h4 class="inv-bulk-section-title"><Package :size="14" /> Items to Hold</h4>
               <div class="inv-bulk-items-actions">
-                <div class="inv-bulk-search-wrap">
+                <div v-if="holdMeta.source !== 'quote'" class="inv-bulk-search-wrap">
                   <div class="search-input" style="width:280px">
                     <Search :size="14" class="search-icon" />
                     <input v-model="holdItemSearch" type="text" class="form-input" style="font-size:0.78rem" placeholder="Search items to add..." @focus="showHoldItemDropdown = holdItemSearch.trim().length > 0" @blur="delayHideHoldDropdown" @input="showHoldItemDropdown = holdItemSearch.trim().length > 0" />
@@ -1653,9 +1617,10 @@ function delayHideMoveDropdown() { window.setTimeout(() => { showMoveItemDropdow
                         <span class="text-muted" style="font-size:0.62rem; margin-left:4px">{{ getShortfall(item) }} ordered</span>
                       </template>
                       <template v-else>
-                        <button class="btn btn-warning btn-sm inv-create-po-btn" @click="openQuickPO(item)">
+                        <button v-if="auth.can('procurement:create')" class="btn btn-warning btn-sm inv-create-po-btn" @click="openQuickPO(item)">
                           <ShoppingBag :size="12" /> Order {{ getShortfall(item) }}
                         </button>
+                        <span v-if="!auth.can('procurement:create')" class="text-muted">Purchasing needed: {{ getShortfall(item) }}</span>
                       </template>
                     </td>
                     <td><button class="btn btn-ghost btn-icon btn-sm" @click="removeHoldItem(idx)"><X :size="13" /></button></td>
@@ -1665,7 +1630,7 @@ function delayHideMoveDropdown() { window.setTimeout(() => { showMoveItemDropdow
             </div>
             <div v-else class="inv-bulk-empty">
               <Package :size="28" class="text-muted" />
-              <p class="text-muted">Search and add items, or click "Load All Inventory" to see all available stock.</p>
+              <p class="text-muted">{{ holdMeta.source === 'quote' ? (selectedQuote ? 'All selected material lines are already held or ordered.' : 'Select an accepted quote to see its remaining material quantities.') : 'Search and add available inventory.' }}</p>
             </div>
           </div>
 
@@ -1674,10 +1639,10 @@ function delayHideMoveDropdown() { window.setTimeout(() => { showMoveItemDropdow
               <AlertTriangle :size="16" />
               <div>
                 <strong>{{ holdMissingItems.filter(i => !i.poCreated).length }} item{{ holdMissingItems.filter(i => !i.poCreated).length !== 1 ? 's' : '' }} need more stock than available</strong>
-                <span class="text-muted" style="font-size:0.75rem; margin-left:6px">Create a Purchase Order to cover the shortfall</span>
+                <span class="text-muted" style="font-size:0.75rem; margin-left:6px">{{ auth.can('procurement:create') ? 'Create a purchase order to cover the shortfall.' : 'Purchasing must order the shortfall. Reserve only available stock.' }}</span>
               </div>
             </div>
-            <button class="btn btn-warning btn-sm" @click="openQuickPO()"><ShoppingBag :size="14" /> Create PO for Shortfall</button>
+            <button v-if="auth.can('procurement:create')" class="btn btn-warning btn-sm" @click="openQuickPO()"><ShoppingBag :size="14" /> Create PO for Shortfall</button>
           </div>
           <div v-if="holdMissingItems.length > 0 && holdMissingItems.every(i => !!i.poCreated)" class="inv-hold-po-success">
             <Check :size="16" /> All shortfall items have POs created
@@ -1694,7 +1659,7 @@ function delayHideMoveDropdown() { window.setTimeout(() => { showMoveItemDropdow
             </span>
           </div>
           <button class="btn btn-secondary" @click="showCreateHoldModal = false">Cancel</button>
-          <button class="btn btn-primary" :disabled="!holdMeta.sourceRef || !holdMeta.customerName || holdSelectedItems.length === 0 || holdHasErrors" @click="confirmBulkHold">
+          <button class="btn btn-primary" :disabled="stockSaving || !holdMeta.sourceRef || !holdMeta.customerName || holdSelectedItems.length === 0 || holdHasErrors" @click="confirmBulkHold">
             <Lock :size="14" /> Reserve {{ holdTotalUnits }} Units
           </button>
         </div>

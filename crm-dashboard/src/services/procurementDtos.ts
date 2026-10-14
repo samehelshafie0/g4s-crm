@@ -10,7 +10,7 @@ export type SupplierQuoteDto = Omit<SupplierQuote, 'items' | 'validFrom' | 'vali
 }
 type GRItemDto = Omit<GoodsReceiptItem, 'productSku' | 'productName'> & { product?: ProductSummary }
 export type GoodsReceiptDto = Omit<GoodsReceipt, 'items' | 'poNumber' | 'receivedBy'> & {
-  items?: GRItemDto[]; po?: { poNumber: string }; receivedBy?: { firstName: string; lastName: string }
+  items?: GRItemDto[]; po?: { poNumber: string; currency?: PurchaseOrder['currency'] }; receivedBy?: { firstName: string; lastName: string }
 }
 
 export function toPurchaseOrder(dto: PurchaseOrderDto): PurchaseOrder {
@@ -23,7 +23,7 @@ export function toSupplierQuote(dto: SupplierQuoteDto): SupplierQuote {
   return { ...dto, items: dto.items ?? [], validFrom: dto.validFrom ?? '', validUntil: dto.validUntil ?? '' }
 }
 export function toGoodsReceipt(dto: GoodsReceiptDto): GoodsReceipt {
-  return { ...dto, poNumber: dto.po?.poNumber ?? '',
+  return { ...dto, poNumber: dto.po?.poNumber ?? '', sourceCurrency: dto.po?.currency ?? 'SAR',
     receivedBy: dto.receivedBy ? `${dto.receivedBy.firstName} ${dto.receivedBy.lastName}` : '',
     items: (dto.items ?? []).map(item => ({ ...item, productSku: item.product?.sku ?? '', productName: item.product?.name ?? '' })) }
 }

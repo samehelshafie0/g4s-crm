@@ -1,7 +1,33 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { readFile } from 'node:fs/promises'
 import * as XLSX from 'xlsx'
-import { parseFile, parseCSVText, getMappedValue, getMappedNumber } from '../src/utils/fileParser.ts'
+import { parseFile, parseExcelFile, parseCSVText, getMappedValue, getMappedNumber } from '../src/utils/fileParser.ts'
+
+test('shipped workbook imports only Products and preserves identifiers and mixed row metadata', async () => {
+ const bytes = await readFile(new URL('../public/templates/g4s-product-import.xlsx', import.meta.url))
+ const empty = await parseExcelFile(new File([bytes], 'g4s-product-import.xlsx'))
+ assert.equal(empty.rows.length, 0, 'instructions must never become catalog rows')
+ const workbook = XLSX.read(bytes, { type: 'buffer' })
+ assert.deepEqual(workbook.SheetNames, ['Products', 'Instructions'])
+ // Fill a disposable in-memory copy of the exact delivered workbook, including a leading-zero SKU.
+ XLSX.utils.sheet_add_aoa(workbook.Sheets.Products, [
+  ['000123', 'Dome camera', 100, 'Actual Supplier', 'Camera Maker', 'Cameras', 'USD', 3.75, 21],
+  ['LOCAL-001', 'Recorder', 500, 'Local Supplier', 'Recorder Maker', 'Recorders', 'SAR', 1, 7],
+ ], { origin: 'A2' })
+ workbook.SheetNames.reverse() // Products must still win if the user opens/reorders Instructions first.
+ const loaded = await parseFile(new File([XLSX.write(workbook, { type: 'array', bookType: 'xlsx' })], 'filled.xlsx'))
+ assert.ok('result' in loaded)
+ const { rows, headers, mappedColumns } = loaded.result
+ assert.equal(rows.length, 2)
+ for (const [field, expected] of Object.entries({sku:'000123',name:'Dome camera',vendorName:'Actual Supplier',manufacturer:'Camera Maker',category:'Cameras',currency:'USD'})) {
+  assert.equal(getMappedValue(rows[0], field, headers, mappedColumns), expected, field)
+ }
+ assert.equal(getMappedNumber(rows[0], 'fxRate', headers, mappedColumns), 3.75)
+ assert.equal(getMappedNumber(rows[0], 'leadTimeDays', headers, mappedColumns), 21)
+ assert.equal(getMappedNumber(rows[0], 'unitCost', headers, mappedColumns), 100)
+ assert.equal(getMappedValue(rows[1], 'currency', headers, mappedColumns), 'SAR')
+})
 
 for (const bookType of ['xlsx', 'xls']) {
  test(`vendor ${bookType} import preserves values across blank spacer columns`, async () => {

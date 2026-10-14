@@ -25,6 +25,6 @@ test('write payloads exclude display and protected fields while retaining false 
 test('procurement responses preserve nested display values and safe empty arrays', () => {
  const po = toPurchaseOrder({id:'po', approvedBy:{firstName:'Jane',lastName:'Manager'}, items:[{product:{sku:'CAM-1',name:'Camera',manufacturer:{name:'Acme'}}}]})
  assert.equal(po.approvedBy,'Jane Manager'); assert.equal(po.items[0].productSku,'CAM-1'); assert.equal(po.items[0].manufacturerName,'Acme')
- const receipt = toGoodsReceipt({po:{poNumber:'PO-1'}, receivedBy:{firstName:'Ali',lastName:'Store'}})
- assert.equal(receipt.poNumber,'PO-1'); assert.equal(receipt.receivedBy,'Ali Store'); assert.deepEqual(receipt.items,[])
+ const receipt = toGoodsReceipt({po:{poNumber:'PO-1',currency:'USD'}, receivedBy:{firstName:'Ali',lastName:'Store'}})
+ assert.equal(receipt.poNumber,'PO-1'); assert.equal(receipt.sourceCurrency,'USD'); assert.equal(receipt.receivedBy,'Ali Store'); assert.deepEqual(receipt.items,[])
 })

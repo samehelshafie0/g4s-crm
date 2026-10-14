@@ -61,6 +61,7 @@ const salesReps = ref<SalesRep[]>([])
 const loaded = ref(false)
 
 async function load() {
+  if (!auth.can('quotes:read')) { loaded.value = true; return }
   await dashStore.fetchAll()
   try {
     const [recent, expiring, reps] = await Promise.all([
@@ -339,7 +340,15 @@ const maxCustomerValue = computed(() => Math.max(...topCustomers.value.map((c) =
 </script>
 
 <template>
-  <div class="dashboard">
+  <section v-if="!auth.can('quotes:read')" class="dashboard">
+    <header class="page-header"><div><h1 class="page-header-title">Your workspace</h1><p class="page-header-subtitle">Open your purchasing, catalog or warehouse tasks.</p></div></header>
+    <div class="flex flex-wrap gap-4">
+      <RouterLink v-if="auth.can('procurement:read')" to="/procurement" class="btn">Procurement</RouterLink>
+      <RouterLink v-if="auth.can('inventory:read')" to="/inventory" class="btn">Inventory</RouterLink>
+      <RouterLink v-if="auth.can('products:read')" to="/products" class="btn">Products</RouterLink>
+    </div>
+  </section>
+  <div v-else class="dashboard">
     <!-- Header -->
     <header class="dash-header">
       <div>

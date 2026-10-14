@@ -1287,7 +1287,7 @@ function exportExcel() {
               </button>
             </div>
 
-            <div v-else-if="itemRows.filter(r => r.source === 'product').length > 0" class="stock-ok">
+            <div v-else-if="outOfStockRows.length === 0 && itemRows.some(r => r.source === 'product')" class="stock-ok">
               <PackageCheck :size="14" />
               <span>All product items are in stock</span>
             </div>

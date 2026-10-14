@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { canonicalVendorName, vendorKey, usableVendorName } from '@/services/vendorNames'
+import { useAuthStore } from '@/stores/auth'
 import { ref, computed, onMounted } from 'vue'
 import {
   Plus, Search, Eye, Trash2, X, FileText, Clock, CheckCircle2,
@@ -10,17 +12,17 @@ import {
 } from 'lucide-vue-next'
 import { parseFile, parseCSVText, downloadTemplate, getMappedValue, getMappedNumber, getMappedInt, type FileType, type ParseResult } from '@/utils/fileParser'
 import RecordAttachments from '@/components/RecordAttachments.vue'
+import AppDialog from '@/components/shared/AppDialog.vue'
 import { useProcurementStore } from '@/stores/procurement'
 import { useManufacturersStore } from '@/stores/manufacturers'
-import { useQuotesStore } from '@/stores/quotes'
+import type { JobDemand, JobDemandLine } from '@/services/jobDemands'
 import type {
   PurchaseOrder, PurchaseOrderStatus,
   SupplierQuote, SupplierQuoteStatus, SupplierQuoteLineItem,
   SupplierItemEntry, GoodsReceipt, Manufacturer,
-  Quote, QuoteLineItem, Opportunity,
 } from '@/types'
 
-import { procurementService, productsService, manufacturersService, quotesService, inventoryService, opportunitiesService, exchangeRatesService } from '@/services'
+import { procurementService, productsService, manufacturersService, inventoryService, exchangeRatesService } from '@/services'
 import { allPages } from '@/services/collections'
 import { errorMessage } from '@/services/payload'
 import type { Product, Currency } from '@/types'
@@ -42,7 +44,7 @@ interface Offer {
   supplierName: string; cost: number; currency: Currency; leadTimeDays: number; moq: number; sqRef: string
 }
 const poTotalSAR = computed(() => store.purchaseOrders.filter(po => po.status !== 'cancelled').reduce((sum, po) => sum + convert(po.total, po.currency, 'SAR'), 0))
-const sameName = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase()
+const sameName = (a: string, b: string) => vendorKey(a) === vendorKey(b)
 const catalogOffers = computed<Offer[]>(() => {
   const offers: Offer[] = []
   for (const sq of store.supplierQuotes) {
@@ -65,7 +67,7 @@ const catalogOffers = computed<Offer[]>(() => {
       offers.push({ ...base, supplierName: p.supplierName, cost: p.unitCostOrigin, currency: p.originCurrency, leadTimeDays: p.leadTimeDays, moq: 1 })
     }
   }
-  return offers
+  return offers.filter(offer => usableVendorName(offer.supplierName))
 })
 function supplierOffer(productId: string, supplierName: string): Offer | undefined {
   return catalogOffers.value.find(o => o.productId === productId && sameName(o.supplierName, supplierName))
@@ -90,12 +92,12 @@ interface SupplierOption {
 }
 const supplierOptions = computed<SupplierOption[]>(() => {
   const list: SupplierOption[] = mfrStore.suppliers.map(m => ({ id: m.id, name: m.name, code: m.code, country: m.country, categories: m.categories, label: m.vendorType === 'both' ? 'Mfr + Supplier' : 'Supplier', contactEmail: m.contactEmail, record: true }))
-  const known = new Set(list.map(s => s.name.trim().toLowerCase()))
+  const known = new Set(list.map(s => vendorKey(s.name)))
   for (const o of catalogOffers.value) {
-    const key = o.supplierName.trim().toLowerCase()
-    if (!key || known.has(key)) continue
+    const key = vendorKey(o.supplierName)
+    if (!usableVendorName(o.supplierName) || known.has(key)) continue
     known.add(key)
-    list.push({ id: `vendor:${key}`, name: o.supplierName.trim(), code: '', country: '', categories: [], label: 'Vendor in catalog', contactEmail: '', record: false })
+    list.push({ id: `vendor:${key}`, name: canonicalVendorName(o.supplierName), code: '', country: '', categories: [], label: 'Vendor in catalog', contactEmail: '', record: false })
   }
   return list
 })
@@ -103,11 +105,21 @@ const availableStock = ref<Record<string,number>>({})
 
 const store = useProcurementStore()
 const mfrStore = useManufacturersStore()
-const quotesStore = useQuotesStore()
-const opportunityList = ref<Opportunity[]>([])
+const auth = useAuthStore()
+const jobQuotes = ref<JobDemand[]>([])
+const opportunityList = computed(() => jobQuotes.value.filter(q => q.opportunityId).map(q => ({ id: q.opportunityId!, title: q.opportunityTitle, customerName: q.customerName })))
 
 async function reloadProcurement() {await Promise.all([store.fetchPurchaseOrders({limit:100}),store.fetchSupplierQuotes({limit:100}),store.fetchGoodsReceipts({limit:100})]);store.supplierItems=(await procurementService.supplierItems()).data}
-onMounted(async()=>{try{await reloadProcurement();catalogProducts.value=await allPages(productsService.list);mfrStore.manufacturers=await allPages(manufacturersService.list);quotesStore.quotes=await allPages(quotesService.list);opportunityList.value=await allPages(opportunitiesService.list);for(const rate of (await exchangeRatesService.list()).data) fxRates.value[rate.fromCurrency]=rate.currentRate;const stock=await allPages(inventoryService.listStock);for(const row of stock) availableStock.value[row.productId]=(availableStock.value[row.productId]??0)+row.availableQty}catch(e){window.alert(errorMessage(e))}})
+onMounted(async () => {
+  try {
+    await reloadProcurement()
+    catalogProducts.value = await allPages(productsService.list)
+    jobQuotes.value = await allPages(procurementService.jobDemands)
+    if (auth.can('manufacturers:read')) mfrStore.manufacturers = await allPages(manufacturersService.list)
+    if (auth.can('exchange-rates:read')) for (const rate of (await exchangeRatesService.list()).data) fxRates.value[rate.fromCurrency] = rate.currentRate
+    if (auth.can('inventory:read')) for (const row of await allPages(inventoryService.listStock)) availableStock.value[row.productId] = (availableStock.value[row.productId] ?? 0) + row.availableQty
+  } catch (e) { window.alert(errorMessage(e)) }
+})
 
 function uid(): string { return Math.random().toString(36).slice(2, 11) }
 
@@ -201,39 +213,36 @@ const supplierSearchQuery = ref('')
 // Step 1: Source — won opportunity or quote
 type POSourceType = 'opportunity' | 'quote' | 'manual'
 const poSourceType = ref<POSourceType>('opportunity')
-const selectedSourceQuote = ref<Quote | null>(null)
+const selectedSourceQuote = ref<JobDemand | null>(null)
 const sourceSearchQuery = ref('')
 
 const availableOpportunities = computed(() => {
   const q = sourceSearchQuery.value.toLowerCase().trim()
-  const accepted = quotesStore.quotes.filter(qt => qt.status === 'accepted')
+  const accepted = jobQuotes.value.filter(qt => qt.status === 'accepted')
   if (!q) return accepted
-  return accepted.filter(qt => qt.quoteNumber.toLowerCase().includes(q) || qt.customerName.toLowerCase().includes(q) || qt.notes.toLowerCase().includes(q))
+  return accepted.filter(qt => qt.quoteNumber.toLowerCase().includes(q) || qt.customerName.toLowerCase().includes(q) || qt.opportunityTitle.toLowerCase().includes(q))
 })
 
 const availableQuotes = computed(() => {
   const q = sourceSearchQuery.value.toLowerCase().trim()
-  const all = quotesStore.quotes.filter(qt => qt.status !== 'declined' && qt.status !== 'expired')
+  const all = jobQuotes.value.filter(qt => qt.status === 'accepted')
   if (!q) return all
-  return all.filter(qt => qt.quoteNumber.toLowerCase().includes(q) || qt.customerName.toLowerCase().includes(q) || qt.notes.toLowerCase().includes(q))
+  return all.filter(qt => qt.quoteNumber.toLowerCase().includes(q) || qt.customerName.toLowerCase().includes(q) || qt.opportunityTitle.toLowerCase().includes(q))
 })
 
 // What each line of an accepted job still needs bought: its quantity less what
 // is already held for it or still on order.
 const sourceNeed = ref<Record<string, number>>({})
-const remainingFor = (li: QuoteLineItem) => sourceNeed.value[li.id] ?? li.quantity
+const remainingFor = (li: JobDemandLine) => sourceNeed.value[li.id] ?? Math.ceil(li.quantity * (li.multiplier || 1))
 
-async function selectSource(quote: Quote) {
+async function selectSource(quote: JobDemand) {
   selectedSourceQuote.value = quote
   sourceNeed.value = {}
-  if (quote.status === 'accepted' && quote.opportunityId) {
-    try {
-      const fulfilment = (await opportunitiesService.fulfilment(quote.opportunityId)).data
-      for (const line of fulfilment.lines) {
-        sourceNeed.value[line.quoteLineItemId] = Math.max(0, Math.ceil(line.quantity) - line.reserved - line.outstanding)
-      }
-    } catch (e) { window.alert(errorMessage(e)); return }
-  }
+  try {
+    const current = (await procurementService.jobDemand(quote.id)).data
+    selectedSourceQuote.value = current
+    for (const line of current.lineItems) sourceNeed.value[line.id] = line.remainingQty
+  } catch (e) { window.alert(errorMessage(e)); return }
   createPOStep.value = 'supplier'
 }
 
@@ -813,7 +822,7 @@ function selectSQSupplier(supplier: SupplierOption) {
 // Asking a supplier to price a customer quote starts from that quote's material
 // lines, priced with what this supplier last charged when that is known.
 function loadSQFromQuote() {
-  const quote = quotesStore.quotes.find(q => q.id === sqForm.value.sourceQuoteId)
+  const quote = jobQuotes.value.find(q => q.id === sqForm.value.sourceQuoteId)
   if (!quote) return
   if (quote.opportunityId) sqForm.value.opportunityId = quote.opportunityId
   if (sqForm.value.items.length && !window.confirm('Replace the lines already on this supplier quote with the lines of ' + quote.quoteNumber + '?')) return
@@ -823,8 +832,8 @@ function loadSQFromQuote() {
   sqForm.value.items = lines.map(({ li, product }) => {
     const offer = product ? supplierOffer(product.id, sqForm.value.supplierName) : undefined
     return {
-      sku: product?.sku ?? li.sku ?? '', name: li.description, manufacturer: product?.manufacturerName ?? li.manufacturerName ?? '',
-      qty: li.quantity, unitCost: offer ? convert(offer.cost, offer.currency, sqForm.value.currency) : 0,
+      sku: product?.sku ?? li.sku ?? '', name: li.description, manufacturer: product?.manufacturerName ?? '',
+      qty: Math.ceil(li.quantity * (li.multiplier || 1)), unitCost: offer ? convert(offer.cost, offer.currency, sqForm.value.currency) : 0,
       leadTimeDays: offer?.leadTimeDays || product?.leadTimeDays || 30, moq: offer?.moq || 1,
     }
   })
@@ -844,12 +853,62 @@ async function poAction(po:PurchaseOrder,action:'pending-approval'|'approve'|'or
 }
 async function acceptSQ(sq:SupplierQuote){try{await procurementService.updateSQStatus(sq.id,'accepted');await reloadProcurement();viewingSQ.value=store.supplierQuotes.find(s=>s.id===sq.id)??null}catch(e){window.alert(errorMessage(e))}}
 async function convertSQ(sq:SupplierQuote){try{await procurementService.convertToPO(sq.id);await reloadProcurement();showViewSQModal.value=false;activeTab.value='purchase-orders'}catch(e){window.alert(errorMessage(e))}}
-async function receivePO(po:PurchaseOrder){
- const warehouse=window.prompt('Receiving warehouse: riyadh-main, jeddah-branch or dammam-branch','riyadh-main');if(!warehouse)return
- const items=[]
- for(const line of po.items.filter(i=>i.receivedQty<i.quantity)){const answer=window.prompt(`Receive quantity for ${line.productSku} (${line.quantity-line.receivedQty} outstanding; 0 to skip)`,String(line.quantity-line.receivedQty));if(answer===null)return;const qty=Number(answer);if(!Number.isInteger(qty)||qty<0){window.alert('Enter a non-negative whole quantity.');return};if(qty>0)items.push({poItemId:line.id,productId:line.productId,receivedQty:qty,storageLocation:warehouse,condition:'good'})}
- if(items.length===0)return
- try{await store.addGoodsReceipt({poId:po.id,receiveDate:new Date().toISOString().slice(0,10),items});await reloadProcurement();showViewPOModal.value=false;activeTab.value='goods-receipts'}catch(e){window.alert(errorMessage(e))}
+const canReceive = computed(() => auth.can('procurement:create') || auth.can('inventory:update'))
+const canReturn = computed(() => auth.can('procurement:update') || auth.can('inventory:update'))
+const receiptBusy = ref(false)
+const receiptOpen = ref(false)
+const receiptPO = ref<PurchaseOrder | null>(null)
+const receiptWarehouse = ref('riyadh-main')
+const receiptDate = ref(new Date().toISOString().slice(0, 10))
+const receiptError = ref('')
+const receiptLines = ref<{ poItemId: string; productId: string; sku: string; name: string; outstanding: number; qty: number; damagedQty: number }[]>([])
+function receivePO(po: PurchaseOrder) {
+  receiptPO.value = po
+  receiptError.value = ''
+  receiptDate.value = new Date().toISOString().slice(0, 10)
+  receiptLines.value = po.items.filter(i => i.receivedQty < i.quantity).map(i => ({ poItemId: i.id, productId: i.productId, sku: i.productSku, name: i.productName, outstanding: i.quantity - i.receivedQty, qty: i.quantity - i.receivedQty, damagedQty: 0 }))
+  receiptOpen.value = true
+}
+async function saveReceipt() {
+  if (receiptBusy.value || !receiptPO.value) return
+  receiptError.value = ''
+  if (!receiptDate.value || receiptLines.value.some(i => !Number.isInteger(i.qty) || i.qty < 0 || i.qty > i.outstanding || !Number.isInteger(i.damagedQty) || i.damagedQty < 0 || i.damagedQty > i.qty)) {
+    receiptError.value = 'Enter whole quantities within the outstanding amount. Damaged quantity cannot exceed received quantity.'
+    return
+  }
+  const items = receiptLines.value.filter(i => i.qty > 0).map(i => ({ poItemId: i.poItemId, productId: i.productId, receivedQty: i.qty, damagedQty: i.damagedQty, storageLocation: receiptWarehouse.value, condition: i.damagedQty === 0 ? 'good' : i.damagedQty === i.qty ? 'damaged' : 'partial-damage' }))
+  if (!items.length) { receiptError.value = 'Receive at least one unit.'; return }
+  receiptBusy.value = true
+  try {
+    await store.addGoodsReceipt({ poId: receiptPO.value.id, receiveDate: receiptDate.value, items })
+    receiptOpen.value = false
+    showViewPOModal.value = false
+    activeTab.value = 'goods-receipts'
+    await reloadProcurement()
+  } catch (e) { receiptError.value = errorMessage(e) }
+  finally { receiptBusy.value = false }
+}
+const returnOpen = ref(false)
+const returnItemId = ref('')
+const returnReference = ref('')
+const returnError = ref('')
+function openReturn(itemId: string) {
+  returnItemId.value = itemId
+  returnReference.value = ''
+  returnError.value = ''
+  returnOpen.value = true
+}
+async function returnDamaged() {
+  if (!viewingGR.value || receiptBusy.value || !returnReference.value.trim()) return
+  receiptBusy.value = true
+  try {
+    const id = viewingGR.value.id
+    await procurementService.returnDamaged(id, returnItemId.value, returnReference.value.trim())
+    await reloadProcurement()
+    viewingGR.value = store.goodsReceipts.find(gr => gr.id === id) ?? null
+    returnOpen.value = false
+  } catch (e) { returnError.value = errorMessage(e) }
+  finally { receiptBusy.value = false }
 }
 
 // ── CSV / Excel / PDF Catalog Upload ─────────────────────────
@@ -965,7 +1024,7 @@ function delayHideSQDropdown() { window.setTimeout(() => { showSQItemDropdown.va
         <button class="btn btn-secondary" @click="activeTab = 'supplier-quotes'">
           <FileText :size="16" /> Supplier Quotes
         </button>
-        <button class="btn btn-primary" @click="resetCreatePO(); showCreatePOModal = true">
+        <button v-if="auth.can('procurement:create')" class="btn btn-primary" @click="resetCreatePO(); showCreatePOModal = true">
           <Plus :size="18" /> New Purchase Order
         </button>
       </div>
@@ -1100,7 +1159,7 @@ function delayHideSQDropdown() { window.setTimeout(() => { showSQItemDropdown.va
               <td>
                 <div class="table-actions">
                   <button class="btn btn-ghost btn-icon btn-sm" title="View" @click="openViewPO(po)"><Eye :size="14" /></button>
-                  <button class="btn btn-ghost btn-icon btn-sm" title="Delete" @click="deletePO(po.id)" :disabled="po.status === 'received'"><Trash2 :size="14" /></button>
+                  <button v-if="auth.can('procurement:delete')" class="btn btn-ghost btn-icon btn-sm" title="Delete" @click="deletePO(po.id)" :disabled="po.status === 'received'"><Trash2 :size="14" /></button>
                 </div>
               </td>
             </tr>
@@ -1128,7 +1187,7 @@ function delayHideSQDropdown() { window.setTimeout(() => { showSQItemDropdown.va
             <option value="">All Statuses</option>
             <option v-for="(cfg, key) in sqStatusConfig" :key="key" :value="key">{{ cfg.label }}</option>
           </select>
-          <button class="btn btn-primary btn-sm" @click="openCreateSQ">
+          <button v-if="auth.can('procurement:create')" class="btn btn-primary btn-sm" @click="openCreateSQ">
             <Plus :size="15" /> Add Supplier Quote
           </button>
         </div>
@@ -1167,9 +1226,9 @@ function delayHideSQDropdown() { window.setTimeout(() => { showSQItemDropdown.va
               <td>
                 <div class="table-actions">
                   <button class="btn btn-ghost btn-icon btn-sm" title="View Details" @click="openViewSQ(sq)"><Eye :size="14" /></button>
-                  <button class="btn btn-ghost btn-icon btn-sm" title="Edit" @click="openEditSQ(sq)"><Pencil :size="14" /></button>
-                  <button v-if="sq.status === 'accepted'" class="btn btn-ghost btn-icon btn-sm" title="Create PO from Quote" @click="convertSQ(sq)"><ArrowRight :size="14" /></button>
-                  <button class="btn btn-ghost btn-icon btn-sm" title="Delete" @click="deleteSQ(sq.id)"><Trash2 :size="14" /></button>
+                  <button v-if="auth.can('procurement:update')" class="btn btn-ghost btn-icon btn-sm" title="Edit" @click="openEditSQ(sq)"><Pencil :size="14" /></button>
+                  <button v-if="auth.can('procurement:create') && sq.status === 'accepted'" class="btn btn-ghost btn-icon btn-sm" title="Create PO from Quote" @click="convertSQ(sq)"><ArrowRight :size="14" /></button>
+                  <button v-if="auth.can('procurement:delete')" class="btn btn-ghost btn-icon btn-sm" title="Delete" @click="deleteSQ(sq.id)"><Trash2 :size="14" /></button>
                 </div>
               </td>
             </tr>
@@ -1207,6 +1266,7 @@ function delayHideSQDropdown() { window.setTimeout(() => { showSQItemDropdown.va
               <th class="text-center">Items</th>
               <th class="text-right">Landing Cost</th>
               <th>Received By</th>
+              <th>Returns</th>
               <th></th>
             </tr>
           </thead>
@@ -1221,6 +1281,7 @@ function delayHideSQDropdown() { window.setTimeout(() => { showSQItemDropdown.va
               <td class="text-center">{{ gr.totalItems }}</td>
               <td class="text-right whitespace-nowrap font-bold">SAR {{ formatSAR(gr.totalLandingCost) }}</td>
               <td class="text-muted">{{ gr.receivedBy }}</td>
+              <td>{{ gr.items.some(item => item.returnStatus === 'pending') ? 'Return pending' : gr.items.some(item => item.returnStatus === 'returned') ? 'Returned' : '—' }}</td>
               <td>
                 <button class="btn btn-ghost btn-icon btn-sm" title="View" @click="openViewGR(gr)"><Eye :size="14" /></button>
               </td>
@@ -1390,10 +1451,10 @@ function delayHideSQDropdown() { window.setTimeout(() => { showSQItemDropdown.va
             />
           </div>
           <div class="modal-footer">
-            <button v-if="viewingPO.status === 'draft'" class="btn btn-sm" @click="poAction(viewingPO,'pending-approval')">Submit for approval</button>
-            <button v-if="viewingPO.status === 'pending-approval'" class="btn btn-sm" @click="poAction(viewingPO,'approve')">Approve</button>
-            <button v-if="viewingPO.status === 'approved'" class="btn btn-sm" @click="poAction(viewingPO,'ordered')">Mark ordered</button>
-            <button v-if="['ordered','partial-received'].includes(viewingPO.status)" class="btn btn-sm" @click="receivePO(viewingPO)">Receive goods</button>
+            <button v-if="auth.can('procurement:update') && viewingPO.status === 'draft'" class="btn btn-sm" @click="poAction(viewingPO,'pending-approval')">Submit for approval</button>
+            <button v-if="auth.can('procurement:approve') && viewingPO.status === 'pending-approval'" class="btn btn-sm" @click="poAction(viewingPO,'approve')">Approve</button>
+            <button v-if="auth.can('procurement:update') && viewingPO.status === 'approved'" class="btn btn-sm" @click="poAction(viewingPO,'ordered')">Mark ordered</button>
+            <button v-if="canReceive && ['ordered','partial-received'].includes(viewingPO.status)" class="btn btn-sm" @click="receivePO(viewingPO)">Receive goods</button>
             <button class="btn btn-secondary" @click="showViewPOModal = false">Close</button>
           </div>
         </div>
@@ -1494,8 +1555,8 @@ function delayHideSQDropdown() { window.setTimeout(() => { showSQItemDropdown.va
             />
           </div>
           <div class="modal-footer">
-            <button v-if="['received','under-review'].includes(viewingSQ.status)" class="btn btn-sm" @click="acceptSQ(viewingSQ)">Accept supplier quote</button><button class="btn btn-secondary" @click="showViewSQModal = false">Close</button>
-            <button v-if="viewingSQ.status === 'accepted'" class="btn btn-primary" @click="convertSQ(viewingSQ)">
+            <button v-if="auth.can('procurement:update') && ['received','under-review'].includes(viewingSQ.status)" class="btn btn-sm" @click="acceptSQ(viewingSQ)">Accept supplier quote</button><button class="btn btn-secondary" @click="showViewSQModal = false">Close</button>
+            <button v-if="auth.can('procurement:create') && viewingSQ.status === 'accepted'" class="btn btn-primary" @click="convertSQ(viewingSQ)">
               <ArrowRight :size="16" /> Create PO from This Quote
             </button>
           </div>
@@ -1528,6 +1589,7 @@ function delayHideSQDropdown() { window.setTimeout(() => { showSQItemDropdown.va
                 <span class="view-info-value">{{ viewingGR.receivedBy }}</span>
               </div>
             </div>
+            <p v-if="viewingGR.replacementPo">Replacement draft: <strong>{{ viewingGR.replacementPo.poNumber }}</strong> ({{ viewingGR.replacementPo.status }}). Review pricing and supplier credit before approval.</p>
             <div v-if="viewingGR.notes" class="view-notes"><p>{{ viewingGR.notes }}</p></div>
 
             <div class="table-container table-container--embedded">
@@ -1546,7 +1608,7 @@ function delayHideSQDropdown() { window.setTimeout(() => { showSQItemDropdown.va
                     <td class="text-mono font-medium">{{ item.productSku }}</td>
                     <td class="font-medium">{{ item.productName }}</td>
                     <td class="text-center">{{ item.receivedQty }}</td>
-                    <td class="text-right whitespace-nowrap">SAR {{ formatSAR(item.unitCost) }}</td>
+                    <td class="text-right whitespace-nowrap">{{ viewingGR.sourceCurrency }} {{ formatSAR(item.unitCost) }}</td>
                     <td class="text-right whitespace-nowrap text-muted">{{ formatSAR(item.shippingAlloc) }}</td>
                     <td class="text-right whitespace-nowrap text-muted">{{ formatSAR(item.customsAlloc) }}</td>
                     <td class="text-right whitespace-nowrap font-bold">SAR {{ formatSAR(item.landingCost) }}</td>
@@ -1555,6 +1617,8 @@ function delayHideSQDropdown() { window.setTimeout(() => { showSQItemDropdown.va
                       <span :class="['badge badge-dot', item.condition === 'good' ? 'badge-success' : item.condition === 'damaged' ? 'badge-danger' : 'badge-warning']">
                         {{ item.condition === 'good' ? 'Good' : item.condition === 'damaged' ? 'Damaged' : 'Partial Damage' }}
                       </span>
+                      <p v-if="item.damagedQty">{{ item.damagedQty }} damaged · {{ item.returnStatus === 'returned' ? 'Returned: ' + item.returnReference : 'Return pending' }}</p>
+                      <button v-if="item.returnStatus === 'pending' && canReturn" class="btn btn-sm" :disabled="receiptBusy" @click="openReturn(item.id)">Record return</button>
                     </td>
                   </tr>
                 </tbody>
@@ -1574,6 +1638,45 @@ function delayHideSQDropdown() { window.setTimeout(() => { showSQItemDropdown.va
           </div>
         </div>
       </div>
+
+      <AppDialog v-model:open="receiptOpen" :title="`Receive goods — ${receiptPO?.poNumber ?? ''}`" :busy="receiptBusy">
+        <form id="receive-goods-form" @submit.prevent="saveReceipt" class="space-y-4">
+          <div class="grid gap-4 sm:grid-cols-2">
+            <label class="block">Warehouse
+              <select v-model="receiptWarehouse" class="select form-select w-full" :disabled="receiptBusy">
+                <option value="riyadh-main">Riyadh Main</option><option value="jeddah-branch">Jeddah Branch</option><option value="dammam-branch">Dammam Branch</option>
+              </select>
+            </label>
+            <label class="block">Receive date<input v-model="receiptDate" type="date" class="input form-input w-full" required :disabled="receiptBusy" /></label>
+          </div>
+          <p class="text-sm">Received includes damaged units. Only good units enter stock; damage creates a pending return and a replacement order draft.</p>
+          <fieldset v-for="line in receiptLines" :key="line.poItemId" class="border border-base-300 rounded-box p-4" :disabled="receiptBusy">
+            <legend class="font-medium">{{ line.sku }} — {{ line.name }}</legend>
+            <p class="text-sm mb-3">{{ line.outstanding }} outstanding. Enter 0 to skip this item.</p>
+            <div class="grid gap-4 sm:grid-cols-2">
+              <label class="block">Received quantity<input v-model.number="line.qty" :aria-label="`Received quantity ${line.sku}`" type="number" min="0" :max="line.outstanding" step="1" required class="input form-input w-full" /></label>
+              <label class="block">Damaged quantity<input v-model.number="line.damagedQty" :aria-label="`Damaged quantity ${line.sku}`" type="number" min="0" :max="line.qty" step="1" required class="input form-input w-full" /></label>
+            </div>
+          </fieldset>
+          <p v-if="receiptError" role="alert" class="text-error">{{ receiptError }}</p>
+        </form>
+        <template #footer>
+          <button class="btn" :disabled="receiptBusy" @click="receiptOpen = false">Cancel</button>
+          <button class="btn btn-primary" form="receive-goods-form" type="submit" :disabled="receiptBusy">{{ receiptBusy ? 'Saving…' : 'Save receipt' }}</button>
+        </template>
+      </AppDialog>
+      <AppDialog v-model:open="returnOpen" title="Record damaged return" :busy="receiptBusy">
+        <p>Record the dispatch of all damaged units on this receipt line. These units were excluded from usable stock.</p>
+        <form id="damaged-return-form" @submit.prevent="returnDamaged">
+          <label class="form-label" for="return-reference">Return dispatch reference</label>
+          <input id="return-reference" v-model.trim="returnReference" class="input form-input" required maxlength="1000" />
+          <p v-if="returnError" role="alert">{{ returnError }}</p>
+        </form>
+        <template #footer>
+          <button class="btn" :disabled="receiptBusy" @click="returnOpen = false">Cancel</button>
+          <button class="btn" form="damaged-return-form" type="submit" :disabled="receiptBusy || !returnReference.trim()">{{ receiptBusy ? 'Saving…' : 'Confirm return' }}</button>
+        </template>
+      </AppDialog>
 
       <!-- Item Detail Modal (Supplier Catalog) -->
       <div v-if="showItemDetailModal && detailItem" class="modal-backdrop" @click.self="showItemDetailModal = false">
@@ -1722,7 +1825,7 @@ function delayHideSQDropdown() { window.setTimeout(() => { showSQItemDropdown.va
                   <label class="form-label" for="sq-source-quote">Requested for customer quote</label>
                   <select id="sq-source-quote" v-model="sqForm.sourceQuoteId" class="form-input" @change="loadSQFromQuote">
                     <option value="">Not linked</option>
-                    <option v-for="qt in quotesStore.quotes" :key="qt.id" :value="qt.id">{{ qt.quoteNumber }} — {{ qt.customerName }}</option>
+                    <option v-for="qt in jobQuotes" :key="qt.id" :value="qt.id">{{ qt.quoteNumber }} — {{ qt.customerName }}</option>
                   </select>
                 </div>
                 <div class="form-group" style="flex:1">
@@ -1978,12 +2081,12 @@ function delayHideSQDropdown() { window.setTimeout(() => { showSQItemDropdown.va
                   <button v-for="qt in (poSourceType === 'opportunity' ? availableOpportunities : availableQuotes)" :key="qt.id" class="po-source-card" @click="selectSource(qt)">
                     <div class="po-source-card-top">
                       <span class="text-mono font-bold" style="font-size:0.78rem">{{ qt.quoteNumber }}</span>
-                      <span :class="['badge', qt.status === 'accepted' ? 'badge-success' : qt.status === 'sent' ? 'badge-info' : 'badge-gray']" style="font-size:0.6rem">{{ qt.status }}</span>
+                      <span :class="['badge', 'badge-success']" style="font-size:0.6rem">{{ qt.status }}</span>
                     </div>
                     <div class="po-source-card-customer font-medium">{{ qt.customerName }}</div>
                     <div class="po-source-card-meta">
                       <span>{{ qt.lineItems.filter(l => l.category === 'materials').length }} material items</span>
-                      <span class="font-bold" style="color:var(--color-primary)">{{ qt.currency }} {{ formatSAR(qt.total) }}</span>
+
                     </div>
                     <div v-if="qt.lineItems.filter(l => l.category === 'materials').length" class="po-source-card-items">
                       <div v-for="li in qt.lineItems.filter(l => l.category === 'materials').slice(0, 4)" :key="li.id" class="po-src-inline-item">
@@ -1993,7 +2096,7 @@ function delayHideSQDropdown() { window.setTimeout(() => { showSQItemDropdown.va
                       </div>
                       <span v-if="qt.lineItems.filter(l => l.category === 'materials').length > 4" class="po-src-inline-more">+{{ qt.lineItems.filter(l => l.category === 'materials').length - 4 }} more</span>
                     </div>
-                    <div v-if="!qt.lineItems.filter(l => l.category === 'materials').length" class="po-source-card-desc text-muted">{{ qt.notes.slice(0, 80) }}</div>
+                    <div v-if="!qt.lineItems.filter(l => l.category === 'materials').length" class="po-source-card-desc text-muted">{{ qt.opportunityTitle.slice(0, 80) }}</div>
                   </button>
                 </div>
                 <div v-else class="detail-empty">No {{ poSourceType === 'opportunity' ? 'won opportunities' : 'quotes' }} found.</div>
@@ -2126,7 +2229,7 @@ function delayHideSQDropdown() { window.setTimeout(() => { showSQItemDropdown.va
                       <span class="text-muted" style="font-size:0.6875rem">{{ sq.items.length }} items · {{ sq.currency }} {{ formatSAR(sq.subtotal) }}</span>
                       <span v-if="sq.validUntil" class="text-muted" style="font-size:0.625rem">Valid until {{ formatDate(sq.validUntil) }}</span>
                     </div>
-                    <button class="btn btn-primary btn-sm" @click="convertSQ(sq)" style="font-size:0.6875rem">
+                    <button v-if="auth.can('procurement:create')" class="btn btn-primary btn-sm" @click="convertSQ(sq)" style="font-size:0.6875rem">
                       <ArrowRight :size="13" /> Import Items
                     </button>
                   </div>

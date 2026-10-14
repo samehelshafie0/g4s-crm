@@ -76,14 +76,14 @@ export const useProcurementStore = defineStore('procurement', () => {
     )
   }
 
-  function getReceiptHistoryForProduct(productSku: string) {
+  function getReceiptHistoryForProduct(productIdOrSku: string) {
     return goodsReceipts.value.flatMap(gr =>
-      gr.items.filter(item => item.productSku === productSku).map(item => ({ gr, item })),
+      gr.items.filter(item => item.productId === productIdOrSku || item.productSku === productIdOrSku).map(item => ({ gr, item })),
     ).sort((a, b) => b.gr.receiveDate.localeCompare(a.gr.receiveDate))
   }
 
-  function getSupplierItemsForProduct(productSku: string) {
-    return supplierItems.value.filter((si) => si.productSku === productSku)
+  function getSupplierItemsForProduct(productIdOrSku: string) {
+    return supplierItems.value.filter((si) => si.productId === productIdOrSku || si.productSku === productIdOrSku)
   }
 
 

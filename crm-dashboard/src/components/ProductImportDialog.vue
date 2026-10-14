@@ -32,6 +32,11 @@ const pasteText = ref('')
 const parsed = ref<ParseResult | null>(null)
 
 interface Draft {
+  vendorName: string
+  manufacturerName: string
+  categoryName: string
+  currency: string
+  fxRate: number | undefined
   include: boolean
   sku: string
   name: string
@@ -48,12 +53,17 @@ function buildDrafts(result: ParseResult) {
   drafts.value = result.rows
     .map(row => ({
       include: true,
+      vendorName: getMappedValue(row, 'vendorName', headers, mappedColumns).trim(),
+      manufacturerName: getMappedValue(row, 'manufacturer', headers, mappedColumns).trim(),
+      categoryName: getMappedValue(row, 'category', headers, mappedColumns).trim(),
+      currency: getMappedValue(row, 'currency', headers, mappedColumns).trim().toUpperCase(),
+      fxRate: getMappedValue(row, 'fxRate', headers, mappedColumns).trim() ? getMappedNumber(row, 'fxRate', headers, mappedColumns) : undefined,
       sku: getMappedValue(row, 'sku', headers, mappedColumns).trim(),
       name: getMappedValue(row, 'name', headers, mappedColumns).trim(),
       description: getMappedValue(row, 'name', headers, mappedColumns).trim(),
       unitCost: getMappedNumber(row, 'unitCost', headers, mappedColumns),
       qty: getMappedInt(row, 'qty', headers, mappedColumns),
-      leadTimeDays: getMappedInt(row, 'leadTime', headers, mappedColumns),
+      leadTimeDays: getMappedInt(row, 'leadTimeDays', headers, mappedColumns),
     }))
     // A row with no part number or no price is not something we can cost.
     .filter(d => d.sku || d.name)
@@ -180,6 +190,22 @@ const categories = computed(
   () => manufacturers.value.find(m => m.id === settings.value.manufacturerId)?.categories ?? [],
 )
 
+const mappingFields = [
+  ['sku', 'Part number'], ['name', 'Description'], ['unitCost', 'Unit cost'],
+  ['vendorName', 'Vendor'], ['manufacturer', 'Manufacturer'], ['category', 'Category'],
+  ['currency', 'Currency'], ['fxRate', 'Rate to SAR'], ['leadTimeDays', 'Lead time'],
+] as const
+
+function applyMapping() {
+  if (parsed.value) buildDrafts(parsed.value)
+}
+
+function rowCurrency(row: Draft) { return row.currency || settings.value.originCurrency }
+function rowRate(row: Draft) {
+  if (rowCurrency(row) === 'SAR') return 1
+  return typeof row.fxRate === 'number' ? row.fxRate : (rowCurrency(row) === settings.value.originCurrency ? settings.value.fxRate : 0)
+}
+
 watch(() => settings.value.manufacturerId, () => { settings.value.categoryId = '' })
 
 watch(() => settings.value.originCurrency, currency => {
@@ -207,14 +233,14 @@ async function loadReferenceData() {
 watch(() => props.open, open => { if (open) { reset(); void loadReferenceData() } })
 
 // ── Costing preview, mirroring the server's calculation ──────
-function landedCost(unitCost: number): number {
-  const base = settings.value.productType === 'local' ? unitCost : unitCost * settings.value.fxRate
+function landedCost(row: Draft): number {
+  const base = row.unitCost * rowRate(row)
   const s = settings.value
   return base * (1 + (s.freightPercent + s.customsPercent + s.clearancePercent) / 100)
 }
 
-function sellingPrice(unitCost: number): number {
-  return landedCost(unitCost) / (1 - settings.value.targetMarginPercent / 100)
+function sellingPrice(row: Draft): number {
+  return landedCost(row) / (1 - settings.value.targetMarginPercent / 100)
 }
 
 function money(value: number): string {
@@ -223,13 +249,21 @@ function money(value: number): string {
 
 const selected = computed(() => drafts.value.filter(d => d.include && d.sku && d.name))
 const unusable = computed(() => drafts.value.filter(d => !d.sku || !d.name || d.unitCost <= 0).length)
+const importIssues = computed(() => selected.value.flatMap(row => {
+  const reasons = []
+  if (!(row.vendorName || settings.value.vendorName).trim()) reasons.push('vendor missing')
+  if (!['SAR', 'USD', 'EUR', 'GBP', 'AED', 'CNY'].includes(rowCurrency(row))) reasons.push('unsupported currency')
+  if (!(rowRate(row) > 0)) reasons.push('rate to SAR missing')
+  if (!Number.isFinite(row.unitCost) || row.unitCost < 0) reasons.push('invalid cost')
+  return reasons.length ? [`${row.sku}: ${reasons.join(', ')}`] : []
+}))
 
 // ── Import ───────────────────────────────────────────────────
 interface Outcome { sku: string; status: string; reason?: string; landedCostSAR?: number; sellingPrice?: number }
 const result = ref<{ created: number; updated: number; skipped: number; failed: number; rows: Outcome[] } | null>(null)
 
 async function runImport() {
-  if (!selected.value.length || !settings.value.vendorName.trim()) return
+  if (!selected.value.length || importIssues.value.length) return
   busy.value = true
   error.value = ''
   try {
@@ -249,6 +283,11 @@ async function runImport() {
       updateExisting: settings.value.updateExisting,
       rows: selected.value.map(d => ({
         sku: d.sku,
+        vendorName: d.vendorName || undefined,
+        manufacturerName: d.manufacturerName || undefined,
+        categoryName: d.categoryName || undefined,
+        currency: d.currency as Currency || undefined,
+        fxRate: rowRate(d),
         name: d.name.slice(0, 255),
         description: d.description,
         unitCost: d.unitCost,
@@ -287,6 +326,7 @@ function close() {
   <AppDialog
     :open="open"
     :busy="busy"
+    wide
     title="Import products from a vendor file"
     @update:open="emit('update:open', $event)"
   >
@@ -349,8 +389,24 @@ function close() {
         </div>
       </div>
 
+      <details v-if="parsed">
+        <summary>Check or change column mapping</summary>
+        <div class="imp-grid">
+          <label v-for="[field, label] in mappingFields" :key="field" class="imp-field">{{ label }} column
+            <select v-model="parsed.mappedColumns[field]" class="select form-select">
+              <option :value="-1">Not in this file</option>
+              <option v-for="(header, index) in parsed.headers" :key="index" :value="index">{{ header }}</option>
+            </select>
+          </label>
+        </div>
+        <button type="button" class="btn btn-sm" @click="applyMapping">Apply mapping and reread rows</button>
+        <p class="imp-lead">Re-reading replaces edits in the review below.</p>
+      </details>
+
+      <p class="imp-lead">File defaults apply to blank row fields. Manufacturer and category names must already exist in Manufacturers. This imports catalog products and prices; inventory is added through receiving.</p>
+
       <div class="imp-grid">
-        <label class="imp-field">Vendor or supplier
+        <label class="imp-field">Default vendor or supplier
           <input v-model.trim="settings.vendorName" class="input form-input" maxlength="255" required placeholder="Ingram Micro" />
         </label>
         <label class="imp-field">This file is a
@@ -402,6 +458,7 @@ function close() {
         Fill them in below or leave them out.
       </p>
 
+      <p v-if="importIssues.length" class="imp-note" role="alert">{{ importIssues.slice(0, 5).join(' · ') }}</p>
       <div class="table-container imp-table">
         <table class="table">
           <thead>
@@ -409,7 +466,8 @@ function close() {
               <th class="imp-tick"><span class="sr-only">Include</span></th>
               <th>Part number</th>
               <th>Description</th>
-              <th class="text-right">Cost ({{ settings.originCurrency }})</th>
+              <th>Vendor</th><th>Manufacturer</th><th>Category</th><th>Currency</th><th>Rate to SAR</th>
+              <th class="text-right">Unit cost</th>
               <th class="text-right">Landed (SAR)</th>
               <th class="text-right">Sell (SAR)</th>
             </tr>
@@ -417,11 +475,16 @@ function close() {
           <tbody>
             <tr v-for="(row, index) in drafts" :key="index" :class="{ 'imp-row--off': !row.include }">
               <td><input v-model="row.include" type="checkbox" :aria-label="`Include ${row.sku || 'row ' + (index + 1)}`" /></td>
-              <td><input v-model.trim="row.sku" class="input imp-cell imp-cell--sku" maxlength="100" /></td>
-              <td><input v-model.trim="row.name" class="input imp-cell" maxlength="255" /></td>
-              <td><input v-model.number="row.unitCost" class="input imp-cell imp-cell--num" type="number" min="0" step="0.01" /></td>
-              <td class="text-right num">{{ money(landedCost(row.unitCost)) }}</td>
-              <td class="text-right num">{{ money(sellingPrice(row.unitCost)) }}</td>
+              <td><input v-model.trim="row.sku" :aria-label="`Part number for row ${index + 1}`" class="input form-input imp-cell imp-cell--sku" maxlength="100" /></td>
+              <td><input v-model.trim="row.name" :aria-label="`Description for ${row.sku}`" class="input form-input imp-cell" maxlength="255" /></td>
+              <td><input v-model.trim="row.vendorName" :aria-label="`Vendor for ${row.sku}`" class="input form-input imp-cell" :placeholder="settings.vendorName || 'Required'" /></td>
+              <td><input v-model.trim="row.manufacturerName" :aria-label="`Manufacturer for ${row.sku}`" class="input form-input imp-cell" placeholder="File default" /></td>
+              <td><input v-model.trim="row.categoryName" :aria-label="`Category for ${row.sku}`" class="input form-input imp-cell" placeholder="File default" /></td>
+              <td><select v-model="row.currency" :aria-label="`Currency for ${row.sku}`" class="select form-select imp-cell"><option value="">{{ settings.originCurrency }} (default)</option><option v-for="cur in ['SAR', 'USD', 'EUR', 'GBP', 'AED', 'CNY']" :key="cur">{{ cur }}</option></select></td>
+              <td><input v-model.number="row.fxRate" :aria-label="`Rate to SAR for ${row.sku}`" class="input form-input imp-cell" type="number" min="0.000001" step="0.000001" :disabled="rowCurrency(row) === 'SAR'" :placeholder="String(rowRate(row) || 'Required')" /></td>
+              <td><input v-model.number="row.unitCost" :aria-label="`Unit cost for ${row.sku}`" class="input form-input imp-cell imp-cell--num" type="number" min="0" step="0.01" /></td>
+              <td class="text-right num">{{ rowRate(row) ? money(landedCost(row)) : '—' }}</td>
+              <td class="text-right num">{{ rowRate(row) ? money(sellingPrice(row)) : '—' }}</td>
             </tr>
           </tbody>
         </table>
@@ -448,7 +511,7 @@ function close() {
 
     <template #footer>
       <button v-if="step !== 'done'" type="button" class="btn" :disabled="busy" @click="close">Cancel</button>
-      <button v-if="step === 'review'" type="button" class="btn btn-primary" :disabled="busy || !selected.length || !settings.vendorName.trim()" @click="runImport">
+      <button v-if="step === 'review'" type="button" class="btn btn-primary" :disabled="busy || !selected.length || !!importIssues.length" @click="runImport">
         {{ busy ? 'Importing…' : `Import ${selected.length} product${selected.length === 1 ? '' : 's'}` }}
       </button>
       <button v-if="step === 'done'" type="button" class="btn" @click="reset">Import another file</button>
@@ -462,7 +525,7 @@ function close() {
 .imp-table-picker { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .imp-table-btn { font-size: var(--text-xs); padding: 4px var(--space-3); border: 1px solid var(--color-neutral-300); border-radius: var(--radius-full); background: var(--content-surface); color: var(--color-neutral-700); cursor: pointer; }
 .imp-table-btn--active { border-color: var(--color-primary); background: var(--color-primary-light); color: var(--color-primary-dark); }
-.imp-step { display: flex; flex-direction: column; gap: var(--space-4); min-width: min(78vw, 900px); }
+.imp-step { display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; }
 .imp-lead { font-size: var(--text-sm); color: var(--color-neutral-600); max-width: 62ch; line-height: var(--leading-relaxed); }
 .imp-error { display: flex; align-items: center; gap: var(--space-2); font-size: var(--text-sm); color: var(--color-danger-dark); background: var(--color-danger-light); padding: var(--space-2) var(--space-3); border-radius: var(--radius-md); margin-bottom: var(--space-3); }
 

@@ -151,9 +151,8 @@ const DEFAULT_COLUMN_ALIASES: ColumnMapping[] = [
   {
     field: 'manufacturer',
     aliases: [
-      'manufacturer', 'mfr', 'mfg', 'brand', 'make', 'vendor', 'oem',
-      'manufacturer name', 'brand name', 'vendor name', 'supplier',
-      'supplier name', 'company', 'producer', 'origin',
+      'manufacturer', 'mfr', 'mfg', 'brand', 'make', 'oem',
+      'manufacturer name', 'brand name', 'producer',
       'الشركة المصنعة', 'العلامة التجارية', 'المصنع',
     ],
     keywords: [
@@ -161,6 +160,9 @@ const DEFAULT_COLUMN_ALIASES: ColumnMapping[] = [
       'المصنع',
     ],
   },
+  { field: 'vendorName', aliases: ['vendor', 'vendor name', 'supplier', 'supplier name'], keywords: ['supplier name', 'vendor name'] },
+  { field: 'category', aliases: ['category', 'category name'], keywords: ['category'] },
+  { field: 'fxRate', aliases: ['fx rate', 'rate to sar', 'exchange rate'], keywords: ['rate to sar', 'exchange rate'] },
   {
     field: 'qty',
     aliases: [
@@ -199,7 +201,7 @@ const DEFAULT_COLUMN_ALIASES: ColumnMapping[] = [
       'price', 'cost', 'rate', 'السعر', 'التكلفة',
       'msrp', 'dealer', 'discounted',
     ],
-    antiKeywords: ['total', 'extended', 'subtotal', 'الإجمالي'],
+    antiKeywords: ['total', 'extended', 'subtotal', 'exchange', 'fx', 'rate to sar', 'الإجمالي'],
     preferKeywords: ['discounted', 'distributor', 'dealer', 'net', 'your price', 'buy', 'trade'],
     demoteKeywords: ['msrp', 'list price', 'rrp', 'retail', 'srp', 'recommended'],
     contentDetectable: true,
@@ -588,7 +590,7 @@ export async function parseExcelFile(
 ): Promise<ParseResult> {
   const buffer = await file.arrayBuffer()
   const workbook = XLSX.read(buffer, { type: 'array' })
-  const sheetName = workbook.SheetNames[0]
+  const sheetName = workbook.SheetNames.includes('Products') ? 'Products' : workbook.SheetNames[0]
   if (!sheetName) return { headers: [], rows: [], mappedColumns: {}, rawRowCount: 0, detectionMethod: {} }
 
   const sheet = workbook.Sheets[sheetName]
@@ -899,6 +901,13 @@ const TEMPLATES: Record<TemplateType, { headers: string[]; sampleRow: (string | 
 }
 
 export function downloadTemplate(type: TemplateType, fileName?: string) {
+  if (type === 'product-catalog') {
+    const link = document.createElement('a')
+    link.href = `${import.meta.env.BASE_URL}templates/g4s-product-import.xlsx`
+    link.download = fileName || 'g4s-product-import.xlsx'
+    link.click()
+    return
+  }
   const tmpl = TEMPLATES[type]
   const wb = XLSX.utils.book_new()
   const data = [tmpl.headers, tmpl.sampleRow]

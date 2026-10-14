@@ -123,9 +123,11 @@ const defaultForm = (): ProductForm => ({
 })
 const form = ref<ProductForm>(defaultForm())
 const availableCategories = computed(() => { const m = mfrList.find(x => x.id === form.value.manufacturerId); return m ? m.categories : [] })
-watch(() => form.value.manufacturerId, () => { form.value.categoryId = '' })
+watch(() => form.value.manufacturerId, () => {
+  if (!availableCategories.value.some(category => category.id === form.value.categoryId)) form.value.categoryId = ''
+})
 const costInSAR = computed(() => form.value.unitCostOrigin * form.value.fxRate)
-const landedCostSAR = computed(() => form.value.productType === 'local' ? form.value.unitCostOrigin : calcLanded(form.value.unitCostOrigin, form.value.fxRate, form.value.freightPercent, form.value.customsPercent, form.value.clearancePercent))
+const landedCostSAR = computed(() => calcLanded(form.value.unitCostOrigin, form.value.productType === 'local' ? 1 : form.value.fxRate, form.value.freightPercent, form.value.customsPercent, form.value.clearancePercent))
 const sellingPrice = computed(() => calcSelling(landedCostSAR.value, form.value.targetMarginPercent))
 const marginAmount = computed(() => sellingPrice.value - landedCostSAR.value)
 
@@ -133,6 +135,14 @@ function marginClass(pct: number): string {
   if (pct >= 25) return 'text-success'
   if (pct >= 20) return 'text-warning'
   return 'text-danger'
+}
+
+function changeProductType() {
+  if (form.value.productType === 'local') {
+    Object.assign(form.value, { originCurrency: 'SAR', fxRate: 1, freightPercent: 0, customsPercent: 0, clearancePercent: 0 })
+  } else if (form.value.originCurrency === 'SAR') {
+    Object.assign(form.value, { originCurrency: 'USD', fxRate: 3.75 })
+  }
 }
 
 function openAddModal() { editingId.value = null; form.value = defaultForm(); showModal.value = true }
@@ -649,13 +659,13 @@ async function savePrice() {
             <div class="form-row"><div class="form-group"><label class="form-label">Manufacturer <span class="required">*</span></label><select v-model="form.manufacturerId" class="form-select"><option value="" disabled>Select manufacturer</option><option v-for="m in mfrList" :key="m.id" :value="m.id">{{ m.name }}</option></select></div><div class="form-group"><label class="form-label">Category <span class="required">*</span></label><select v-model="form.categoryId" class="form-select" :disabled="!form.manufacturerId"><option value="" disabled>{{ form.manufacturerId ? 'Select category' : 'Select manufacturer first' }}</option><option v-for="c in availableCategories" :key="c.id" :value="c.id">{{ c.name }}</option></select></div></div>
             <div class="divider" />
             <h4 class="section-title mb-4"><Calculator :size="16" style="vertical-align:-2px" /> Pricing</h4>
-            <div class="form-group"><label class="form-label">Product Type</label><div class="flex gap-4 mt-1"><label class="form-radio"><input v-model="form.productType" type="radio" value="import" /> Import</label><label class="form-radio"><input v-model="form.productType" type="radio" value="local" /> Local</label></div></div>
+            <div class="form-group"><label class="form-label">Product Type</label><div class="flex gap-4 mt-1"><label class="form-radio"><input v-model="form.productType" type="radio" @change="changeProductType" value="import" /> Import</label><label class="form-radio"><input v-model="form.productType" type="radio" @change="changeProductType" value="local" /> Local</label></div></div>
             <div v-if="form.productType === 'import'" class="import-pricing">
               <div class="form-row"><div class="form-group"><label class="form-label">Origin Currency</label><select v-model="form.originCurrency" class="form-select"><option v-for="c in currencies.filter(x => x !== 'SAR')" :key="c" :value="c">{{ c }}</option></select></div><div class="form-group"><label class="form-label">Unit Cost ({{ form.originCurrency }})</label><input v-model.number="form.unitCostOrigin" type="number" step="0.01" min="0" class="form-input" /></div><div class="form-group"><label class="form-label">FX Rate → SAR</label><input v-model.number="form.fxRate" type="number" step="0.0001" min="0" class="form-input" /></div></div>
               <div class="form-group"><label class="form-label">Cost in SAR (auto)</label><input :value="formatSAR(costInSAR)" type="text" class="form-input" disabled /></div>
-              <div class="form-row"><div class="form-group"><label class="form-label">Freight %</label><input v-model.number="form.freightPercent" type="number" step="0.1" min="0" class="form-input" /></div><div class="form-group"><label class="form-label">Customs %</label><input v-model.number="form.customsPercent" type="number" step="0.1" min="0" class="form-input" /></div><div class="form-group"><label class="form-label">Clearance %</label><input v-model.number="form.clearancePercent" type="number" step="0.1" min="0" class="form-input" /></div></div>
             </div>
             <div v-else class="local-pricing"><div class="form-row"><div class="form-group"><label class="form-label">Unit Cost (SAR)</label><input v-model.number="form.unitCostOrigin" type="number" step="0.01" min="0" class="form-input" /></div></div></div>
+              <div class="form-row"><div class="form-group"><label class="form-label">Freight %</label><input v-model.number="form.freightPercent" type="number" step="0.1" min="0" class="form-input" /></div><div class="form-group"><label class="form-label">Customs %</label><input v-model.number="form.customsPercent" type="number" step="0.1" min="0" class="form-input" /></div><div class="form-group"><label class="form-label">Clearance %</label><input v-model.number="form.clearancePercent" type="number" step="0.1" min="0" class="form-input" /></div></div>
             <div class="form-row"><div class="form-group"><label class="form-label">Landed Cost SAR (auto)</label><input :value="'SAR ' + formatSAR(landedCostSAR)" type="text" class="form-input" disabled /></div><div class="form-group"><label class="form-label">Target Margin %</label><input v-model.number="form.targetMarginPercent" type="number" step="0.5" min="0" max="99" class="form-input" /></div><div class="form-group"><label class="form-label">Selling Price SAR (auto)</label><input :value="'SAR ' + formatSAR(sellingPrice)" type="text" class="form-input" disabled /></div></div>
             <div class="divider" />
             <h4 class="section-title mb-4">Additional Information</h4>

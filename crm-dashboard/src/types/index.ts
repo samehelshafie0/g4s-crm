@@ -259,6 +259,8 @@ export interface ProductDocument {
 export type WarehouseLocation = 'riyadh-main' | 'jeddah-branch' | 'dammam-branch'
 
 export interface WarehouseStock extends BaseEntity {
+  manufacturerName?: string
+  categoryName?: string
   productId: string
   productSku: string
   productName: string
@@ -284,6 +286,10 @@ export type QuoteStatus =
 export type QuoteLineCategory = 'materials' | 'manpower' | 'miscellaneous'
 
 export interface QuoteLineItem {
+  rowType?: string
+  multiplier?: number
+  isOptional?: boolean
+  isSelected?: boolean
   id: string
   category: QuoteLineCategory
   productId?: string
@@ -622,6 +628,9 @@ export interface SupplierItemEntry {
 
 // ─── Goods Receipt ─────────────────────────────────────────
 export interface GoodsReceiptItem {
+  damagedQty?: number
+  returnStatus?: 'not-required' | 'pending' | 'returned'
+  returnReference?: string
   id: string
   poItemId: string
   productId: string
@@ -639,6 +648,9 @@ export interface GoodsReceiptItem {
 }
 
 export interface GoodsReceipt extends BaseEntity {
+  sourceCurrency?: Currency
+  replacementPoId?: string
+  replacementPo?: { id: string; poNumber: string; status: string }
   grNumber: string
   poId: string
   poNumber: string
@@ -656,6 +668,7 @@ export type ReservationSource = 'quote' | 'project' | 'manual'
 export type ReservationStatus = 'active' | 'released' | 'fulfilled'
 
 export interface StockReservation {
+  quoteLineItemId?: string
   id: string
   productId: string
   productSku: string

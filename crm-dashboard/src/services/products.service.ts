@@ -1,8 +1,8 @@
 import { editable } from './payload'
 import { http, type ApiResponse, type PaginationParams } from './http'
-import type { Product, ProductVendorEntry, ProductPriceRecord, ProductDocument } from '@/types'
+import type { Currency, Product, ProductVendorEntry, ProductPriceRecord, ProductDocument } from '@/types'
 
-export interface ProductImportRow { sku: string; name: string; description?: string; unitCost: number; qty?: number; leadTimeDays?: number; vendorSku?: string }
+export interface ProductImportRow { sku: string; name: string; description?: string; unitCost: number; qty?: number; leadTimeDays?: number; vendorSku?: string; vendorName?: string; manufacturerName?: string; categoryName?: string; currency?: Currency; fxRate?: number }
 export interface ProductImportRequest {
   vendorName: string
   manufacturerId?: string
