@@ -28,6 +28,14 @@
   - The product form offers "+ Add new manufacturer…" and "+ Add new category…" inline, with duplicate checks and auto-suggested unique codes.
   - Verified in the browser on the live copy: a duplicate was caught, a manufacturer and category were created inline, and an import of three rows, including a new manufacturer and categories, bound every product correctly. The test records were then removed. Backend integration test for the template; 4 new frontend tests (28 total).
 
+- **Categories and price books (same day, later):**
+  - Products has a **Categories** tab: list categories by manufacturer with product counts, add several at once, rename and delete. Delete is blocked while products use a category.
+  - The API refuses duplicate category names within a manufacturer (409). Live data has none.
+  - In the import template, Category lists all categories while Manufacturer is blank (checked in LibreOffice).
+  - Price book save failed when the customer was set to "None", because an empty string was sent as `customerId` and returned 400. It now sends no value.
+  - Blank names and customer-specific books without a customer show a message instead of failing silently; the API also requires the customer.
+  - The catalog search list opens on focus and closes on blur or Escape, instead of staying open.
+
 **Still needs owner input:**
 - Which quote op2 keeps (QT-2026-0002 or QT-2026-0004).
 - The vendor for "in".
