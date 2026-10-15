@@ -6,7 +6,7 @@ Updated 2026-10-07 from `crm-api/internal/router/router.go`. 187 registered rout
 |---|---|---|
 | PATCH | `/api/v1/auth/change-password` | `Authenticated` |
 | POST | `/api/v1/auth/forgot-password` | `Public` |
-| POST | `/api/v1/auth/login` | `Public` |
+| POST | `/api/v1/auth/login` | `Public` (rate-limited on failures: 429 + Retry-After) |
 | POST | `/api/v1/auth/logout` | `Authenticated` |
 | GET | `/api/v1/auth/me` | `Authenticated` |
 | PATCH | `/api/v1/auth/me` | `Authenticated` |

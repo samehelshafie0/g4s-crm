@@ -1,13 +1,36 @@
 # G4S CRM — current status and work plan
 
-**Last updated:** 2026-10-07
-**Current phase:** fresh-data sales-to-delivery functional acceptance **PASS** locally on `feature/opportunity-flow`, with separate API/browser roles. Latest batch is uncommitted. [Business acceptance report](docs/BUSINESS_ACCEPTANCE.md). Live-data decisions and wider release gates remain.
+**Last updated:** 2026-10-15
+**Current phase:** release hardening for the client's **test server** on `feature/opportunity-flow` (committed). Sales-to-delivery acceptance passes on fresh data and on a migrated copy of live data. [Test-server runbook](docs/TEST_SERVER_DEPLOY.md). Live-data decisions and production release gates remain.
 **Release state:** not ready for production.
 **Primary objective:** make customers → opportunities → quotes → contracts work end to end, then finish remaining modules and deploy to the owner's server.
 **Detailed findings:** [docs/CRM_REVIEW.md](docs/CRM_REVIEW.md).
 **Current API coverage:** [docs/API_COVERAGE.md](docs/API_COVERAGE.md); [187-route inventory](docs/API_ENDPOINTS.md).
 
-## Current task — role-based business acceptance
+## Current task — hardening for the client test server (2026-10-15)
+
+**DONE and committed:**
+- **Dependencies:**
+  - Go modules upgraded (`pgx` 5.9.2, `x/net` 0.60, `x/text` 0.42, `quic-go` 0.59.1) on Go 1.26.9, including the API Docker image. `govulncheck`: 0 reachable vulnerabilities (was 8).
+  - `npm audit fix`: 0 vulnerabilities (was 4).
+- **Sign-in limits:** failed logins are limited per account and address (5 per 15 minutes), per account (20) and per address (50); the response is 429 with Retry-After. Forwarded client addresses are trusted only from private and loopback proxies.
+- **Production guards:** the API refuses to start in production with a default, `change-me` or short refresh secret, a default database password, or `*` as an allowed origin. Compose requires `DB_PASSWORD` and `JWT_REFRESH_SECRET`. CORS is now closed by default (`CORS_ALLOWED_ORIGINS`); it previously allowed every origin.
+- **nginx:** security headers were missing on the app's own pages and static files, because each location that set its own header dropped them. A shared snippet now sends them everywhere, adding a Content-Security-Policy and Permissions-Policy. Verified on a real nginx container: no CSP violations on the main screens.
+- **Header:** global search across customers, opportunities, quotes and products, limited to what the user may read (Ctrl/⌘K). The non-functional notification bell and its permanent unread dot were removed.
+- **Test banner:** an optional "Test environment" label on every page (`ENVIRONMENT_LABEL`).
+- **Delivery:** Fulfilment reports dispatched quantities. Marking a delivery Completed while lines are undispatched asks for confirmation; this is a warning, not a block.
+- **Backups:** `scripts/backup.sh` (database plus uploaded documents, verified, 14-day retention) and `scripts/restore.sh` (typed confirmation). Both were tested on a throwaway stack.
+- **Docs:** [test-server runbook](docs/TEST_SERVER_DEPLOY.md). Catalog gap sheet `outputs/catalog-details-to-complete-20261015.xlsx` (30 products) for the client to complete.
+
+**Still needs owner input:**
+- Which quote op2 keeps (QT-2026-0002 or QT-2026-0004).
+- The vendor for "in".
+- Manufacturer and category for 29 products.
+- Server host and domain for HTTPS.
+- VAT/FX and approval policy sign-off.
+- Supplier credits and refunds remain out of scope.
+
+## Previous task — role-based business acceptance
 
 **DONE locally (2026-10-07):** fresh API fixtures and a separate-role browser cycle through accepted quote, existing-stock hold, shortfall PO, partial/damaged receipts, return/replacement, dispatch, active contract and completed delivery. [Report](docs/BUSINESS_ACCEPTANCE.md) and [reconciled final state](docs/business-acceptance-20261007.json).
 
@@ -15,7 +38,7 @@
 - Receiving now uses a validated form. Hold planner selects available units by default; shortage rows remain visible for purchasing. Fixed stale stock detail totals, history lookups, missing expiry display and false stock-ready message.
 - Browser: **5 cameras + 2 recorders dispatched**, 5 fulfilled holds, 3 received POs, 4 GRs, one returned damaged unit, active **CNT-2026-0001 / SAR 1,092.50**, delivery **Completed**. Both stocks and remaining demand reconcile to zero.
 - Verification: full PostgreSQL/race suite **PASS (132.381s)**; **24 frontend tests PASS**; checked build, Go vet and whitespace checks **PASS**.
-- Fresh isolated `business_uat` environment retained for review at `http://127.0.0.1:5179`, API loopback 18109; accounts in ignored `crm-api/tmp/business-uat/LOGIN.txt`. No live records reset/migrated; no deployment, commit or push.
+- Fresh isolated `business_uat` environment (since stopped) used ports 5179/18109; accounts in ignored `crm-api/tmp/business-uat/LOGIN.txt`. No live records reset/migrated. This batch was committed on 2026-10-14.
 - Native Excel file-picker check still requires extension file access/manual verification; exact populated workbook parser and paste import have passed. Whole-project release and owner policy signoff are separate from this functional-cycle acceptance.
 
 ## Previous task — full-cycle acceptance and bulk product template
