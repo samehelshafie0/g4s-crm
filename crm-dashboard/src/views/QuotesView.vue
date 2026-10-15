@@ -222,6 +222,28 @@ function selectCustomer(cust: { id: string; name: string; storeId: string }) {
   newQuoteStep.value = 'opportunity'
 }
 
+// A quote always belongs to an opportunity (or a contract), so a customer with
+// none can get one here without leaving the dialog.
+const newOpp = ref({ open: false, title: '', busy: false, error: '' })
+function startNewOpportunity() {
+  newOpp.value = { open: true, title: `${newQuoteForm.value.customerName} — ${new Date().toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })}`, busy: false, error: '' }
+}
+async function createOpportunityForQuote() {
+  const draft = newOpp.value
+  if (!draft.title.trim() || draft.busy) return
+  draft.busy = true
+  draft.error = ''
+  try {
+    const created = await oppStore.addOpportunity({ title: draft.title.trim(), customerId: newQuoteForm.value.customerStoreId })
+    draft.open = false
+    selectOpportunity(created.id, created.title)
+  } catch (e) {
+    draft.error = errorMessage(e)
+  } finally {
+    draft.busy = false
+  }
+}
+
 function chooseOpportunity(opp: Opportunity) {
   if (opp.currentQuote) { router.push(`/quotes/${opp.currentQuote.id}/builder`); return }
   selectOpportunity(opp.id, opp.title)
@@ -762,6 +784,19 @@ function formatTimestamp(ts: string): string {
                 <Target :size="24" class="text-muted" />
                 <p>No active opportunities for this customer</p>
               </div>
+              <template v-if="auth.can('opportunities:create')">
+                <div v-if="newOpp.open" class="nq-new-opp">
+                  <label class="form-label" for="nq-new-opp-title">New opportunity title</label>
+                  <input id="nq-new-opp-title" v-model="newOpp.title" class="form-input" maxlength="255" @keydown.enter.prevent="createOpportunityForQuote" />
+                  <p v-if="newOpp.error" class="nq-new-opp-error" role="alert">{{ newOpp.error }}</p>
+                  <div class="nq-new-opp-actions">
+                    <button class="btn btn-secondary btn-sm" @click="newOpp.open = false">Cancel</button>
+                    <button class="btn btn-primary btn-sm" :disabled="!newOpp.title.trim() || newOpp.busy" @click="createOpportunityForQuote">{{ newOpp.busy ? 'Creating…' : 'Create and continue' }}</button>
+                  </div>
+                </div>
+                <button v-else class="btn btn-ghost nq-skip-btn" @click="startNewOpportunity">+ New opportunity for {{ newQuoteForm.customerName }}</button>
+              </template>
+              <p v-else-if="!customerOpportunities.length" class="nq-hint">Ask sales to create an opportunity for this customer first; every quote belongs to one.</p>
             </div>
 
             <!-- Step 3: Select Price Book (optional) -->
@@ -1337,6 +1372,10 @@ function formatTimestamp(ts: string): string {
   white-space: nowrap;
 }
 
+.nq-new-opp { display: flex; flex-direction: column; gap: var(--space-2); margin-top: var(--space-3); padding: var(--space-3); border: 1px dashed var(--color-primary); border-radius: var(--radius-md); }
+.nq-new-opp-actions { display: flex; justify-content: flex-end; gap: var(--space-2); }
+.nq-new-opp-error { color: var(--color-danger); font-size: var(--text-sm); }
+.nq-hint { font-size: var(--text-xs); color: var(--color-neutral-500); margin-top: var(--space-2); }
 .nq-skip-btn {
   width: 100%;
   justify-content: center;

@@ -565,6 +565,7 @@ export interface PurchaseOrder extends BaseEntity {
   opportunityTitle?: string
   notes: string
   approvedBy?: string
+  createdByName?: string
   approvedAt?: string
 }
 

@@ -1126,6 +1126,7 @@ function delayHideSQDropdown() { window.setTimeout(() => { showSQItemDropdown.va
           <thead>
             <tr>
               <th>PO #</th>
+              <th>Created</th>
               <th>Supplier</th>
               <th>Status</th>
               <th class="text-center">Items</th>
@@ -1139,6 +1140,7 @@ function delayHideSQDropdown() { window.setTimeout(() => { showSQItemDropdown.va
           <tbody>
             <tr v-for="po in filteredPOs" :key="po.id">
               <td class="text-mono font-bold">{{ po.poNumber }}</td>
+              <td class="text-muted whitespace-nowrap" :title="po.createdByName ? `Created by ${po.createdByName}` : undefined">{{ formatDate(po.createdAt) }}</td>
               <td class="font-medium text-dark">{{ po.supplierName }}</td>
               <td><span :class="['badge badge-dot', statusConfig[po.status].badge]">{{ statusConfig[po.status].label }}</span></td>
               <td class="text-center">{{ po.items.length }}</td>
@@ -1388,6 +1390,10 @@ function delayHideSQDropdown() { window.setTimeout(() => { showSQItemDropdown.va
               <div class="view-info-item">
                 <span class="view-info-label">Currency</span>
                 <span class="view-info-value">{{ viewingPO.currency }}</span>
+              </div>
+              <div class="view-info-item">
+                <span class="view-info-label">Created</span>
+                <span class="view-info-value">{{ formatDate(viewingPO.createdAt) }}{{ viewingPO.createdByName ? ` by ${viewingPO.createdByName}` : '' }}</span>
               </div>
               <div class="view-info-item">
                 <span class="view-info-label">Expected Delivery</span>

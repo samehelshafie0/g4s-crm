@@ -11,11 +11,12 @@ import {
   MessageSquare, Minus, Hash, Zap, FileText, Settings, Copy, MapPin, Clipboard,
   ShoppingCart, Truck, AlertTriangle, PackageCheck, History, DollarSign, TrendingDown, TrendingUp, Check,
 } from 'lucide-vue-next'
-import type { QuoteLineCategory, QuoteStatus, Currency, CustomerSite, FulfilmentSource } from '@/types'
+import type { QuoteLineCategory, QuoteStatus, Currency, CustomerSite, FulfilmentSource, PriceBook } from '@/types'
 import { useProcurementStore } from '@/stores/procurement'
 
 import { quotesService, http, opportunitiesService } from '@/services'
 import type { ApiResponse } from '@/services/http'
+import { allPages } from '@/services/collections'
 import type { BuilderQuote, BuilderInput, QuoteAppendix, QuoteVersion } from '@/services/workflowDtos'
 import { priceBooksService } from '@/services'
 import { errorMessage } from '@/services/payload'
@@ -87,6 +88,8 @@ interface CatalogRecurring {
 }
 
 const productCatalog = reactive<CatalogProduct[]>([])
+// Catalog prices before any price book override, so books can be switched.
+const standardPrices = new Map<string, number>()
 const serviceCatalog = reactive<CatalogService[]>([])
 const recurringCatalog = reactive<CatalogRecurring[]>([])
 
@@ -136,6 +139,57 @@ const showHistory = ref(false)
 // Catalog prices are held in SAR; a USD quote divides by its pinned rate (SAR per USD).
 function toQuoteCurrency(sar: number): number {
   return currency.value === 'SAR' || !fxRate.value ? sar : Math.round((sar / fxRate.value) * 100) / 100
+}
+
+// ── Price book ───────────────────────────────────────────────
+const priceBookId = ref('')
+const priceBooks = ref<PriceBook[]>([])
+const today = new Date().toISOString().slice(0, 10)
+// Books the API accepts for this quote: active, in date, general or this customer's.
+const bookOptions = computed(() => priceBooks.value.filter(b =>
+  b.id === priceBookId.value || (b.isActive && (!b.customerId || b.customerId === customerId.value)
+    && (!b.validFrom || b.validFrom.slice(0, 10) <= today) && (!b.validTo || b.validTo.slice(0, 10) >= today))))
+const priceBookName = computed(() => priceBooks.value.find(b => b.id === priceBookId.value)?.name ?? '')
+
+function catalogPrice(kind: string, id?: string): number | undefined {
+  if (!id) return undefined
+  if (kind === 'product') return productCatalog.find(p => p.id === id)?.unitPrice
+  if (kind === 'service') return serviceCatalog.find(p => p.id === id)?.unitPrice
+  if (kind === 'recurring') return recurringCatalog.find(p => p.id === id)?.monthlyPrice
+  return undefined
+}
+async function applyBookPrices(id: string) {
+  for (const p of productCatalog) p.unitPrice = standardPrices.get(`product:${p.id}`) ?? p.unitPrice
+  for (const p of serviceCatalog) p.unitPrice = standardPrices.get(`service:${p.id}`) ?? p.unitPrice
+  for (const p of recurringCatalog) p.monthlyPrice = standardPrices.get(`recurring:${p.id}`) ?? p.monthlyPrice
+  if (!id) return
+  const book = (await priceBooksService.get(id)).data
+  for (const entry of book.entries) {
+    const kind = entry.kind ?? 'product'
+    if (kind === 'product') { const p = productCatalog.find(x => x.id === entry.productId); if (p) p.unitPrice = entry.customPrice }
+    if (kind === 'service') { const p = serviceCatalog.find(x => x.id === entry.productId); if (p) p.unitPrice = entry.customPrice }
+    if (kind === 'recurring') { const p = recurringCatalog.find(x => x.id === entry.productId); if (p) p.monthlyPrice = entry.customPrice }
+  }
+}
+async function changePriceBook(id: string) {
+  if (locked.value) return
+  try {
+    await applyBookPrices(id)
+    priceBookId.value = id
+  } catch (e) { window.alert(errorMessage(e)); return }
+  // New lines use the book's prices; existing lines change only if asked.
+  const changes = rows.value.flatMap(row => {
+    if (row.rowType !== 'item' || !['product', 'service', 'recurring'].includes(row.source)) return []
+    const price = catalogPrice(row.source, row.productId)
+    if (price === undefined) return []
+    const next = toQuoteCurrency(price)
+    return next !== row.unitPrice ? [{ row, next }] : []
+  })
+  const label = id ? `"${priceBookName.value}"` : 'standard pricing'
+  if (changes.length && window.confirm(`Update the price on ${changes.length} existing line${changes.length === 1 ? '' : 's'} to ${label}?`)) {
+    for (const { row, next } of changes) { row.unitPrice = next; recalcRow(row) }
+  }
+  showSaveToast(`Price book set to ${id ? priceBookName.value : 'standard pricing'} — save the draft to keep it`)
 }
 const fulfilmentOptions: { value: FulfilmentSource; label: string }[] = [
   { value: 'stock', label: 'From stock' },
@@ -630,6 +684,7 @@ function applyQuote(q: BuilderQuote) {
   introductionText.value = q.introductionText; closingText.value = q.closingText; internalNotes.value = q.internalNotes
   purchasingNotes.value = q.purchasingNotes; statementOfWork.value = q.statementOfWork
   soldTo.value = q.soldTo; shipTo.value = q.shipTo
+  priceBookId.value = q.priceBookId ?? ''
   if (!soldTo.value.company) soldTo.value.company = q.customerName
   rows.value = q.lineItems.map(line => ({ ...line, sku: line.sku ?? '', productId: line.productId || line.serviceId || line.recurringServiceId, manufacturer: line.manufacturerName, siteId: line.siteId ?? '', fulfilmentSource: (line.fulfilmentSource ?? '') as FulfilmentSource }))
 }
@@ -649,17 +704,7 @@ async function loadQuote() {
     applyQuote(quote.data)
     void loadVersions()
     void loadJobSites(quote.data)
-    if (quote.data.priceBookId) {
-      const book = (await priceBooksService.get(quote.data.priceBookId)).data
-      for (const entry of book.entries) {
-        const product = productCatalog.find(p => p.id === entry.productId)
-        if (product && (!entry.kind || entry.kind === 'product')) product.unitPrice = entry.customPrice
-        const service = serviceCatalog.find(p => p.id === entry.productId)
-        if (service && entry.kind === 'service') service.unitPrice = entry.customPrice
-        const recurring = recurringCatalog.find(p => p.id === entry.productId)
-        if (recurring && entry.kind === 'recurring') recurring.monthlyPrice = entry.customPrice
-      }
-    }
+    await applyBookPrices(priceBookId.value)
   } catch (error) { window.alert(errorMessage(error)) }
 }
 onMounted(async () => {
@@ -668,6 +713,10 @@ onMounted(async () => {
     productCatalog.push(...catalog.data.data.products)
     serviceCatalog.push(...catalog.data.data.services)
     recurringCatalog.push(...catalog.data.data.recurring)
+    for (const p of productCatalog) standardPrices.set(`product:${p.id}`, p.unitPrice)
+    for (const p of serviceCatalog) standardPrices.set(`service:${p.id}`, p.unitPrice)
+    for (const p of recurringCatalog) standardPrices.set(`recurring:${p.id}`, p.monthlyPrice)
+    if (auth.can('price-books:read')) priceBooks.value = await allPages(priceBooksService.list)
   } catch (error) {
     catalogError.value = 'The product and service catalog could not be loaded: ' + errorMessage(error)
   }
@@ -683,6 +732,7 @@ async function saveDraft(): Promise<boolean> {
   try {
     const payload: BuilderInput = {
       lockVersion: loadedQuote.value.lockVersion, customerId: customerId.value, opportunityId: loadedQuote.value.opportunityId || null,
+      priceBookId: priceBookId.value || null,
       currency: currency.value, validUntil: validUntil.value || null, discountPercent: discountPercent.value, vatPercent: vatPercent.value,
       notes: notes.value, paymentTerms: paymentTerms.value, deliveryTerms: deliveryTerms.value,
       introductionText: introductionText.value, closingText: closingText.value, internalNotes: internalNotes.value,
@@ -913,6 +963,14 @@ function exportExcel() {
         </select>
         <span v-else class="info-value">{{ currency }}</span>
         <span v-if="currency !== 'SAR'" class="text-muted text-xs">1 {{ currency }} = {{ fxRate }} SAR (pinned)</span>
+      </div>
+      <div class="info-field">
+        <label class="info-label" for="quote-price-book">Price book</label>
+        <select v-if="!locked" id="quote-price-book" class="info-select" :value="priceBookId" @change="changePriceBook(($event.target as HTMLSelectElement).value)">
+          <option value="">Standard pricing</option>
+          <option v-for="b in bookOptions" :key="b.id" :value="b.id">{{ b.name }}{{ b.customerId ? ' · customer' : '' }}</option>
+        </select>
+        <span v-else class="info-value">{{ priceBookName || 'Standard pricing' }}</span>
       </div>
       <div class="info-field">
         <label class="info-label">Valid Until</label>
