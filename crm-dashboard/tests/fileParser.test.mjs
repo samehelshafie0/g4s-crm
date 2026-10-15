@@ -4,12 +4,13 @@ import { readFile } from 'node:fs/promises'
 import * as XLSX from 'xlsx'
 import { parseFile, parseExcelFile, parseCSVText, getMappedValue, getMappedNumber } from '../src/utils/fileParser.ts'
 
-test('shipped workbook imports only Products and preserves identifiers and mixed row metadata', async () => {
- const bytes = await readFile(new URL('../public/templates/g4s-product-import.xlsx', import.meta.url))
+test('generated import template imports only Products and preserves identifiers and mixed row metadata', async () => {
+ // Produced by GET /products/import-template; refresh it if the template layout changes.
+ const bytes = await readFile(new URL('./fixtures/product-import-template.xlsx', import.meta.url))
  const empty = await parseExcelFile(new File([bytes], 'g4s-product-import.xlsx'))
- assert.equal(empty.rows.length, 0, 'instructions must never become catalog rows')
+ assert.equal(empty.rows.length, 0, 'instructions and drop-down lists must never become catalog rows')
  const workbook = XLSX.read(bytes, { type: 'buffer' })
- assert.deepEqual(workbook.SheetNames, ['Products', 'Instructions'])
+ assert.deepEqual(workbook.SheetNames, ['Products', 'Instructions', 'Lists'])
  // Fill a disposable in-memory copy of the exact delivered workbook, including a leading-zero SKU.
  XLSX.utils.sheet_add_aoa(workbook.Sheets.Products, [
   ['000123', 'Dome camera', 100, 'Actual Supplier', 'Camera Maker', 'Cameras', 'USD', 3.75, 21],

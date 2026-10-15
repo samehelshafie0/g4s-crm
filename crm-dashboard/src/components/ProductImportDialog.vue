@@ -6,11 +6,12 @@ import { productsService, manufacturersService, exchangeRatesService } from '@/s
 import { pdfExtractService } from '@/services/products.service'
 import { allPages } from '@/services/collections'
 import { errorMessage } from '@/services/payload'
+import { useAuthStore } from '@/stores/auth'
+import { findMissingMasters, matchManufacturers, sameMaster, suggestCode } from '@/services/catalogMasters'
 import {
   parseFile,
   parseCSVText,
   parseRowMatrix,
-  downloadTemplate,
   getMappedValue,
   getMappedNumber,
   getMappedInt,
@@ -167,6 +168,15 @@ function usePastedText() {
   buildDrafts(result)
 }
 
+async function downloadTemplateFile() {
+  error.value = ''
+  try {
+    await productsService.downloadImportTemplate()
+  } catch (e) {
+    error.value = errorMessage(e)
+  }
+}
+
 // ── Import settings ──────────────────────────────────────────
 const manufacturers = ref<Manufacturer[]>([])
 const rates = ref<Record<string, number>>({})
@@ -249,21 +259,72 @@ function money(value: number): string {
 
 const selected = computed(() => drafts.value.filter(d => d.include && d.sku && d.name))
 const unusable = computed(() => drafts.value.filter(d => !d.sku || !d.name || d.unitCost <= 0).length)
+// ── Manufacturers and categories named in the file but not in the catalog ──
+const auth = useAuthStore()
+const canAddMasters = computed(() => auth.can('manufacturers:create') && auth.can('manufacturers:update'))
+const missing = computed(() => findMissingMasters(selected.value, manufacturers.value, settings.value.manufacturerId))
+const hasMissing = computed(() => missing.value.manufacturers.length + missing.value.categories.length > 0)
+
+function isNewManufacturer(row: Draft) {
+  return !!row.manufacturerName && matchManufacturers(manufacturers.value, row.manufacturerName).length === 0
+}
+function rowManufacturer(row: Draft) {
+  if (row.manufacturerName) return matchManufacturers(manufacturers.value, row.manufacturerName)[0]?.name ?? row.manufacturerName
+  return manufacturers.value.find(m => m.id === settings.value.manufacturerId)?.name ?? ''
+}
+function isNewCategory(row: Draft) {
+  if (!row.categoryName) return false
+  const owner = rowManufacturer(row)
+  return missing.value.categories.some(c => sameMaster(c.manufacturer, owner) && sameMaster(c.category, row.categoryName))
+}
+
+const addingMasters = ref(false)
+// Adds the new manufacturers, then the new categories under them, and reloads
+// the lists so the review shows them as matched.
+async function addMissingMasters() {
+  if (!canAddMasters.value || addingMasters.value) return
+  addingMasters.value = true
+  error.value = ''
+  try {
+    const codes = manufacturers.value.map(m => m.code)
+    for (const name of missing.value.manufacturers) {
+      const code = suggestCode(name, codes)
+      codes.push(code)
+      const created = (await manufacturersService.create({ name, code, vendorType: 'manufacturer', isActive: true })).data
+      manufacturers.value.push({ ...created, categories: created.categories ?? [] })
+    }
+    for (const { manufacturer, category } of missing.value.categories) {
+      const owner = matchManufacturers(manufacturers.value, manufacturer)[0]
+      if (!owner) continue
+      const created = (await manufacturersService.addCategory(owner.id, { name: category })).data
+      owner.categories = [...(owner.categories ?? []), created]
+    }
+    manufacturers.value = await allPages(manufacturersService.list)
+  } catch (e) {
+    error.value = errorMessage(e)
+    manufacturers.value = await allPages(manufacturersService.list).catch(() => manufacturers.value)
+  } finally {
+    addingMasters.value = false
+  }
+}
+
 const importIssues = computed(() => selected.value.flatMap(row => {
   const reasons = []
   if (!(row.vendorName || settings.value.vendorName).trim()) reasons.push('vendor missing')
   if (!['SAR', 'USD', 'EUR', 'GBP', 'AED', 'CNY'].includes(rowCurrency(row))) reasons.push('unsupported currency')
   if (!(rowRate(row) > 0)) reasons.push('rate to SAR missing')
   if (!Number.isFinite(row.unitCost) || row.unitCost < 0) reasons.push('invalid cost')
+  if (row.categoryName && !row.manufacturerName && !settings.value.manufacturerId) reasons.push('category needs a manufacturer')
   return reasons.length ? [`${row.sku}: ${reasons.join(', ')}`] : []
 }))
+const blocked = computed(() => importIssues.value.length > 0 || hasMissing.value || missing.value.ambiguous.length > 0)
 
 // ── Import ───────────────────────────────────────────────────
 interface Outcome { sku: string; status: string; reason?: string; landedCostSAR?: number; sellingPrice?: number }
 const result = ref<{ created: number; updated: number; skipped: number; failed: number; rows: Outcome[] } | null>(null)
 
 async function runImport() {
-  if (!selected.value.length || importIssues.value.length) return
+  if (!selected.value.length || blocked.value) return
   busy.value = true
   error.value = ''
   try {
@@ -357,7 +418,7 @@ function close() {
         />
         <div class="imp-alt-actions">
           <button type="button" class="btn btn-sm" :disabled="!pasteText.trim()" @click="usePastedText">Read pasted rows</button>
-          <button type="button" class="btn btn-ghost btn-sm" @click="downloadTemplate('product-catalog')">
+          <button type="button" class="btn btn-ghost btn-sm" @click="downloadTemplateFile">
             <FileSpreadsheet :size="14" /> Download the Excel template
           </button>
         </div>
@@ -403,7 +464,7 @@ function close() {
         <p class="imp-lead">Re-reading replaces edits in the review below.</p>
       </details>
 
-      <p class="imp-lead">File defaults apply to blank row fields. Manufacturer and category names must already exist in Manufacturers. This imports catalog products and prices; inventory is added through receiving.</p>
+      <p class="imp-lead">File defaults apply to blank row fields. Manufacturer and category names are matched to the catalog; new ones are listed below to add before importing. This imports catalog products and prices; inventory is added through receiving.</p>
 
       <div class="imp-grid">
         <label class="imp-field">Default vendor or supplier
@@ -458,7 +519,23 @@ function close() {
         Fill them in below or leave them out.
       </p>
 
+      <div v-if="hasMissing || missing.ambiguous.length" class="imp-masters" role="alert">
+        <p v-if="missing.manufacturers.length"><strong>New manufacturers in this file:</strong> {{ missing.manufacturers.join(', ') }}</p>
+        <p v-if="missing.categories.length"><strong>New categories:</strong> {{ missing.categories.map(c => `${c.manufacturer} › ${c.category}`).join(', ') }}</p>
+        <p v-if="missing.ambiguous.length"><strong>Matches more than one manufacturer:</strong> {{ missing.ambiguous.join(', ') }} — use the manufacturer's code instead.</p>
+        <template v-if="hasMissing">
+          <button v-if="canAddMasters" type="button" class="btn btn-sm btn-primary" :disabled="addingMasters" @click="addMissingMasters">
+            {{ addingMasters ? 'Adding…' : 'Add them to the catalog' }}
+          </button>
+          <p v-else class="imp-masters-hint">Ask an administrator or procurement manager to add them under Manufacturers, or change these rows to existing names.</p>
+          <p class="imp-masters-hint">Check the spelling first: a near-duplicate of an existing manufacturer should be corrected in the row instead.</p>
+        </template>
+      </div>
+
       <p v-if="importIssues.length" class="imp-note" role="alert">{{ importIssues.slice(0, 5).join(' · ') }}</p>
+      <datalist id="imp-manufacturers">
+        <option v-for="m in manufacturers" :key="m.id" :value="m.name" />
+      </datalist>
       <div class="table-container imp-table">
         <table class="table">
           <thead>
@@ -478,8 +555,8 @@ function close() {
               <td><input v-model.trim="row.sku" :aria-label="`Part number for row ${index + 1}`" class="input form-input imp-cell imp-cell--sku" maxlength="100" /></td>
               <td><input v-model.trim="row.name" :aria-label="`Description for ${row.sku}`" class="input form-input imp-cell" maxlength="255" /></td>
               <td><input v-model.trim="row.vendorName" :aria-label="`Vendor for ${row.sku}`" class="input form-input imp-cell" :placeholder="settings.vendorName || 'Required'" /></td>
-              <td><input v-model.trim="row.manufacturerName" :aria-label="`Manufacturer for ${row.sku}`" class="input form-input imp-cell" placeholder="File default" /></td>
-              <td><input v-model.trim="row.categoryName" :aria-label="`Category for ${row.sku}`" class="input form-input imp-cell" placeholder="File default" /></td>
+              <td><input v-model.trim="row.manufacturerName" :aria-label="`Manufacturer for ${row.sku}`" list="imp-manufacturers" class="input form-input imp-cell" :class="{ 'imp-cell--new': isNewManufacturer(row) }" :title="isNewManufacturer(row) ? 'Not in the catalog yet' : undefined" placeholder="File default" /></td>
+              <td><input v-model.trim="row.categoryName" :aria-label="`Category for ${row.sku}`" class="input form-input imp-cell" :class="{ 'imp-cell--new': isNewCategory(row) }" :title="isNewCategory(row) ? 'Not in the catalog yet' : undefined" placeholder="File default" /></td>
               <td><select v-model="row.currency" :aria-label="`Currency for ${row.sku}`" class="select form-select imp-cell"><option value="">{{ settings.originCurrency }} (default)</option><option v-for="cur in ['SAR', 'USD', 'EUR', 'GBP', 'AED', 'CNY']" :key="cur">{{ cur }}</option></select></td>
               <td><input v-model.number="row.fxRate" :aria-label="`Rate to SAR for ${row.sku}`" class="input form-input imp-cell" type="number" min="0.000001" step="0.000001" :disabled="rowCurrency(row) === 'SAR'" :placeholder="String(rowRate(row) || 'Required')" /></td>
               <td><input v-model.number="row.unitCost" :aria-label="`Unit cost for ${row.sku}`" class="input form-input imp-cell imp-cell--num" type="number" min="0" step="0.01" /></td>
@@ -511,7 +588,7 @@ function close() {
 
     <template #footer>
       <button v-if="step !== 'done'" type="button" class="btn" :disabled="busy" @click="close">Cancel</button>
-      <button v-if="step === 'review'" type="button" class="btn btn-primary" :disabled="busy || !selected.length || !!importIssues.length" @click="runImport">
+      <button v-if="step === 'review'" type="button" class="btn btn-primary" :disabled="busy || !selected.length || blocked" @click="runImport">
         {{ busy ? 'Importing…' : `Import ${selected.length} product${selected.length === 1 ? '' : 's'}` }}
       </button>
       <button v-if="step === 'done'" type="button" class="btn" @click="reset">Import another file</button>
@@ -552,6 +629,9 @@ function close() {
 .imp-cell { width: 100%; min-width: 90px; font-size: var(--text-xs); padding: 4px 6px; }
 .imp-cell--sku { font-family: var(--font-mono); min-width: 130px; }
 .imp-cell--num { max-width: 110px; text-align: right; }
+.imp-cell--new { border-color: var(--color-warning); background: var(--color-warning-light); }
+.imp-masters { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-2); font-size: var(--text-sm); background: var(--color-warning-light); border: 1px solid var(--color-warning); padding: var(--space-3); border-radius: var(--radius-md); }
+.imp-masters-hint { font-size: var(--text-xs); color: var(--color-neutral-600); }
 .imp-row--off { opacity: 0.45; }
 .num { font-variant-numeric: tabular-nums; }
 .imp-reason { font-size: var(--text-xs); color: var(--color-neutral-500); }

@@ -39,6 +39,16 @@ export const pdfExtractService = {
 }
 
 export const productsService = {
+  // The workbook is built from the live catalog, so its manufacturer and
+  // category drop-downs match what the import accepts.
+  downloadImportTemplate: async () => {
+    const res = await http.get<Blob>('/products/import-template', { responseType: 'blob' })
+    const disposition = String(res.headers['content-disposition'] ?? '')
+    const name = /filename="([^"]+)"/.exec(disposition)?.[1] ?? 'g4s-product-import.xlsx'
+    const url = URL.createObjectURL(res.data)
+    const link = document.createElement('a'); link.href = url; link.download = name; link.click()
+    setTimeout(() => URL.revokeObjectURL(url), 1000)
+  },
   importProducts: (data: ProductImportRequest) =>
     http.post<ApiResponse<ProductImportResult>>('/products/import', data, { timeout: 120_000 }).then(r => r.data),
   documents: (id: string) => http.get<ApiResponse<ProductDocument[]>>(`/products/${id}/documents`).then(r => r.data),

@@ -10,17 +10,18 @@ import {
   Minus, DollarSign, ExternalLink, Download, FileUp, Check, AlertTriangle,
   Table2, FileSpreadsheet, RefreshCw,
 } from 'lucide-vue-next'
-import { parseFile, parseCSVText, downloadTemplate, getMappedValue, getMappedNumber, getMappedInt, type FileType, type ParseResult } from '@/utils/fileParser'
+import { parseFile, parseCSVText, getMappedValue, getMappedNumber, getMappedInt, type FileType, type ParseResult } from '@/utils/fileParser'
 import ProductImportDialog from '@/components/ProductImportDialog.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useProcurementStore } from '@/stores/procurement'
 import { useProductsStore } from '@/stores/products'
 import { useManufacturersStore } from '@/stores/manufacturers'
 import type {
-  Product, ProductType, Currency, ManufacturerCategory,
+  Product, ProductType, Currency, ManufacturerCategory, VendorType,
   ProductVendorEntry, ProductPriceRecord, ProductDocument, ProductDocType, PriceSource,
   SupplierItemEntry,
 } from '@/types'
+import { matchManufacturers, sameMaster, suggestCode } from '@/services/catalogMasters'
 
 const procStore = useProcurementStore()
 const productsStore = useProductsStore()
@@ -127,6 +128,73 @@ const availableCategories = computed(() => { const m = mfrList.find(x => x.id ==
 watch(() => form.value.manufacturerId, () => {
   if (!availableCategories.value.some(category => category.id === form.value.categoryId)) form.value.categoryId = ''
 })
+
+// ── Adding a manufacturer or category without leaving the product form ──
+const NEW = '__new__'
+const canAddMasters = computed(() => auth.can('manufacturers:create') && auth.can('manufacturers:update'))
+const newMfr = ref({ open: false, name: '', code: '', codeEdited: false, vendorType: 'manufacturer' as VendorType, busy: false, error: '' })
+const newCat = ref({ open: false, name: '', busy: false, error: '' })
+
+watch(() => form.value.manufacturerId, id => {
+  if (id !== NEW) return
+  form.value.manufacturerId = ''
+  newMfr.value = { open: true, name: '', code: '', codeEdited: false, vendorType: 'manufacturer', busy: false, error: '' }
+})
+watch(() => form.value.categoryId, id => {
+  if (id !== NEW) return
+  form.value.categoryId = ''
+  newCat.value = { open: true, name: '', busy: false, error: '' }
+})
+watch(() => newMfr.value.name, name => {
+  if (!newMfr.value.codeEdited) newMfr.value.code = name.trim() ? suggestCode(name, mfrList.map(m => m.code)) : ''
+})
+
+async function saveNewManufacturer() {
+  const draft = newMfr.value
+  const name = draft.name.trim()
+  if (!name || !draft.code.trim() || draft.busy) return
+  const existing = matchManufacturers(mfrList, name)[0]
+  if (existing) { draft.error = `${existing.name} already exists — pick it from the list.`; return }
+  draft.busy = true
+  draft.error = ''
+  try {
+    const created = (await manufacturersService.create({ name, code: draft.code.trim().toUpperCase(), vendorType: draft.vendorType, isActive: true })).data
+    mfrList.push({ id: created.id, name: created.name, code: created.code, categories: [] })
+    form.value.manufacturerId = created.id
+    draft.open = false
+    // A new manufacturer has no categories yet, and a product needs one.
+    newCat.value = { open: true, name: '', busy: false, error: '' }
+  } catch (e) {
+    draft.error = errorMessage(e)
+  } finally {
+    draft.busy = false
+  }
+}
+
+async function saveNewCategory() {
+  const draft = newCat.value
+  const name = draft.name.trim()
+  const owner = mfr(form.value.manufacturerId)
+  if (!name || !owner || draft.busy) return
+  const existing = owner.categories.find(c => sameMaster(c.name, name))
+  if (existing) { form.value.categoryId = existing.id; draft.open = false; return }
+  draft.busy = true
+  draft.error = ''
+  try {
+    const created = (await manufacturersService.addCategory(owner.id, { name })).data
+    owner.categories.push(created)
+    form.value.categoryId = created.id
+    draft.open = false
+  } catch (e) {
+    draft.error = errorMessage(e)
+  } finally {
+    draft.busy = false
+  }
+}
+
+async function downloadTemplateFile() {
+  try { await productsService.downloadImportTemplate() } catch (e) { window.alert(errorMessage(e)) }
+}
 const costInSAR = computed(() => form.value.unitCostOrigin * form.value.fxRate)
 const landedCostSAR = computed(() => calcLanded(form.value.unitCostOrigin, form.value.productType === 'local' ? 1 : form.value.fxRate, form.value.freightPercent, form.value.customsPercent, form.value.clearancePercent))
 const sellingPrice = computed(() => calcSelling(landedCostSAR.value, form.value.targetMarginPercent))
@@ -559,7 +627,7 @@ async function savePrice() {
                 <span class="cat-type-badge"><FileSpreadsheet :size="12" /> Excel</span>
                 <span class="cat-type-badge"><FileText :size="12" /> PDF</span>
               </div>
-              <button class="btn-download-template" @click.stop="downloadTemplate('product-catalog')"><Download :size="12" /> Download Excel Template</button>
+              <button class="btn-download-template" @click.stop="downloadTemplateFile"><Download :size="12" /> Download Excel Template</button>
             </div>
             <div v-else class="cat-upload-selected">
               <Check :size="18" class="text-success" />
@@ -583,7 +651,7 @@ async function savePrice() {
           <div v-if="catalogFileName && !catalogParsing && catalogPreviewRows.length === 0 && !catalogParseError" class="cat-pdf-section">
             <div class="cat-pdf-notice">
               <AlertTriangle :size="16" />
-              <span>Could not extract structured data. Try pasting the content below, or <a href="#" class="fallback-template-link" @click.prevent.stop="downloadTemplate('product-catalog')">download our Excel template</a> and re-upload.</span>
+              <span>Could not extract structured data. Try pasting the content below, or <a href="#" class="fallback-template-link" @click.prevent.stop="downloadTemplateFile">download our Excel template</a> and re-upload.</span>
             </div>
             <textarea v-model="catalogPasteText" class="form-input cat-paste-area" placeholder="Paste table data here (tab-separated or comma-separated)&#10;&#10;Example:&#10;SKU, Description, Price, MOQ&#10;CAM-001, IP Camera 4MP, 245.00, 10&#10;CAM-002, IP Camera 8MP, 385.00, 5" rows="8"></textarea>
             <button class="btn btn-primary btn-sm" :disabled="!catalogPasteText.trim()" @click="parsePastedText" style="margin-top:8px"><Table2 :size="14" /> Parse Pasted Data</button>
@@ -665,7 +733,41 @@ async function savePrice() {
             <h4 class="section-title mb-4">Basic Information</h4>
             <div class="form-row"><div class="form-group"><label class="form-label">SKU <span class="required">*</span></label><input v-model="form.sku" type="text" class="form-input text-mono" placeholder="e.g. HIK-DS2CD2143" /></div><div class="form-group"><label class="form-label">Product Name <span class="required">*</span></label><input v-model="form.name" type="text" class="form-input" placeholder="Product name" /></div></div>
             <div class="form-group"><label class="form-label">Description</label><textarea v-model="form.description" class="form-textarea" rows="2" placeholder="Brief product description..." /></div>
-            <div class="form-row"><div class="form-group"><label class="form-label">Manufacturer <span class="required">*</span></label><select v-model="form.manufacturerId" class="form-select"><option value="" disabled>Select manufacturer</option><option v-for="m in mfrList" :key="m.id" :value="m.id">{{ m.name }}</option></select></div><div class="form-group"><label class="form-label">Category <span class="required">*</span></label><select v-model="form.categoryId" class="form-select" :disabled="!form.manufacturerId"><option value="" disabled>{{ form.manufacturerId ? 'Select category' : 'Select manufacturer first' }}</option><option v-for="c in availableCategories" :key="c.id" :value="c.id">{{ c.name }}</option></select></div></div>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label" for="product-manufacturer">Manufacturer <span class="required">*</span></label>
+                <select id="product-manufacturer" v-model="form.manufacturerId" class="form-select">
+                  <option value="" disabled>Select manufacturer</option>
+                  <option v-for="m in mfrList" :key="m.id" :value="m.id">{{ m.name }}</option>
+                  <option v-if="canAddMasters" :value="NEW">+ Add new manufacturer…</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="product-category">Category <span class="required">*</span></label>
+                <select id="product-category" v-model="form.categoryId" class="form-select" :disabled="!form.manufacturerId">
+                  <option value="" disabled>{{ form.manufacturerId ? (availableCategories.length ? 'Select category' : 'No categories yet') : 'Select manufacturer first' }}</option>
+                  <option v-for="c in availableCategories" :key="c.id" :value="c.id">{{ c.name }}</option>
+                  <option v-if="canAddMasters && form.manufacturerId" :value="NEW">+ Add new category…</option>
+                </select>
+              </div>
+            </div>
+            <p v-if="!canAddMasters" class="master-hint">Manufacturer or category not listed? Ask an administrator or procurement manager to add it under Manufacturers.</p>
+            <div v-if="newMfr.open" class="master-inline">
+              <p class="master-inline-title">New manufacturer</p>
+              <div class="form-row">
+                <div class="form-group"><label class="form-label" for="new-mfr-name">Name <span class="required">*</span></label><input id="new-mfr-name" v-model="newMfr.name" class="form-input" maxlength="255" placeholder="e.g. Bosch Security Systems" @keydown.enter.prevent="saveNewManufacturer" /></div>
+                <div class="form-group"><label class="form-label" for="new-mfr-code">Code <span class="required">*</span></label><input id="new-mfr-code" v-model="newMfr.code" class="form-input text-mono" maxlength="50" @input="newMfr.codeEdited = true" /></div>
+                <div class="form-group"><label class="form-label" for="new-mfr-type">Type</label><select id="new-mfr-type" v-model="newMfr.vendorType" class="form-select"><option value="manufacturer">Manufacturer</option><option value="both">Manufacturer and supplier</option><option value="supplier">Supplier</option></select></div>
+              </div>
+              <p v-if="newMfr.error" class="master-error" role="alert">{{ newMfr.error }}</p>
+              <div class="master-inline-actions"><button type="button" class="btn btn-secondary btn-sm" @click="newMfr.open = false">Cancel</button><button type="button" class="btn btn-primary btn-sm" :disabled="!newMfr.name.trim() || !newMfr.code.trim() || newMfr.busy" @click="saveNewManufacturer">{{ newMfr.busy ? 'Adding…' : 'Add manufacturer' }}</button></div>
+            </div>
+            <div v-if="newCat.open && form.manufacturerId" class="master-inline">
+              <p class="master-inline-title">New category for {{ mfr(form.manufacturerId)?.name }}</p>
+              <div class="form-group"><label class="form-label" for="new-cat-name">Category name <span class="required">*</span></label><input id="new-cat-name" v-model="newCat.name" class="form-input" maxlength="255" placeholder="e.g. IP Cameras" @keydown.enter.prevent="saveNewCategory" /></div>
+              <p v-if="newCat.error" class="master-error" role="alert">{{ newCat.error }}</p>
+              <div class="master-inline-actions"><button type="button" class="btn btn-secondary btn-sm" @click="newCat.open = false">Cancel</button><button type="button" class="btn btn-primary btn-sm" :disabled="!newCat.name.trim() || newCat.busy" @click="saveNewCategory">{{ newCat.busy ? 'Adding…' : 'Add category' }}</button></div>
+            </div>
             <div class="divider" />
             <h4 class="section-title mb-4"><Calculator :size="16" style="vertical-align:-2px" /> Pricing</h4>
             <div class="form-group"><label class="form-label">Product Type</label><div class="flex gap-4 mt-1"><label class="form-radio"><input v-model="form.productType" type="radio" @change="changeProductType" value="import" /> Import</label><label class="form-radio"><input v-model="form.productType" type="radio" @change="changeProductType" value="local" /> Local</label></div></div>
@@ -691,6 +793,11 @@ async function savePrice() {
 </template>
 
 <style scoped>
+.master-hint { font-size: var(--text-xs); color: var(--color-neutral-500); margin: calc(-1 * var(--space-2)) 0 var(--space-3); }
+.master-inline { border: 1px dashed var(--color-primary); border-radius: var(--radius-md); padding: var(--space-3); margin-bottom: var(--space-4); background: var(--color-neutral-50); }
+.master-inline-title { font-weight: 600; font-size: var(--text-sm); margin-bottom: var(--space-2); }
+.master-inline-actions { display: flex; justify-content: flex-end; gap: var(--space-2); }
+.master-error { color: var(--color-danger); font-size: var(--text-sm); margin-bottom: var(--space-2); }
 .page-header-actions { display: flex; gap: var(--space-2); flex-wrap: wrap; }
 
 .products-page { padding: var(--space-6); }
