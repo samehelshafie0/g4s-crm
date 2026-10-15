@@ -142,6 +142,7 @@ export interface FulfilmentLine {
   quantity: number
   source: FulfilmentSource | 'unassigned'
   reserved: number
+  dispatched: number
   ordered: number
   received: number
   damaged: number

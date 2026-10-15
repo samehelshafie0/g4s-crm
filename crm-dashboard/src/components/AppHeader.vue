@@ -3,8 +3,6 @@ import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   Menu,
-  Search,
-  Bell,
   Settings,
   User,
   ChevronDown,
@@ -15,6 +13,7 @@ import {
 } from 'lucide-vue-next'
 import { useTheme } from '@/composables/useTheme'
 import { useAuthStore } from '@/stores/auth'
+import GlobalSearch from '@/components/GlobalSearch.vue'
 
 defineProps<{
   title: string
@@ -30,7 +29,6 @@ const authStore = useAuthStore()
 const router = useRouter()
 
 const showProfileMenu = ref(false)
-const searchQuery = ref('')
 
 async function handleLogout() {
   showProfileMenu.value = false
@@ -51,16 +49,7 @@ async function handleLogout() {
     </div>
 
     <div class="header-center">
-      <div class="header-search">
-        <Search :size="16" class="search-icon" />
-        <input
-          v-model="searchQuery"
-          type="text"
-          placeholder="Search customers, quotes, products..."
-          class="search-input"
-        />
-        <kbd class="search-kbd">⌘K</kbd>
-      </div>
+      <GlobalSearch />
     </div>
 
     <div class="header-right">
@@ -68,11 +57,6 @@ async function handleLogout() {
         <Sun v-if="mode === 'light'" :size="20" />
         <Moon v-else-if="mode === 'dark'" :size="20" />
         <Monitor v-else :size="20" />
-      </button>
-
-      <button class="btn btn-ghost btn-icon notification-btn">
-        <Bell :size="20" />
-        <span class="notification-dot" />
       </button>
 
       <button class="btn btn-ghost btn-icon" aria-label="My profile settings" @click="router.push('/profile')">
@@ -138,55 +122,6 @@ async function handleLogout() {
   max-width: 480px;
 }
 
-.header-search {
-  position: relative;
-  display: flex;
-  align-items: center;
-}
-
-.header-search .search-icon {
-  position: absolute;
-  left: 12px;
-  color: var(--color-neutral-400);
-  pointer-events: none;
-}
-
-.search-input {
-  width: 100%;
-  height: 38px;
-  padding: 0 44px 0 36px;
-  border: 1px solid var(--color-neutral-200);
-  border-radius: var(--radius-md);
-  font-size: var(--text-sm);
-  background: var(--color-neutral-50);
-  color: var(--color-neutral-800);
-  outline: none;
-  transition: all var(--transition-fast);
-}
-
-.search-input:focus {
-  background: var(--content-surface);
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px var(--color-primary-200);
-}
-
-.search-input::placeholder {
-  color: var(--color-neutral-400);
-}
-
-.search-kbd {
-  position: absolute;
-  right: 8px;
-  padding: 2px 6px;
-  font-size: 0.625rem;
-  font-family: inherit;
-  background: var(--content-surface);
-  border: 1px solid var(--color-neutral-200);
-  border-radius: 4px;
-  color: var(--color-neutral-400);
-  pointer-events: none;
-}
-
 .header-right {
   display: flex;
   align-items: center;
@@ -196,21 +131,6 @@ async function handleLogout() {
 
 .theme-toggle {
   position: relative;
-}
-
-.notification-btn {
-  position: relative;
-}
-
-.notification-dot {
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  width: 8px;
-  height: 8px;
-  background: var(--color-danger);
-  border-radius: 50%;
-  border: 2px solid var(--content-surface);
 }
 
 .profile-menu {
@@ -299,7 +219,7 @@ async function handleLogout() {
   .header-left { flex: 1; min-width: 0; gap: var(--space-2); }
   .header-title-section { min-width: 0; }
   .header-title { font-size: var(--text-base); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .header-center, .profile-info, .notification-btn, [aria-label="My profile settings"] { display: none; }
+  .header-center, .profile-info, [aria-label="My profile settings"] { display: none; }
   .profile-menu { padding-inline: var(--space-1); }
   .header-right { gap: 0; }
 }

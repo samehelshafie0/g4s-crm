@@ -245,6 +245,13 @@ func testFullCycle(t *testing.T, db *gorm.DB, r *gin.Engine, token string) {
 				t.Fatal("dispatched demand reappeared", finalDemand)
 			}
 		}
+		dispatched := call("GET", "/opportunities/"+oppID+"/fulfilment", nil, 200)
+		for _, raw := range dispatched["lines"].([]any) {
+			line := raw.(map[string]any)
+			if line["source"] != "service" && line["dispatched"].(float64) < line["quantity"].(float64) {
+				t.Fatal("fulfilment does not report the dispatched quantity", line)
+			}
+		}
 
 		contract := call("POST", "/quotes/"+qID+"/convert-to-contract", m("title", "Cycle sales contract", "type", "sales", "startDate", "2026-10-07", "endDate", "2027-10-07"), 201)
 		call("PATCH", "/contracts/"+contract["id"].(string)+"/activate", m(), 200)

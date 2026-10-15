@@ -150,6 +150,7 @@ type fulfilmentLine struct {
 	Quantity        float64       `json:"quantity"`
 	Source          string        `json:"source"`
 	Reserved        int           `json:"reserved"`
+	Dispatched      int           `json:"dispatched"`
 	Ordered         int           `json:"ordered"`
 	Received        int           `json:"received"`
 	Damaged         int           `json:"damaged"`
@@ -211,6 +212,10 @@ func (h *OpportunityHandler) Fulfilment(c *gin.Context) {
 			line.Source = "unassigned"
 		}
 		if err := h.db.Model(&models.StockReservation{}).Where("quote_line_item_id = ? AND status IN ('active', 'fulfilled')", item.ID).Select("COALESCE(SUM(qty), 0)").Scan(&line.Reserved).Error; err != nil {
+			apiError(c, err)
+			return
+		}
+		if err := h.db.Model(&models.StockReservation{}).Where("quote_line_item_id = ? AND status = 'fulfilled'", item.ID).Select("COALESCE(SUM(qty), 0)").Scan(&line.Dispatched).Error; err != nil {
 			apiError(c, err)
 			return
 		}

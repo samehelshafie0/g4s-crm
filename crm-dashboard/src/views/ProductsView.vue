@@ -3,6 +3,7 @@ import { productsService, manufacturersService, documentsService } from '@/servi
 import { allPages } from '@/services/collections'
 import { errorMessage } from '@/services/payload'
 import { ref, computed, watch, onMounted, reactive } from 'vue'
+import { useRoute } from 'vue-router'
 import {
   Plus, Search, Pencil, Trash2, X, Package, Calculator, Eye,
   Building2, History, FileText, Upload, TrendingUp, TrendingDown,
@@ -28,7 +29,7 @@ const auth = useAuthStore()
 const showImportDialog = ref(false)
 async function onImported() { products.value = await allPages(productsService.list) }
 
-onMounted(async () => { try { const [items, manufacturers] = await Promise.all([allPages(productsService.list), allPages(manufacturersService.list)]); products.value = items; mfrList.push(...manufacturers) } catch (e) { window.alert(errorMessage(e)) } })
+onMounted(async () => { try { const [items, manufacturers] = await Promise.all([allPages(productsService.list), allPages(manufacturersService.list)]); products.value = items; mfrList.push(...manufacturers); openFromRoute() } catch (e) { window.alert(errorMessage(e)) } })
 
 function uid(): string { return Math.random().toString(36).slice(2, 11) }
 
@@ -168,6 +169,14 @@ const detailProduct = ref<Product | null>(null)
 type DetailTab = 'overview' | 'vendors' | 'price-history' | 'documents'
 const detailTab = ref<DetailTab>('overview')
 
+const route = useRoute()
+// Global search links here with ?open=<product id>.
+function openFromRoute() {
+  const id = route.query.open
+  const product = typeof id === 'string' ? products.value.find(p => p.id === id) : undefined
+  if (product) void openDetail(product)
+}
+watch(() => route.query.open, openFromRoute)
 async function openDetail(p: Product) { detailProduct.value = p; detailTab.value = 'overview'; showDetailModal.value = true; await refreshDetail() }
 async function refreshDetail() {
  if (!detailProduct.value) return

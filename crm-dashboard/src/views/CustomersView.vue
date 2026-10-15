@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { errorMessage } from '@/services/payload'
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import {
   Plus,
   Search,
@@ -51,9 +52,18 @@ const form = ref(defaultForm())
 const customers = computed(() => customerStore.customers)
 const loading = computed(() => customerStore.loading)
 
-onMounted(() => {
-  customerStore.fetchCustomers()
+const route = useRoute()
+// Global search links here with ?open=<customer id>.
+function openFromRoute() {
+  const id = route.query.open
+  const customer = typeof id === 'string' ? customers.value.find(c => c.id === id) : undefined
+  if (customer) openViewModal(customer)
+}
+onMounted(async () => {
+  await customerStore.fetchCustomers()
+  openFromRoute()
 })
+watch(() => route.query.open, openFromRoute)
 
 const sectorOptions: { value: Sector; label: string }[] = [
   { value: 'government', label: 'Government' },

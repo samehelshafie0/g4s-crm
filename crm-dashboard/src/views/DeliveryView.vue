@@ -95,8 +95,23 @@ function openEdit(o: Opportunity) {
   }
 }
 
+// Completing a job is the operator's call, but not silently while quoted items
+// are still undispatched.
+async function confirmCompletion(job: Opportunity): Promise<boolean> {
+  try {
+    const { lines } = (await opportunitiesService.fulfilment(job.id)).data
+    const open = lines.filter((l) => l.source !== 'service' && l.dispatched < Math.ceil(l.quantity))
+    if (!open.length) return true
+    const list = open.map((l) => `• ${l.sku || l.description}: ${l.dispatched} of ${Math.ceil(l.quantity)} dispatched`).join('\n')
+    return window.confirm(`${open.length} line(s) of ${job.title} are not fully dispatched:\n\n${list}\n\nMark the delivery completed anyway?`)
+  } catch {
+    return window.confirm('Dispatch status could not be checked. Mark the delivery completed anyway?')
+  }
+}
+
 async function save() {
   if (!editing.value) return
+  if (form.value.deliveryStatus === 'completed' && editing.value.deliveryStatus !== 'completed' && !(await confirmCompletion(editing.value))) return
   saving.value = true
   error.value = ''
   try {
