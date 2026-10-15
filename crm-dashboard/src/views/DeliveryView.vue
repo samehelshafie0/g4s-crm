@@ -178,7 +178,7 @@ async function save() {
         <tbody>
           <tr v-if="loading"><td colspan="10" class="text-muted">Loading…</td></tr>
           <tr v-for="o in filtered" :key="o.id">
-            <td class="font-semibold"><a href="#" class="row-link" @click.prevent="router.push(`/opportunities/${o.id}`)">{{ o.title }}</a></td>
+            <td class="font-semibold"><a href="#" class="row-link" @click.prevent="router.push(`/opportunities/${o.id}`)">{{ o.title }}</a><div class="text-xs text-muted text-mono">{{ o.opportunityNumber }}</div></td>
             <td>{{ o.customerName }}</td>
             <td class="text-mono">{{ o.currentQuote ? `${o.currentQuote.quoteNumber} v${o.currentQuote.version}` : '—' }}</td>
             <td><span class="badge badge-dot" :class="statusInfo(o.deliveryStatus)?.badge">{{ statusInfo(o.deliveryStatus)?.label ?? '—' }}</span></td>

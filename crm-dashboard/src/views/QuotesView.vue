@@ -303,7 +303,8 @@ function openNewQuoteFromOpp(oppId: string) {
 
 function oppTitle(q: Quote): string {
   if (q.contractId) return 'Contract quote'
-  return oppStore.opportunities.find(o => o.id === q.opportunityId)?.title ?? '—'
+  const opp = oppStore.opportunities.find(o => o.id === q.opportunityId)
+  return opp ? `${opp.opportunityNumber} · ${opp.title}` : '—'
 }
 
 function openBuilder(quoteId: string) {
@@ -772,7 +773,7 @@ function formatTimestamp(ts: string): string {
                 <button v-for="opp in customerOpportunities" :key="opp.id" class="nq-list-item" @click="chooseOpportunity(opp)">
                   <div class="nq-list-icon nq-list-icon--opp"><Target :size="16" /></div>
                   <div class="nq-list-info">
-                    <span class="nq-list-name">{{ opp.title }}</span>
+                    <span class="nq-list-name"><span class="text-mono text-muted">{{ opp.opportunityNumber }}</span> {{ opp.title }}</span>
                     <span class="nq-list-meta">
                       {{ opp.stage.replace('-', ' ') }} · SAR {{ (opp.estimatedValue / 1000).toFixed(0) }}K · {{ opp.currentQuote ? `open ${opp.currentQuote.quoteNumber} v${opp.currentQuote.version}` : 'no quote yet' }}
                     </span>

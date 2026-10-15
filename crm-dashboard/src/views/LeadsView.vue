@@ -72,7 +72,7 @@ const customers = ref<{id: string; name: string}[]>([])
 const salesTeam = ref<{id: string; name: string}[]>([])
 const preSales = ref<{id: string; name: string}[]>([])
 
-type OppForm = Omit<Opportunity, 'id' | 'createdAt' | 'updatedAt' | 'estimatedMargin' | 'quoteIds' | 'sites'> & { siteIds: string[] }
+type OppForm = Omit<Opportunity, 'id' | 'createdAt' | 'updatedAt' | 'estimatedMargin' | 'quoteIds' | 'sites' | 'opportunityNumber'> & { siteIds: string[] }
 const defaultForm = (): OppForm => ({
   title: '',
   customerId: '',
@@ -366,6 +366,7 @@ function probClass(prob: number): string {
         </div>
         <div class="pipeline-column-body">
           <div v-for="opp in col.items" :key="opp.id" class="pipeline-card card card-clickable" @click="openOpportunity(opp)">
+            <div class="pipeline-card-number">{{ opp.opportunityNumber }}</div>
             <div class="pipeline-card-title">{{ opp.title }}</div>
             <div class="pipeline-card-customer">{{ opp.customerName }}</div>
             <div class="pipeline-card-meta">
@@ -553,6 +554,7 @@ function probClass(prob: number): string {
 </template>
 
 <style scoped>
+.pipeline-card-number { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-neutral-500); }
 .row-link { color: inherit; text-decoration: none; }
 .row-link:hover { text-decoration: underline; }
 .leads-view {

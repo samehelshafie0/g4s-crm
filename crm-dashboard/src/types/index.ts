@@ -82,6 +82,8 @@ export type ServiceType =
   | 'consulting'
 
 export interface Opportunity extends BaseEntity {
+  /** OPP-2026-0034; the job's quote shares the digits (QT-2026-0034). */
+  opportunityNumber: string
   title: string
   customerId: string
   customerName: string

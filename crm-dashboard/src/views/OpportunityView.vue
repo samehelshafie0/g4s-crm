@@ -120,7 +120,7 @@ function openQuote() {
     <template v-if="opp">
       <div class="page-header">
         <div>
-          <h1 class="page-header-title">{{ opp.title }}</h1>
+          <h1 class="page-header-title"><span class="opp-number">{{ opp.opportunityNumber }}</span> {{ opp.title }}</h1>
           <p class="page-header-subtitle">
             {{ opp.customerName }}
             <span class="badge badge-dot" :class="stageBadge[opp.stage]">{{ stageLabel[opp.stage] }}</span>
@@ -261,6 +261,7 @@ function openQuote() {
 </template>
 
 <style scoped>
+.opp-number { font-family: var(--font-mono); font-size: 0.7em; color: var(--color-neutral-500); margin-right: var(--space-2); vertical-align: middle; }
 .opp-page { padding: var(--space-6); }
 .back { margin-bottom: var(--space-3); }
 .head-actions { display: flex; gap: var(--space-2); }

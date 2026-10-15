@@ -23,7 +23,7 @@ const sources = computed(() => [
   auth.can('customers:read') && (async (q: string): Promise<Hit[]> =>
     (await customersService.list({ q, limit: 5 })).data.map(c => ({ key: `c${c.id}`, group: 'Customers', label: c.companyName, detail: [c.region, c.sector].filter(Boolean).join(' · '), to: `/customers?open=${c.id}` }))),
   auth.can('opportunities:read') && (async (q: string): Promise<Hit[]> =>
-    (await opportunitiesService.list({ q, limit: 5 })).data.map(o => ({ key: `o${o.id}`, group: 'Opportunities', label: o.title, detail: o.customerName, to: `/opportunities/${o.id}` }))),
+    (await opportunitiesService.list({ q, limit: 5 })).data.map(o => ({ key: `o${o.id}`, group: 'Opportunities', label: `${o.opportunityNumber} · ${o.title}`, detail: o.customerName, to: `/opportunities/${o.id}` }))),
   auth.can('quotes:read') && (async (q: string): Promise<Hit[]> =>
     (await quotesService.list({ q, limit: 5 })).data.map(qt => ({ key: `q${qt.id}`, group: 'Quotes', label: `${qt.quoteNumber} v${qt.version}`, detail: qt.customerName, to: `/quotes/${qt.id}/builder` }))),
   auth.can('products:read') && (async (q: string): Promise<Hit[]> =>

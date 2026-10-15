@@ -693,10 +693,16 @@ const catalogError = ref('')
 async function loadVersions() {
   try { versions.value = (await quotesService.versions(String(route.params.id))).data } catch { versions.value = [] }
 }
+const jobLabel = ref('')
 async function loadJobSites(q: BuilderQuote) {
   jobSites.value = []
+  jobLabel.value = ''
   if (!q.opportunityId || !auth.can('opportunities:read')) return
-  try { jobSites.value = (await opportunitiesService.get(q.opportunityId)).data.sites ?? [] } catch { jobSites.value = [] }
+  try {
+    const job = (await opportunitiesService.get(q.opportunityId)).data
+    jobSites.value = job.sites ?? []
+    jobLabel.value = `${job.opportunityNumber} · ${job.title}`
+  } catch { jobSites.value = [] }
 }
 async function loadQuote() {
   try {
@@ -955,6 +961,14 @@ function exportExcel() {
       <div class="info-field">
         <label class="info-label">Customer</label>
         <span class="info-value"><Building2 :size="14" class="info-icon" /> {{ customerName }}</span>
+      </div>
+      <div v-if="loadedQuote?.opportunityId" class="info-field">
+        <label class="info-label">Opportunity</label>
+        <RouterLink :to="`/opportunities/${loadedQuote.opportunityId}`" class="info-value info-link">{{ jobLabel || 'Open opportunity' }}</RouterLink>
+      </div>
+      <div v-else-if="loadedQuote?.contractId" class="info-field">
+        <label class="info-label">Raised under</label>
+        <span class="info-value">Contract</span>
       </div>
       <div class="info-field">
         <label class="info-label">Currency</label>
@@ -1742,6 +1756,8 @@ function exportExcel() {
 </template>
 
 <style scoped>
+.info-link { color: var(--color-primary); text-decoration: none; }
+.info-link:hover { text-decoration: underline; }
 .version-tag { font-size: var(--text-sm); font-weight: 600; color: var(--color-neutral-500); margin-left: var(--space-2); }
 .version-banner { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-3) var(--space-4); margin-bottom: var(--space-3); border-radius: var(--radius-lg); background: var(--color-warning-50, #fffbeb); border: 1px solid var(--color-warning, #f59e0b); }
 .version-banner--info { background: var(--color-neutral-50); border-color: var(--color-neutral-200); font-size: var(--text-sm); }
