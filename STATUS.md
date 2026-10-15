@@ -36,6 +36,12 @@
   - Blank names and customer-specific books without a customer show a message instead of failing silently; the API also requires the customer.
   - The catalog search list opens on focus and closes on blur or Escape, instead of staying open.
 
+- **Quotes and purchase orders (same day, later):**
+  - Choosing an opportunity that already has a quote opens that quote, by the one-quote-per-opportunity rule, so the new-quote price-book step was skipped and quotes created without a book could never get one.
+  - The builder now has a Price book selector: the customer's eligible books, with an optional reprice of existing lines. The API accepts `priceBookId` on builder save (absent keeps it, null clears it, ineligible gets 400).
+  - The new-quote dialog can create an opportunity when the customer has none. Quotes still cannot skip the opportunity: every quote belongs to one opportunity or one contract.
+  - Purchase orders show their creation date (list column) and creator (details).
+
 **Still needs owner input:**
 - Which quote op2 keeps (QT-2026-0002 or QT-2026-0004).
 - The vendor for "in".
