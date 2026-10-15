@@ -490,6 +490,32 @@ func testModuleAPIs(t *testing.T, db *gorm.DB, r *gin.Engine, token, customerID 
 		call(t, "DELETE", path, nil, 204)
 		call(t, "GET", path, nil, 404)
 	})
+	t.Run("a draft quote's price book can be set, kept and cleared in the builder", func(t *testing.T) {
+		opp := call(t, "POST", "/opportunities", m("title", "Price book job", "customerId", customerID), 201)
+		quote := call(t, "POST", "/quotes", m("customerId", customerID, "opportunityId", opp["id"]), 201)
+		path := "/quotes/" + quote["id"].(string) + "/builder"
+		general := call(t, "POST", "/price-books", m("name", "General list", "type", "standard"), 201)
+		other := call(t, "POST", "/customers", m("companyName", "Other customer", "sector", "government", "region", "Riyadh", "status", "prospect", "type", "get"), 201)
+		foreign := call(t, "POST", "/price-books", m("name", "Other customer's book", "type", "customer-specific", "customerId", other["id"]), 201)
+		save := func(extra map[string]any, want int) map[string]any {
+			current := call(t, "GET", path, nil, 200)
+			body := m("customerId", customerID, "opportunityId", opp["id"], "lockVersion", current["lockVersion"], "currency", "SAR", "vatPercent", 15, "rows", []any{})
+			for k, v := range extra {
+				body[k] = v
+			}
+			return call(t, "PUT", path, body, want)
+		}
+		if saved := save(m("priceBookId", general["id"]), 200); saved["priceBookId"] != general["id"] {
+			t.Fatal("price book not set", saved)
+		}
+		if saved := save(m(), 200); saved["priceBookId"] != general["id"] {
+			t.Fatal("omitting the field must keep the price book", saved)
+		}
+		save(m("priceBookId", foreign["id"]), 400)
+		if saved := save(m("priceBookId", nil), 200); saved["priceBookId"] != nil {
+			t.Fatal("null must switch to standard pricing", saved)
+		}
+	})
 	t.Run("job purchases are held on receipt and fulfilment counts only held stock", func(t *testing.T) {
 		cameraLine := func() map[string]any {
 			f := call(t, "GET", "/opportunities/"+oppID+"/fulfilment", nil, 200)

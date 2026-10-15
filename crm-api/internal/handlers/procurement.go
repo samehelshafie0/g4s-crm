@@ -26,7 +26,7 @@ func (h *ProcurementHandler) ListPOs(c *gin.Context) {
 	params := pagination.GetParams(c)
 	var items []models.PurchaseOrder
 	var total int64
-	query := h.db.Model(&models.PurchaseOrder{}).Preload("Items.Product.Manufacturer").Preload("ApprovedBy").Preload("SourceQuote").Preload("Opportunity")
+	query := h.db.Model(&models.PurchaseOrder{}).Preload("Items.Product.Manufacturer").Preload("ApprovedBy").Preload("CreatedBy").Preload("SourceQuote").Preload("Opportunity")
 	if status := c.Query("status"); status != "" {
 		query = query.Where("status = ?", status)
 	}
@@ -37,7 +37,7 @@ func (h *ProcurementHandler) ListPOs(c *gin.Context) {
 
 func (h *ProcurementHandler) GetPO(c *gin.Context) {
 	var item models.PurchaseOrder
-	if err := h.db.Preload("Items.Product.Manufacturer").Preload("ApprovedBy").Preload("SourceQuote").Preload("Opportunity").First(&item, "id = ?", c.Param("id")).Error; err != nil {
+	if err := h.db.Preload("Items.Product.Manufacturer").Preload("ApprovedBy").Preload("CreatedBy").Preload("SourceQuote").Preload("Opportunity").First(&item, "id = ?", c.Param("id")).Error; err != nil {
 		response.NotFound(c, "Purchase order not found")
 		return
 	}
@@ -193,7 +193,7 @@ func (h *ProcurementHandler) savePO(c *gin.Context, create bool) {
 		apiError(c, err)
 		return
 	}
-	if err := h.db.Preload("Items.Product.Manufacturer").Preload("ApprovedBy").Preload("SourceQuote").Preload("Opportunity").First(&po, "id = ?", po.ID).Error; err != nil {
+	if err := h.db.Preload("Items.Product.Manufacturer").Preload("ApprovedBy").Preload("CreatedBy").Preload("SourceQuote").Preload("Opportunity").First(&po, "id = ?", po.ID).Error; err != nil {
 		apiError(c, err)
 		return
 	}
@@ -577,7 +577,7 @@ func (h *ProcurementHandler) ConvertToPO(c *gin.Context) {
 		apiError(c, err)
 		return
 	}
-	if err := h.db.Preload("Items.Product.Manufacturer").Preload("ApprovedBy").Preload("SourceQuote").Preload("Opportunity").First(&po, "id = ?", po.ID).Error; err != nil {
+	if err := h.db.Preload("Items.Product.Manufacturer").Preload("ApprovedBy").Preload("CreatedBy").Preload("SourceQuote").Preload("Opportunity").First(&po, "id = ?", po.ID).Error; err != nil {
 		apiError(c, err)
 		return
 	}

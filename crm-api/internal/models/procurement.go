@@ -55,6 +55,7 @@ type PurchaseOrder struct {
 	ApprovedBy       *User               `gorm:"foreignKey:ApprovedByID" json:"approvedBy,omitempty"`
 	ApprovedAt       *time.Time          `json:"approvedAt,omitempty"`
 	CreatedByID      *uuid.UUID          `gorm:"type:uuid" json:"createdById,omitempty"`
+	CreatedBy        *User               `gorm:"foreignKey:CreatedByID" json:"-"`
 }
 
 type PurchaseOrderItem struct {

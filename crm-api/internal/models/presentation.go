@@ -153,7 +153,7 @@ func (d Document) MarshalJSON() ([]byte, error) {
 }
 func (p PurchaseOrder) MarshalJSON() ([]byte, error) {
 	type plain PurchaseOrder
-	return withFields(plain(p), map[string]any{"items": rows(p.Items), "sourceQuoteNumber": quoteNumber(p.SourceQuote), "opportunityTitle": opportunityTitle(p.Opportunity)})
+	return withFields(plain(p), map[string]any{"items": rows(p.Items), "sourceQuoteNumber": quoteNumber(p.SourceQuote), "opportunityTitle": opportunityTitle(p.Opportunity), "createdByName": userName(p.CreatedBy)})
 }
 func (s SupplierQuote) MarshalJSON() ([]byte, error) {
 	type plain SupplierQuote

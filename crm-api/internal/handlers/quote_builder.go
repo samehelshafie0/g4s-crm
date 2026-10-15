@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/json"
 	"errors"
 	"g4s-crm/api/internal/models"
 	"g4s-crm/api/pkg/response"
@@ -64,6 +65,8 @@ func (h *QuoteHandler) SaveBuilder(c *gin.Context) {
 		SoldTo           models.QuoteAddress `json:"soldTo"`
 		ShipTo           models.QuoteAddress `json:"shipTo"`
 		Rows             []builderRow        `json:"rows" validate:"max=1000,dive"`
+		// Absent leaves the price book as it is; null means standard pricing.
+		PriceBookID json.RawMessage `json:"priceBookId"`
 	}
 	if !v.BindStrict(c, &req) {
 		return
@@ -72,6 +75,16 @@ func (h *QuoteHandler) SaveBuilder(c *gin.Context) {
 	if err != nil {
 		apiError(c, err)
 		return
+	}
+	changeBook := len(req.PriceBookID) > 0
+	var priceBookID *uuid.UUID
+	if changeBook && string(req.PriceBookID) != "null" {
+		var id uuid.UUID
+		if err := json.Unmarshal(req.PriceBookID, &id); err != nil {
+			response.BadRequest(c, "Invalid price book")
+			return
+		}
+		priceBookID = &id
 	}
 	var quote models.Quote
 	err = h.db.Transaction(func(tx *gorm.DB) error {
@@ -96,6 +109,12 @@ func (h *QuoteHandler) SaveBuilder(c *gin.Context) {
 		}
 		if req.Currency != quote.Currency {
 			return invalid("Change the currency with the currency switch, so prices are converted at a pinned rate")
+		}
+		if changeBook {
+			if err := eligiblePriceBook(tx, priceBookID, quote.CustomerID); err != nil {
+				return invalid("That price book is not active, not in date or not for this customer")
+			}
+			quote.PriceBookID = priceBookID
 		}
 		allowedSites, err := quoteSites(tx, &quote)
 		if err != nil {
