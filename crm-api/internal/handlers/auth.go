@@ -1,6 +1,10 @@
 package handlers
 
 import (
+	"fmt"
+	"net/http"
+	"strconv"
+
 	"g4s-crm/api/internal/middleware"
 	"g4s-crm/api/internal/models"
 	"g4s-crm/api/internal/services"
@@ -10,11 +14,12 @@ import (
 )
 
 type AuthHandler struct {
-	svc *services.AuthService
+	svc     *services.AuthService
+	limiter *loginLimiter
 }
 
 func NewAuthHandler(svc *services.AuthService) *AuthHandler {
-	return &AuthHandler{svc: svc}
+	return &AuthHandler{svc: svc, limiter: newLoginLimiter()}
 }
 
 type loginRequest struct {
@@ -54,11 +59,20 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
+	ip := c.ClientIP()
+	if wait := h.limiter.blocked(req.Email, ip); wait > 0 {
+		minutes := int(wait.Minutes()) + 1
+		c.Header("Retry-After", strconv.Itoa(int(wait.Seconds())+1))
+		c.JSON(http.StatusTooManyRequests, gin.H{"success": false, "error": gin.H{"code": "TOO_MANY_ATTEMPTS", "message": fmt.Sprintf("Too many failed sign-in attempts. Try again in %d minute(s).", minutes)}})
+		return
+	}
 	result, err := h.svc.Login(req.Email, req.Password)
 	if err != nil {
+		h.limiter.failed(req.Email, ip)
 		response.Unauthorized(c, err.Error())
 		return
 	}
+	h.limiter.succeeded(req.Email, ip)
 
 	response.OK(c, result)
 }

@@ -9,6 +9,8 @@ RUN npm ci
 
 # Copy source and build
 COPY . .
+ARG VITE_ENVIRONMENT_LABEL=""
+ENV VITE_ENVIRONMENT_LABEL=$VITE_ENVIRONMENT_LABEL
 RUN npm run build
 
 # ─── Stage 2: Serve with Nginx ───────────────────────────────
@@ -19,6 +21,7 @@ RUN rm /etc/nginx/conf.d/default.conf
 
 # Copy custom nginx config
 COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY security-headers.inc /etc/nginx/snippets/security-headers.inc
 
 # Copy built SPA from builder stage
 COPY --from=builder /app/dist /usr/share/nginx/html

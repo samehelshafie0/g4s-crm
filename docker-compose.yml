@@ -12,7 +12,7 @@ services:
     environment:
       POSTGRES_DB: g4s_crm
       POSTGRES_USER: g4s_app
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-devpassword}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
@@ -58,18 +58,19 @@ services:
       DB_PORT: "5432"
       DB_NAME: g4s_crm
       DB_USER: g4s_app
-      DB_PASSWORD: ${DB_PASSWORD:-devpassword}
+      DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
       DB_SSLMODE: disable
       REDIS_ADDR: redis:6379
       REDIS_PASSWORD: ""
       JWT_PRIVATE_KEY_PATH: /app/keys/private.pem
       JWT_PUBLIC_KEY_PATH: /app/keys/public.pem
-      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-change-me-in-production}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?Set JWT_REFRESH_SECRET in .env}
       JWT_ACCESS_EXPIRY: ${JWT_ACCESS_EXPIRY:-15m}
       JWT_REFRESH_EXPIRY: ${JWT_REFRESH_EXPIRY:-168h}
       STORAGE_ROOT: /app/storage
       MAX_UPLOAD_SIZE: "52428800"
       LOG_LEVEL: ${LOG_LEVEL:-info}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-}
     volumes:
       - ./crm-api/keys:/app/keys:ro          # Mount RSA key pair (read-only)
       - api_storage:/app/storage              # Persistent file uploads
@@ -87,6 +88,8 @@ services:
     build:
       context: ./crm-dashboard
       dockerfile: Dockerfile
+      args:
+        VITE_ENVIRONMENT_LABEL: ${ENVIRONMENT_LABEL:-}
     restart: unless-stopped
     depends_on:
       api:

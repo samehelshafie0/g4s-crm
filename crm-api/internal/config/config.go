@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"net"
 	"net/url"
 	"strings"
@@ -23,6 +24,9 @@ type AppConfig struct {
 	Env  string
 	Port string
 	Host string
+	// AllowedOrigins lists other web origins that may call the API from a
+	// browser. Empty means same-origin only, which is how nginx serves the app.
+	AllowedOrigins []string
 }
 
 type DBConfig struct {
@@ -78,9 +82,10 @@ func Load() (*Config, error) {
 
 	cfg := &Config{
 		App: AppConfig{
-			Env:  viper.GetString("APP_ENV"),
-			Port: viper.GetString("APP_PORT"),
-			Host: viper.GetString("APP_HOST"),
+			Env:            viper.GetString("APP_ENV"),
+			Port:           viper.GetString("APP_PORT"),
+			Host:           viper.GetString("APP_HOST"),
+			AllowedOrigins: splitList(viper.GetString("CORS_ALLOWED_ORIGINS")),
 		},
 		DB: DBConfig{
 			Host:     viper.GetString("DB_HOST"),
@@ -119,7 +124,46 @@ func Load() (*Config, error) {
 		},
 	}
 
+	if err := cfg.validate(); err != nil {
+		return nil, err
+	}
 	return cfg, nil
+}
+
+func splitList(value string) []string {
+	items := []string{}
+	for _, item := range strings.Split(value, ",") {
+		if item = strings.TrimSpace(item); item != "" {
+			items = append(items, item)
+		}
+	}
+	return items
+}
+
+const defaultRefreshSecret = "change-me-in-production"
+
+// validate refuses to run a production server on development fallbacks, so a
+// missing .env value stops the deploy instead of silently weakening it.
+func (c *Config) validate() error {
+	if c.App.Env != "production" {
+		return nil
+	}
+	var problems []string
+	if strings.Contains(c.JWT.RefreshSecret, "change-me") || len(c.JWT.RefreshSecret) < 32 {
+		problems = append(problems, "JWT_REFRESH_SECRET must be set to a random value of at least 32 characters")
+	}
+	if c.DB.Password == "" || c.DB.Password == "devpassword" || strings.Contains(c.DB.Password, "change-me") {
+		problems = append(problems, "DB_PASSWORD must be set to a non-default value")
+	}
+	for _, origin := range c.App.AllowedOrigins {
+		if origin == "*" {
+			problems = append(problems, "CORS_ALLOWED_ORIGINS must list specific origins, not *")
+		}
+	}
+	if len(problems) > 0 {
+		return errors.New("unsafe production configuration: " + strings.Join(problems, "; "))
+	}
+	return nil
 }
 
 func (d *DBConfig) DSN() string {
@@ -149,7 +193,7 @@ func setDefaults() {
 
 	viper.SetDefault("JWT_PRIVATE_KEY_PATH", "./keys/private.pem")
 	viper.SetDefault("JWT_PUBLIC_KEY_PATH", "./keys/public.pem")
-	viper.SetDefault("JWT_REFRESH_SECRET", "change-me-in-production")
+	viper.SetDefault("JWT_REFRESH_SECRET", defaultRefreshSecret)
 	viper.SetDefault("JWT_ACCESS_EXPIRY", "15m")
 	viper.SetDefault("JWT_REFRESH_EXPIRY", "168h")
 

@@ -19,9 +19,15 @@ func Setup(db *gorm.DB, cfg *config.Config) *gin.Engine {
 	}
 
 	r := gin.New()
+	// Forwarded client addresses are believed only from private-network proxies
+	// (nginx on the Docker network, or a TLS proxy on the same host), so a
+	// client cannot pick its own address to dodge sign-in limits.
+	if err := r.SetTrustedProxies([]string{"127.0.0.0/8", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "::1/128", "fc00::/7"}); err != nil {
+		panic(err)
+	}
 	r.Use(middleware.Recovery())
 	r.Use(middleware.Logger())
-	r.Use(middleware.CORS(nil))
+	r.Use(middleware.CORS(cfg.App.AllowedOrigins))
 
 	// Health check
 	r.GET("/health", func(c *gin.Context) {

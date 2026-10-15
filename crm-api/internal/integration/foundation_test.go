@@ -123,6 +123,32 @@ func TestFoundation(t *testing.T) {
 			t.Fatal(u)
 		}
 	})
+	t.Run("repeated failed sign-ins lock that account for a while", func(t *testing.T) {
+		guessed := models.User{Email: "guessed@example.test", FirstName: "Guessed", LastName: "User", PasswordHash: string(hash), Role: models.RoleViewer, Department: models.DeptSales, IsActive: true}
+		must(t, db.Create(&guessed).Error)
+		attempt := func(password string) (int, map[string]any) {
+			return call("POST", "/api/v1/auth/login", fmt.Sprintf(`{"email":"guessed@example.test","password":%q}`, password), "")
+		}
+		// A correct sign-in clears earlier mistakes.
+		for i := 0; i < 4; i++ {
+			code, res := attempt("wrong-password")
+			expect(t, code, 401, res)
+		}
+		code, res := attempt("TestPassword123!")
+		expect(t, code, 200, res)
+		for i := 0; i < 5; i++ {
+			code, res = attempt("wrong-password")
+			expect(t, code, 401, res)
+		}
+		// Locked: even the right password waits, and the answer says so.
+		code, res = attempt("TestPassword123!")
+		expect(t, code, 429, res)
+		if res["error"].(map[string]any)["code"] != "TOO_MANY_ATTEMPTS" {
+			t.Fatal(res)
+		}
+		// Other accounts on the same address are unaffected.
+		login("sales@example.test")
+	})
 	var customerID string
 	t.Run("multiple optional CRs and empty collections", func(t *testing.T) {
 		for i := 0; i < 2; i++ {
