@@ -3,7 +3,7 @@ import { productsService, manufacturersService, documentsService } from '@/servi
 import { allPages } from '@/services/collections'
 import { errorMessage } from '@/services/payload'
 import { ref, computed, watch, onMounted, reactive } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import {
   Plus, Search, Pencil, Trash2, X, Package, Calculator, Eye,
   Building2, History, FileText, Upload, TrendingUp, TrendingDown,
@@ -22,6 +22,7 @@ import type {
   SupplierItemEntry,
 } from '@/types'
 import { matchManufacturers, sameMaster, suggestCode } from '@/services/catalogMasters'
+import ProductCategories from '@/components/ProductCategories.vue'
 
 const procStore = useProcurementStore()
 const productsStore = useProductsStore()
@@ -50,6 +51,9 @@ interface MfrRef { id: string; name: string; code: string; categories: Manufactu
 
 const mfrList = reactive<MfrRef[]>([])
 function mfr(id: string): MfrRef | undefined { return mfrList.find((m) => m.id === id) }
+async function reloadManufacturers() {
+  try { mfrList.splice(0, mfrList.length, ...(await allPages(manufacturersService.list))) } catch (e) { window.alert(errorMessage(e)) }
+}
 
 function calcLanded(cost: number, fx: number, freight: number, customs: number, clearance: number): number {
   return cost * fx * (1 + freight / 100 + customs / 100 + clearance / 100)
@@ -238,6 +242,15 @@ type DetailTab = 'overview' | 'vendors' | 'price-history' | 'documents'
 const detailTab = ref<DetailTab>('overview')
 
 const route = useRoute()
+const router = useRouter()
+// Products and their categories share this page; ?tab=categories opens the second.
+const tab = computed<'products' | 'categories'>(() => (route.query.tab === 'categories' ? 'categories' : 'products'))
+function showTab(next: 'products' | 'categories') { void router.replace({ query: { ...route.query, tab: next === 'products' ? undefined : next, open: undefined } }) }
+const productCounts = computed(() => {
+  const counts: Record<string, number> = {}
+  for (const p of products.value) if (p.categoryId) counts[p.categoryId] = (counts[p.categoryId] ?? 0) + 1
+  return counts
+})
 // Global search links here with ?open=<product id>.
 function openFromRoute() {
   const id = route.query.open
@@ -403,12 +416,20 @@ async function savePrice() {
         <h1 class="page-header-title">Products</h1>
         <p class="page-header-subtitle">{{ filteredProducts.length }} product{{ filteredProducts.length !== 1 ? 's' : '' }} in catalog</p>
       </div>
-      <div class="page-header-actions">
+      <div v-if="tab === 'products'" class="page-header-actions">
         <button v-if="auth.can('products:create')" class="btn" @click="showImportDialog = true"><FileUp :size="16" /> Import from vendor file</button>
         <button class="btn btn-primary" @click="openAddModal"><Plus :size="18" /> Add Product</button>
       </div>
     </div>
 
+    <div class="tabs products-tabs" role="tablist">
+      <button role="tab" :aria-selected="tab === 'products'" :class="['tab', tab === 'products' && 'active']" @click="showTab('products')">Products <span class="tab-count">{{ products.length }}</span></button>
+      <button role="tab" :aria-selected="tab === 'categories'" :class="['tab', tab === 'categories' && 'active']" @click="showTab('categories')">Categories <span class="tab-count">{{ mfrList.reduce((n, m) => n + m.categories.length, 0) }}</span></button>
+    </div>
+
+    <ProductCategories v-if="tab === 'categories'" :manufacturers="mfrList" :product-counts="productCounts" @changed="reloadManufacturers" />
+
+    <template v-else>
     <div class="card mb-6">
       <div class="toolbar">
         <div class="search-input toolbar-search"><Search :size="18" class="search-icon" /><input v-model="searchQuery" type="text" class="form-input" placeholder="Search by SKU, name, or description..." /></div>
@@ -446,6 +467,7 @@ async function savePrice() {
       </table>
     </div>
     <div v-else class="empty-state"><Package :size="48" class="empty-state-icon" /><h3 class="empty-state-title">No products found</h3><p class="empty-state-text">{{ searchQuery || filterMfr || filterType || filterStatus ? 'Try adjusting your filters.' : 'Add your first product to get started.' }}</p></div>
+    </template>
 
     <!-- ═══ Product Detail Modal ══════════════════════════════ -->
     <div v-if="showDetailModal && detailProduct" class="modal-backdrop" @click.self="showDetailModal = false">
@@ -793,6 +815,7 @@ async function savePrice() {
 </template>
 
 <style scoped>
+.products-tabs { margin-bottom: var(--space-4); }
 .master-hint { font-size: var(--text-xs); color: var(--color-neutral-500); margin: calc(-1 * var(--space-2)) 0 var(--space-3); }
 .master-inline { border: 1px dashed var(--color-primary); border-radius: var(--radius-md); padding: var(--space-3); margin-bottom: var(--space-4); background: var(--color-neutral-50); }
 .master-inline-title { font-weight: 600; font-size: var(--text-sm); margin-bottom: var(--space-2); }

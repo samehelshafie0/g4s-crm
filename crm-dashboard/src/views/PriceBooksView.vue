@@ -92,7 +92,8 @@ const saveMessage = ref('')
 
 // ── Builder: Search & Filter ────────────────────────────────
 const searchQuery = ref('')
-const catalogOpen = ref(true)
+// The catalog list opens while the search box is in use and closes on blur.
+const catalogOpen = ref(false)
 const kindFilter = ref<CatalogItemKind | 'all'>('all')
 const entryKindFilter = ref<CatalogItemKind | 'all'>('all')
 
@@ -209,28 +210,35 @@ function goBack() {
 }
 
 const saving = ref(false)
+const saveError = ref('')
 async function saveBook() {
- if (!activeBook.value?.name || saving.value) return
+ const book = activeBook.value
+ if (!book || saving.value) return
+ saveError.value = ''
+ if (!book.name?.trim()) { saveError.value = 'Enter a price book name before saving.'; return }
+ if (book.type === 'customer-specific' && !book.customerId) { saveError.value = 'Choose the customer this price book is for.'; return }
  saving.value = true
  try {
-  const book = activeBook.value
-  const result = book.id ? await priceBooksService.update(book.id, book) : await priceBooksService.create(book)
+  // "None" selections are empty strings in the form; the API expects no value.
+  const header = { ...book, name: book.name.trim(), customerId: book.customerId || null, contractId: book.contractId || null, validFrom: book.validFrom || null, validTo: book.validTo || null } as unknown as Partial<PriceBook>
+  const result = book.id ? await priceBooksService.update(book.id, header) : await priceBooksService.create(header)
   book.id = result.data.id
   const saved = await priceBooksService.replaceEntries(book.id, book.entries)
   activeBook.value = { ...saved.data, validFrom:saved.data.validFrom?.slice(0,10) ?? '',validTo:saved.data.validTo?.slice(0,10) ?? '',entries:saved.data.entries.map(entry => ({...entry,kind:entry.kind ?? 'product'})) }
   await reloadBooks(); saveMessage.value = 'Price book saved'; window.setTimeout(() => {saveMessage.value=''},2500)
- } catch (e) { window.alert(errorMessage(e)) } finally { saving.value=false }
+ } catch (e) { saveError.value = errorMessage(e) } finally { saving.value=false }
 }
 
 function onCustomerChange() {
   if (!activeBook.value) return
   const c = customers.value.find(c => c.id === activeBook.value!.customerId)
-  if (c) activeBook.value.customerName = c.name
+  activeBook.value.customerName = c?.name
 }
 
 watch(searchQuery, () => {
   catalogOpen.value = true
 })
+function closeCatalogSoon() { window.setTimeout(() => { catalogOpen.value = false }, 150) }
 </script>
 
 <template>
@@ -317,12 +325,14 @@ watch(searchQuery, () => {
           </div>
         </div>
         <div class="builder-header-actions">
-          <button class="btn btn-primary" @click="saveBook">
+          <button class="btn btn-primary" :disabled="saving" @click="saveBook">
             <Save :size="16" />
-            Save Price Book
+            {{ saving ? 'Saving…' : 'Save Price Book' }}
           </button>
         </div>
       </div>
+
+      <p v-if="saveError" class="pb-save-error" role="alert">{{ saveError }}</p>
 
       <!-- Info Bar -->
       <div class="info-bar">
@@ -406,18 +416,22 @@ watch(searchQuery, () => {
                       type="text"
                       class="form-input"
                       placeholder="Search by SKU, name, or manufacturer..."
+                      aria-label="Search the catalog to add items"
+                      @focus="catalogOpen = true"
+                      @blur="closeCatalogSoon"
+                      @keydown.escape="catalogOpen = false"
                     />
                   </div>
 
                   <!-- Search Dropdown -->
-                  <p class="catalog-count">{{ catalogItems.length }} catalog items available</p>
+                  <p class="catalog-count">{{ catalogItems.length }} catalog items available — click the search box to browse, or type to filter</p>
                   <div v-if="catalogOpen && searchResults.length" class="product-dropdown product-dropdown--inline">
                     <button
                       v-for="item in searchResults"
                       :key="item.id"
                       type="button"
                       class="product-dropdown-item"
-                      @click="addCatalogItem(item)"
+                      @mousedown.prevent="addCatalogItem(item)"
                     >
                       <div class="dropdown-item-main">
                         <span :class="['kind-badge', kindBadge[item.kind]]">{{ kindLabels[item.kind] }}</span>
@@ -634,6 +648,7 @@ watch(searchQuery, () => {
 </template>
 
 <style scoped>
+.pb-save-error { color: var(--color-danger); background: var(--color-danger-light); border-radius: var(--radius-md); padding: var(--space-2) var(--space-3); font-size: var(--text-sm); margin-bottom: var(--space-3); }
 .pb-page {
   padding: var(--space-6);
   position: relative;
