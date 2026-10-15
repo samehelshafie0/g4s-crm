@@ -58,7 +58,7 @@ Then choose one of:
   ADMIN_EMAIL=admin@client-test.example ADMIN_PASSWORD='<12+ characters>' ADMIN_FIRST_NAME=Test ADMIN_LAST_NAME=Admin make seed
   ```
   `seed-catalog` loads the reference catalog (manufacturers, products, services, FX). `seed` creates the first administrator once.
-- **A copy of the current live data:** back up live (`scripts/backup.sh` on the live machine), copy the files over, restore with `scripts/restore.sh`, then run `make migrate`. Migration 11 stops while opportunity *op2* holds two quotes (QT-2026-0002 and QT-2026-0004); delete the one the owner does not keep first.
+- **A copy of the current live data:** back up live (`scripts/backup.sh` on the live machine), copy the files over, restore with `scripts/restore.sh`, then run `make migrate`. Migration 11 stops while opportunity *op2* holds two quotes (QT-2026-0002 and QT-2026-0004); delete the one the owner does not keep first. Migration 18 then numbers opportunities (OPP-2026-0001…) and renumbers each quote to share its opportunity's number.
 
 ```bash
 docker compose up -d --build

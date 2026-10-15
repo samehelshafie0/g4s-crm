@@ -42,6 +42,12 @@
   - The new-quote dialog can create an opportunity when the customer has none. Quotes still cannot skip the opportunity: every quote belongs to one opportunity or one contract.
   - Purchase orders show their creation date (list column) and creator (details).
 
+- **Quote numbers bound to the opportunity (owner decision):**
+  - Opportunities are numbered OPP-YYYY-NNNN, and the job's quote shares the digits (QT-2026-0034, with versions v1, v2…). Quotes raised inside a contract count up under it (QT-CNT-2026-0003-01). Opportunities are searchable by number.
+  - Migration 000018 numbers existing opportunities by creation date and renumbers their quotes. It updates stock-hold references and marks a clashing deleted quote "-deleted". On the live copy QT-2026-0005/0006 became 0004/0005 and all PO links held.
+  - The quote number-and-version uniqueness rule now ignores deleted quotes, so a job can be re-quoted after its draft is deleted.
+  - The number is shown on the opportunity page, the opportunity cards, Quotes, the new-quote dialog, the builder (which links to the opportunity), Delivery and search.
+
 **Still needs owner input:**
 - Which quote op2 keeps (QT-2026-0002 or QT-2026-0004).
 - The vendor for "in".
