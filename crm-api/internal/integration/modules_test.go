@@ -9,8 +9,11 @@ import (
 	"gorm.io/gorm"
 	"mime/multipart"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
+
+	"github.com/xuri/excelize/v2"
 )
 
 func testModuleAPIs(t *testing.T, db *gorm.DB, r *gin.Engine, token, customerID string) {
@@ -58,6 +61,43 @@ func testModuleAPIs(t *testing.T, db *gorm.DB, r *gin.Engine, token, customerID 
 		}
 		call(t, "PATCH", "/products/"+productID, m("total", 12), 400)
 		call(t, "DELETE", "/manufacturers/"+mfrID+"/categories/"+category["id"].(string), nil, 409)
+	})
+	t.Run("product import template lists the catalog's manufacturers and categories", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/v1/products/import-template", nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		if w.Code != 200 || !strings.Contains(w.Header().Get("Content-Disposition"), "g4s-product-import-") {
+			t.Fatal(w.Code, w.Header())
+		}
+		book, err := excelize.OpenReader(bytes.NewReader(w.Body.Bytes()))
+		must(t, err)
+		if sheets := book.GetSheetList(); len(sheets) != 3 || sheets[0] != "Products" {
+			t.Fatal(sheets)
+		}
+		if visible, _ := book.GetSheetVisible("Lists"); visible {
+			t.Fatal("the lookup sheet should be hidden")
+		}
+		rows, err := book.GetRows("Lists")
+		must(t, err)
+		found := false
+		for _, row := range rows {
+			if len(row) >= 2 && row[0] == "Integration Manufacturer" && row[1] == "Cameras" {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatal("manufacturer/category pair missing from the template lists", rows)
+		}
+		validations, err := book.GetDataValidations("Products")
+		must(t, err)
+		ranges := map[string]string{}
+		for _, dv := range validations {
+			ranges[dv.Sqref] = dv.Formula1
+		}
+		if !strings.Contains(ranges["E2:E501"], "Lists!$D$2") || !strings.Contains(ranges["F2:F501"], "OFFSET(Lists!$B$1") {
+			t.Fatal("manufacturer and category drop-downs missing", ranges)
+		}
 	})
 	t.Run("contacts sites and assigned opportunities persist", func(t *testing.T) {
 		site := call(t, "POST", "/customers/"+customerID+"/sites", m("name", "Main site", "city", "Riyadh"), 201)

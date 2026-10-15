@@ -187,6 +187,7 @@ func Setup(db *gorm.DB, cfg *config.Config) *gin.Engine {
 		products.PATCH("/:id", middleware.Authorize("products:update"), productH.Update)
 		products.DELETE("/:id", middleware.Authorize("products:delete"), productH.Delete)
 		products.POST("/recalculate-costs", middleware.Authorize("products:update"), productH.RecalculateCosts)
+		products.GET("/import-template", middleware.AuthorizeAny("products:create", "products:update"), productH.ImportTemplate)
 		products.POST("/import", middleware.Authorize("products:create"), middleware.Authorize("products:update"), productH.ImportProducts)
 		products.GET("/:id/documents", middleware.Authorize("products:read"), productH.Documents)
 		products.POST("/:id/documents", middleware.Authorize("products:update"), middleware.Authorize("documents:read"), productH.AddDocument)
