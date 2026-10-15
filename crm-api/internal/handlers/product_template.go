@@ -20,7 +20,7 @@ var templateInstructions = [][2]string{
 	{"Required", "Part Number, Description and Unit Cost."},
 	{"Manufacturer", "Pick from the drop-down: it lists the manufacturers in the CRM today, so each row links to the right record."},
 	{"New manufacturer", "If it is not in the list, type the name anyway. Excel warns; continue. The import screen lists new names and offers to add them (or ask an administrator)."},
-	{"Category", "Pick from the drop-down after choosing the manufacturer: it shows that manufacturer's categories. A new category can be typed the same way."},
+	{"Category", "Pick from the drop-down. With a manufacturer chosen it lists that manufacturer's categories; with Manufacturer blank it lists all categories and the import uses the default manufacturer chosen there. A new category can be typed the same way."},
 	{"Vendor Name", "The company the price came from, e.g. Ingram Micro. Blank uses the default chosen during import."},
 	{"Currency", "SAR, USD, EUR, GBP, AED or CNY. Blank uses the currency chosen during import."},
 	{"Rate to SAR", "SAR uses 1. For another currency enter its rate to SAR, e.g. USD 3.75. Blank uses the rate shown during import for the default currency."},
@@ -113,7 +113,17 @@ func buildImportTemplate(manufacturers []models.Manufacturer) (*excelize.File, e
 		return strings.ToLower(pairs[i].manufacturer) < strings.ToLower(pairs[j].manufacturer)
 	})
 	sort.Slice(unique, func(i, j int) bool { return strings.ToLower(unique[i]) < strings.ToLower(unique[j]) })
-	if err := f.SetSheetRow(lists, "A1", &[]any{"Manufacturer", "Category", "", "Manufacturers", "", "Currencies"}); err != nil {
+	// Every category name once, offered when a row leaves Manufacturer blank.
+	allCategories := []string{}
+	seenCategory := map[string]bool{}
+	for _, p := range pairs {
+		if key := strings.ToLower(p.category); p.category != "" && !seenCategory[key] {
+			seenCategory[key] = true
+			allCategories = append(allCategories, p.category)
+		}
+	}
+	sort.Slice(allCategories, func(i, j int) bool { return strings.ToLower(allCategories[i]) < strings.ToLower(allCategories[j]) })
+	if err := f.SetSheetRow(lists, "A1", &[]any{"Manufacturer", "Category", "", "Manufacturers", "", "Currencies", "", "All categories"}); err != nil {
 		return nil, err
 	}
 	for i, p := range pairs {
@@ -123,6 +133,11 @@ func buildImportTemplate(manufacturers []models.Manufacturer) (*excelize.File, e
 	}
 	for i, label := range unique {
 		if err := f.SetCellStr(lists, fmt.Sprintf("D%d", i+2), label); err != nil {
+			return nil, err
+		}
+	}
+	for i, name := range allCategories {
+		if err := f.SetCellStr(lists, fmt.Sprintf("H%d", i+2), name); err != nil {
 			return nil, err
 		}
 	}
@@ -196,10 +211,12 @@ func buildImportTemplate(manufacturers []models.Manufacturer) (*excelize.File, e
 		mfr.SetError(excelize.DataValidationErrorStyleWarning, "New manufacturer?", "This name is not in the CRM's manufacturer list. Choose Yes to keep it; the import screen will offer to add it.")
 		validations = append(validations, mfr)
 
-		// The chosen manufacturer's categories: its block in Lists columns A:B.
+		// The chosen manufacturer's categories (its block in Lists A:B), or every
+		// category while Manufacturer is blank.
 		cat := excelize.NewDataValidation(true)
 		cat.Sqref = fmt.Sprintf("F2:F%d", last)
-		cat.SetSqrefDropList("OFFSET(Lists!$B$1,MATCH($E2,Lists!$A:$A,0)-1,0,MAX(1,COUNTIF(Lists!$A:$A,$E2)),1)")
+		all := fmt.Sprintf("Lists!$H$2:$H$%d", max(2, len(allCategories)+1))
+		cat.SetSqrefDropList(fmt.Sprintf(`IF($E2="",%s,OFFSET(Lists!$B$1,MATCH($E2,Lists!$A:$A,0)-1,0,MAX(1,COUNTIF(Lists!$A:$A,$E2)),1))`, all))
 		cat.SetError(excelize.DataValidationErrorStyleWarning, "New category?", "This category is not listed for the chosen manufacturer. Choose Yes to keep it; the import screen will offer to add it.")
 		validations = append(validations, cat)
 	}

@@ -7,6 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
+	"strings"
 )
 
 type ManufacturerHandler struct{ db *gorm.DB }
@@ -97,6 +98,17 @@ func (h *ManufacturerHandler) SaveCategory(c *gin.Context) {
 		}
 	}
 	if !bindFields(c, &item, map[string]string{"name": "required,max=255", "description": "max=2000"}) {
+		return
+	}
+	item.Name = strings.Join(strings.Fields(item.Name), " ")
+	// One name per manufacturer: imports and templates match categories by name.
+	var clash int64
+	if err := h.db.Model(&models.ManufacturerCategory{}).Where("manufacturer_id = ? AND lower(name) = lower(?) AND id <> ?", parent.ID, item.Name, item.ID).Count(&clash).Error; err != nil {
+		apiError(c, err)
+		return
+	}
+	if clash > 0 {
+		response.Conflict(c, "This manufacturer already has a category named "+item.Name)
 		return
 	}
 	if err := h.db.Save(&item).Error; err != nil {

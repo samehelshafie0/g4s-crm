@@ -54,6 +54,7 @@ func testModuleAPIs(t *testing.T, db *gorm.DB, r *gin.Engine, token, customerID 
 		manufacturer := call(t, "POST", "/manufacturers", m("name", "Integration Manufacturer", "code", "INTEGRATION", "vendorType", "both"), 201)
 		mfrID = manufacturer["id"].(string)
 		category := call(t, "POST", "/manufacturers/"+mfrID+"/categories", m("name", "Cameras"), 201)
+		call(t, "POST", "/manufacturers/"+mfrID+"/categories", m("name", " cameras "), 409)
 		product := call(t, "POST", "/products", m("sku", "TEST-CAMERA", "name", "Integration Camera", "manufacturerId", mfrID, "categoryId", category["id"], "unitCostOrigin", 25, "sellingPrice", 100), 201)
 		productID = product["id"].(string)
 		if product["manufacturerName"] != "Integration Manufacturer" || product["landedCostSAR"] != float64(25) {
@@ -333,6 +334,7 @@ func testModuleAPIs(t *testing.T, db *gorm.DB, r *gin.Engine, token, customerID 
 		if len(fx["history"].([]any)) != 2 || fx["currentRate"] != 1.2 {
 			t.Fatal(fx)
 		}
+		call(t, "POST", "/price-books", m("name", "No customer", "type", "customer-specific"), 400)
 		book := call(t, "POST", "/price-books", m("name", "Customer pricing", "type", "customer-specific", "customerId", customerID), 201)
 		call(t, "POST", "/price-books/"+book["id"].(string)+"/entries", m("productId", productID, "customPrice", 90), 200)
 		// The won opportunity is the project: delivery is recorded on it directly.

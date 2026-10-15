@@ -164,6 +164,9 @@ func (h *PriceBookHandler) save(c *gin.Context, create bool) {
 		if item.ValidFrom != nil && item.ValidTo != nil && item.ValidTo.Before(*item.ValidFrom) {
 			return invalid("Valid to must follow valid from")
 		}
+		if item.Type == models.PriceBookCustomerSpecific && item.CustomerID == nil && item.ContractID == nil {
+			return invalid("A customer-specific price book needs a customer")
+		}
 		if item.ContractID != nil {
 			var contract models.Contract
 			if err := tx.First(&contract, "id = ?", item.ContractID).Error; err != nil {
