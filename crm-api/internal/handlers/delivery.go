@@ -21,7 +21,7 @@ func (h *OpportunityHandler) Delivery(c *gin.Context) {
 	var total int64
 	q := h.db.Model(&models.Opportunity{}).Where("stage = ?", models.StageClosedWon)
 	if term := c.Query("q"); term != "" {
-		q = q.Where("title ILIKE ?", "%"+term+"%")
+		q = q.Where("title ILIKE ? OR opportunity_number ILIKE ?", "%"+term+"%", "%"+term+"%")
 	}
 	for param, column := range map[string]string{"deliveryStatus": "delivery_status", "projectManagerId": "project_manager_id", "customerId": "customer_id"} {
 		if value := c.Query(param); value != "" {

@@ -4,6 +4,7 @@ import (
 	"g4s-crm/api/internal/models"
 	"g4s-crm/api/pkg/pagination"
 	"g4s-crm/api/pkg/response"
+	"g4s-crm/api/pkg/seqgen"
 	v "g4s-crm/api/pkg/validator"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -21,7 +22,7 @@ func (h *OpportunityHandler) List(c *gin.Context) {
 	var total int64
 	q := h.db.Model(&models.Opportunity{})
 	if term := c.Query("q"); term != "" {
-		q = q.Where("title ILIKE ?", "%"+term+"%")
+		q = q.Where("title ILIKE ? OR opportunity_number ILIKE ?", "%"+term+"%", "%"+term+"%")
 	}
 	for param, column := range map[string]string{"stage": "stage", "customerId": "customer_id", "salesExecutiveId": "sales_executive_id", "preSalesId": "pre_sales_id", "deliveryStatus": "delivery_status", "projectManagerId": "project_manager_id"} {
 		if value := c.Query(param); value != "" {
@@ -173,6 +174,13 @@ func (h *OpportunityHandler) save(c *gin.Context, create bool) {
 			if quotes > 0 {
 				return invalid("The customer cannot change once the opportunity has a quote")
 			}
+		}
+		if create {
+			number, err := seqgen.NextNumber(tx, "opportunity")
+			if err != nil {
+				return err
+			}
+			item.OpportunityNumber = number
 		}
 		item.Title = input.Title
 		item.CustomerID = input.CustomerID

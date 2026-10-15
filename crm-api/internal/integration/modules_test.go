@@ -490,6 +490,37 @@ func testModuleAPIs(t *testing.T, db *gorm.DB, r *gin.Engine, token, customerID 
 		call(t, "DELETE", path, nil, 204)
 		call(t, "GET", path, nil, 404)
 	})
+	t.Run("quote numbers follow their opportunity or contract", func(t *testing.T) {
+		first := call(t, "POST", "/opportunities", m("title", "Numbered job", "customerId", customerID), 201)
+		second := call(t, "POST", "/opportunities", m("title", "Next numbered job", "customerId", customerID), 201)
+		number := first["opportunityNumber"].(string)
+		if !strings.HasPrefix(number, "OPP-") || len(number) != len("OPP-2026-0001") || second["opportunityNumber"] == number {
+			t.Fatal("opportunities are not numbered uniquely", first["opportunityNumber"], second["opportunityNumber"])
+		}
+		want := "QT-" + strings.TrimPrefix(number, "OPP-")
+		quote := call(t, "POST", "/quotes", m("customerId", customerID, "opportunityId", first["id"]), 201)
+		if quote["quoteNumber"] != want {
+			t.Fatalf("quote %v should share opportunity %s", quote["quoteNumber"], number)
+		}
+		// Deleting the draft frees the job to be quoted again under the same number.
+		call(t, "DELETE", "/quotes/"+quote["id"].(string), nil, 200)
+		again := call(t, "POST", "/quotes", m("customerId", customerID, "opportunityId", first["id"]), 201)
+		if again["quoteNumber"] != want {
+			t.Fatal("re-quoting a job must reuse its number", again["quoteNumber"])
+		}
+		found := call(t, "GET", "/opportunities?q="+number, nil, 200)
+		if items, ok := found["data"].([]any); !ok || len(items) != 1 {
+			t.Fatal("opportunities are not searchable by number", found)
+		}
+		contract := call(t, "POST", "/contracts", m("title", "Maintenance period", "customerId", customerID, "type", "maintenance", "value", 1000, "startDate", "2026-10-01", "endDate", "2027-09-30"), 201)
+		call(t, "PATCH", "/contracts/"+contract["id"].(string)+"/activate", m(), 200)
+		base := "QT-" + contract["contractNumber"].(string)
+		one := call(t, "POST", "/quotes", m("customerId", customerID, "contractId", contract["id"]), 201)
+		two := call(t, "POST", "/quotes", m("customerId", customerID, "contractId", contract["id"]), 201)
+		if one["quoteNumber"] != base+"-01" || two["quoteNumber"] != base+"-02" {
+			t.Fatal("contract quotes should count up under the contract", one["quoteNumber"], two["quoteNumber"])
+		}
+	})
 	t.Run("a draft quote's price book can be set, kept and cleared in the builder", func(t *testing.T) {
 		opp := call(t, "POST", "/opportunities", m("title", "Price book job", "customerId", customerID), 201)
 		quote := call(t, "POST", "/quotes", m("customerId", customerID, "opportunityId", opp["id"]), 201)

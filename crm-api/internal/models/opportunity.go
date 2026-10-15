@@ -31,6 +31,8 @@ const (
 
 type Opportunity struct {
 	Base
+	// OpportunityNumber (OPP-2026-0034) is shared by the job's quote (QT-2026-0034).
+	OpportunityNumber string           `json:"opportunityNumber"`
 	Title             string           `gorm:"not null" json:"title"`
 	CustomerID        uuid.UUID        `gorm:"type:uuid;not null;index" json:"customerId"`
 	Customer          *Customer        `gorm:"foreignKey:CustomerID" json:"customer,omitempty"`

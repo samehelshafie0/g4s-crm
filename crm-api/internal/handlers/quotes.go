@@ -2,17 +2,18 @@ package handlers
 
 import (
 	"errors"
+	"fmt"
 	"g4s-crm/api/internal/middleware"
 	"g4s-crm/api/internal/models"
 	"g4s-crm/api/pkg/pagination"
 	"g4s-crm/api/pkg/response"
-	"g4s-crm/api/pkg/seqgen"
 	v "g4s-crm/api/pkg/validator"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -108,6 +109,7 @@ func (h *QuoteHandler) Create(c *gin.Context) {
 		if (req.OpportunityID == nil) == (req.ContractID == nil) {
 			return invalid("A quote belongs to exactly one opportunity or one contract")
 		}
+		var number string
 		if req.OpportunityID != nil {
 			var opportunity models.Opportunity
 			if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&opportunity, "id = ? AND customer_id = ?", req.OpportunityID, req.CustomerID).Error; err != nil {
@@ -122,22 +124,26 @@ func (h *QuoteHandler) Create(c *gin.Context) {
 			if !errors.Is(err, gorm.ErrRecordNotFound) {
 				return err
 			}
+			// The job's quote shares its number: OPP-2026-0034 quotes as QT-2026-0034.
+			number = "QT-" + strings.TrimPrefix(opportunity.OpportunityNumber, "OPP-")
 		}
 		if req.ContractID != nil {
 			var contract models.Contract
-			if err := tx.First(&contract, "id = ? AND customer_id = ?", req.ContractID, req.CustomerID).Error; err != nil {
+			if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&contract, "id = ? AND customer_id = ?", req.ContractID, req.CustomerID).Error; err != nil {
 				return errInvalidRelationship
 			}
 			if contract.Status == models.ContractStatusTerminated || contract.Status == models.ContractStatusExpired {
 				return invalid("Quotes cannot be raised inside a terminated or expired contract")
 			}
+			// Quotes raised inside a contract count up under it: QT-CNT-2026-0003-01.
+			var raised int64
+			if err := tx.Unscoped().Model(&models.Quote{}).Where("contract_id = ?", contract.ID).Distinct("quote_number").Count(&raised).Error; err != nil {
+				return err
+			}
+			number = fmt.Sprintf("QT-%s-%02d", contract.ContractNumber, raised+1)
 		}
 		if err := eligiblePriceBook(tx, req.PriceBookID, req.CustomerID); err != nil {
 			return errInvalidRelationship
-		}
-		number, err := seqgen.NextNumber(tx, "quote")
-		if err != nil {
-			return err
 		}
 		userID := middleware.GetCurrentUserID(c)
 		quote = models.Quote{PriceBookID: req.PriceBookID, QuoteNumber: number, Version: 1, IsCurrent: true, CustomerID: req.CustomerID, OpportunityID: req.OpportunityID, ContractID: req.ContractID, Status: models.QuoteStatusDraft, Currency: req.Currency, DiscountPercent: req.DiscountPercent, VATPercent: 15, Notes: req.Notes, CreatedByID: &userID}
