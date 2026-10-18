@@ -2,22 +2,43 @@
 
 For the client's **test (UAT) server**, not production. The same steps apply to production later, without the test banner and with business sign-off first.
 
-Branch: `feature/opportunity-flow`. The stack is the repository's `docker-compose.yml`: PostgreSQL, Redis, the Go API and nginx serving the app. Only nginx is exposed.
+Branch: `main`. The stack is the repository's `docker-compose.yml`: PostgreSQL, Redis, the Go API and nginx serving the app. Only nginx is exposed.
 
-## 1. Server prerequisites
+## 1. Server prerequisites (Ubuntu 24.04 droplet)
 
-- Linux host with Docker Engine and the Compose plugin, `git` and `openssl`.
-- Port 80 open to the client's testers. For HTTPS see section 7.
-- About 2 GB RAM and 10 GB disk to start; uploads and backups grow over time.
+As `root` on a new droplet (1 vCPU / 2 GB or larger):
+
+```bash
+apt update && apt -y upgrade
+apt -y install git make openssl ca-certificates curl ufw
+curl -fsSL https://get.docker.com | sh
+```
+
+Add 2 GB of swap. Building the images, and LibreOffice when it converts quote attachments, need more memory than the app uses at rest:
+
+```bash
+fallocate -l 2G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile
+echo '/swapfile none swap sw 0 0' >> /etc/fstab
+```
+
+Open only SSH and the web ports:
+
+```bash
+ufw allow OpenSSH && ufw allow 80/tcp && ufw allow 443/tcp && ufw --force enable
+```
+
+Check: `docker compose version` prints a version, and `free -h` shows the swap.
 
 ## 2. Get the code and keys
 
 ```bash
 git clone https://github.com/samehelshafie0/g4s-crm.git /opt/g4s-crm
 cd /opt/g4s-crm
-git checkout feature/opportunity-flow
+git checkout main
 make setup
 ```
+
+If the repository is private, GitHub asks for a username and a **personal access token** (not your password). Create a fine-grained token with read-only *Contents* access to this repository only.
 
 `make setup` creates the JWT signing key pair in `crm-api/keys/` (git-ignored). Keep these keys; replacing them signs everyone out.
 
@@ -43,12 +64,16 @@ The API **refuses to start in production** with a missing, `change-me` or short 
 
 ## 4. Choose the data and start
 
-Start the database, migrate, then start everything.
+Build the images (about 10–15 minutes on 1 vCPU), start the database, migrate, then start everything.
 
 ```bash
+docker compose build
+make key-permissions
 docker compose up -d postgres redis
 make migrate
 ```
+
+`make key-permissions` gives the private key to the user the API container runs as. Without it the API cannot read the key on Linux and stops at start-up. Docker on macOS does not enforce this, so a Mac rehearsal will not show it.
 
 Then choose one of:
 
@@ -61,11 +86,11 @@ Then choose one of:
 - **A copy of the current live data:** back up live (`scripts/backup.sh` on the live machine), copy the files over, restore with `scripts/restore.sh`, then run `make migrate`. Migration 11 stops while opportunity *op2* holds two quotes (QT-2026-0002 and QT-2026-0004); delete the one the owner does not keep first. Migration 18 then numbers opportunities (OPP-2026-0001…) and renumbers each quote to share its opportunity's number.
 
 ```bash
-docker compose up -d --build
+docker compose up -d
 make status
 ```
 
-Open `http://<server>/` and sign in as the administrator.
+All four services should show `healthy` within a minute. Open `http://<server-ip>/` and sign in as the administrator; the "Test environment" label shows at the bottom of every page.
 
 ## 5. Tester accounts
 
@@ -95,7 +120,22 @@ make migrate
 
 ## 7. HTTPS
 
-Testers' passwords cross the network, so use HTTPS as soon as the server has a domain name. Run a TLS proxy on the host, for example Caddy (`reverse_proxy 127.0.0.1:8080` with automatic certificates), and set `FRONTEND_PORT=127.0.0.1:8080` in `.env`. The API trusts forwarded client addresses only from private and loopback addresses, so a proxy on the same host or private network keeps sign-in limits per real client.
+Testers' passwords cross the network, so switch to HTTPS as soon as the server has a domain name.
+
+1. In your DNS, add an **A record** for, e.g., `crm-test.example.com` pointing to the droplet's IP. Wait until `ping crm-test.example.com` answers from that IP.
+2. Move the app behind a local port. In `.env` set `FRONTEND_PORT=127.0.0.1:8080`, then run `docker compose up -d`.
+3. Install Caddy, which obtains and renews the certificate automatically:
+   ```bash
+   apt -y install debian-keyring debian-archive-keyring apt-transport-https
+   curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+   curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' > /etc/apt/sources.list.d/caddy-stable.list
+   apt update && apt -y install caddy
+   printf 'crm-test.example.com {\n\treverse_proxy 127.0.0.1:8080\n}\n' > /etc/caddy/Caddyfile
+   systemctl reload caddy
+   ```
+4. Open `https://crm-test.example.com/`.
+
+The API trusts forwarded client addresses only from private and loopback addresses, so a proxy on the same host keeps sign-in limits per real client.
 
 ## 8. Updating the test server
 

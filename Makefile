@@ -1,4 +1,4 @@
-.PHONY: up down build logs migrate seed keys clean help
+.PHONY: up down build logs migrate seed keys key-permissions clean help
 
 # ─── Full-stack commands ─────────────────────────────────────
 
@@ -40,6 +40,11 @@ setup:
 	@echo "Done! Edit .env then run: make up"
 
 # ─── Database ────────────────────────────────────────────────
+# The API container runs as a non-root user; give it the private key (kept 0600).
+key-permissions:
+	chown "$$(docker compose run --rm --no-deps -T --entrypoint id api -u)" crm-api/keys/private.pem
+	@echo "crm-api/keys/private.pem is now readable by the API container user."
+
 migrate:
 	docker compose run --rm --no-deps api ./g4s-crm-api migrate
 

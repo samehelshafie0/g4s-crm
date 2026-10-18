@@ -82,6 +82,11 @@ func main() {
 	if err := middleware.LoadPublicKey(cfg.JWT.PublicKeyPath); err != nil {
 		log.Fatal().Err(err).Str("path", cfg.JWT.PublicKeyPath).Msg("Failed to load JWT public key")
 	}
+	// The private key is mounted from the host; on Linux it must be readable by
+	// this process's user, which differs from the host user that created it.
+	if _, err := os.ReadFile(cfg.JWT.PrivateKeyPath); err != nil {
+		log.Fatal().Err(err).Str("path", cfg.JWT.PrivateKeyPath).Int("uid", os.Getuid()).Msg("Cannot read the JWT private key; on the server run: make key-permissions")
+	}
 
 	// ─── Validator ───────────────────────────────────────────
 	pkgvalidator.Setup()
