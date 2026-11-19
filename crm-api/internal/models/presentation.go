@@ -49,7 +49,7 @@ func (o Opportunity) MarshalJSON() ([]byte, error) {
 	for _, quote := range o.Quotes {
 		ids = append(ids, quote.ID.String())
 		if quote.IsCurrent && current == nil {
-			current = map[string]any{"id": quote.ID, "quoteNumber": quote.QuoteNumber, "version": quote.Version, "status": quote.Status, "total": quote.Total, "currency": quote.Currency, "fxRate": quote.FXRate}
+			current = map[string]any{"id": quote.ID, "teamId": quote.TeamID, "quoteNumber": quote.QuoteNumber, "version": quote.Version, "status": quote.Status, "total": quote.Total, "currency": quote.Currency, "fxRate": quote.FXRate}
 		}
 	}
 	return withFields(plain(o), map[string]any{"customerName": customerName(o.Customer), "salesExecutiveName": userName(o.SalesExecutive), "preSalesName": userName(o.PreSales), "projectManagerName": userName(o.ProjectManager), "serviceTypes": rows(o.ServiceTypes), "sites": rows(o.Sites), "quoteIds": ids, "currentQuote": current})

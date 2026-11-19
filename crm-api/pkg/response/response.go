@@ -1,8 +1,10 @@
 package response
 
 import (
+	"encoding/json"
 	"net/http"
 	"reflect"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 )
@@ -27,15 +29,15 @@ type FieldError struct {
 }
 
 func OK(c *gin.Context, data interface{}) {
-	c.JSON(http.StatusOK, Response{Success: true, Data: nonNilSlice(data)})
+	c.JSON(http.StatusOK, Response{Success: true, Data: visibleData(c, data)})
 }
 
 func OKWithMeta(c *gin.Context, data interface{}, meta interface{}) {
-	c.JSON(http.StatusOK, Response{Success: true, Data: nonNilSlice(data), Meta: meta})
+	c.JSON(http.StatusOK, Response{Success: true, Data: visibleData(c, data), Meta: meta})
 }
 
 func Created(c *gin.Context, data interface{}) {
-	c.JSON(http.StatusCreated, Response{Success: true, Data: nonNilSlice(data)})
+	c.JSON(http.StatusCreated, Response{Success: true, Data: visibleData(c, data)})
 }
 
 func NoContent(c *gin.Context) {
@@ -118,4 +120,98 @@ func nonNilSlice(data any) any {
 		return reflect.MakeSlice(value.Type(), 0, 0).Interface()
 	}
 	return data
+}
+
+func visibleData(c *gin.Context, data any) any {
+	data = nonNilSlice(data)
+	_, scopeTeams := c.Get("quoteTeams")
+	if !c.GetBool("hideQuoteMargins") && !c.GetBool("hideQuotes") && !scopeTeams {
+		return data
+	}
+	raw, err := json.Marshal(data)
+	if err != nil {
+		return nil
+	}
+	var out any
+	if json.Unmarshal(raw, &out) != nil {
+		return nil
+	}
+	if c.GetBool("hideQuoteMargins") {
+		// Catalog is the quotation builder's price source. Other modules retain
+		// their own permissions; nested quotation objects are still redacted.
+		path := c.Request.URL.Path
+		quoteResponse := strings.Contains(path, "/quotes") || strings.Contains(path, "/dashboard/") || strings.HasSuffix(path, "/price-history") && strings.Contains(path, "/customers/") || strings.HasSuffix(path, "/catalog")
+		if quoteResponse {
+			redactMargins(out)
+		} else {
+			redactNestedQuoteMargins(out)
+		}
+	}
+	return redactQuotes(c, out)
+}
+func redactMargins(value any) {
+	switch item := value.(type) {
+	case []any:
+		for _, child := range item {
+			redactMargins(child)
+		}
+	case map[string]any:
+		for _, key := range []string{"unitCost", "totalCost", "costTotal", "marginAmount", "marginPercent", "estimatedCost", "estimatedMargin", "unitCostOrigin", "costInSAR", "landedCostSAR", "targetMarginPercent", "landingCost", "monthlyCost", "cost", "grossProfit", "averageMargin", "margin"} {
+			delete(item, key)
+		}
+		for _, child := range item {
+			redactMargins(child)
+		}
+	}
+}
+
+func redactNestedQuoteMargins(value any) {
+	switch item := value.(type) {
+	case []any:
+		for _, child := range item {
+			redactNestedQuoteMargins(child)
+		}
+	case map[string]any:
+		if _, quote := item["quoteNumber"]; quote {
+			redactMargins(item)
+			return
+		}
+		for _, child := range item {
+			redactNestedQuoteMargins(child)
+		}
+	}
+}
+
+func redactQuotes(c *gin.Context, value any) any {
+	switch item := value.(type) {
+	case []any:
+		out := []any{}
+		for _, child := range item {
+			if visible := redactQuotes(c, child); visible != nil {
+				out = append(out, visible)
+			}
+		}
+		return out
+	case map[string]any:
+		if _, quote := item["quoteNumber"]; quote && !c.GetBool("operationalQuoteResponse") {
+			if c.GetBool("hideQuotes") {
+				return nil
+			}
+			if team, ok := item["teamId"].(string); ok && team != "" {
+				if raw, scoped := c.Get("quoteTeams"); scoped {
+					if allowed, ok := raw.(map[string]bool); !ok || !allowed[team] {
+						return nil
+					}
+				}
+			}
+		}
+		if c.GetBool("hideQuotes") {
+			delete(item, "quoteIds")
+			delete(item, "currentQuote")
+		}
+		for key, child := range item {
+			item[key] = redactQuotes(c, child)
+		}
+	}
+	return value
 }

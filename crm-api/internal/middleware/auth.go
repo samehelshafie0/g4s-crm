@@ -73,8 +73,23 @@ func Auth(db *gorm.DB) gin.HandlerFunc {
 			c.Abort()
 			return
 		}
-		user.Permissions = Permissions(user.Role)
+		user.Permissions = UserPermissions(user)
 		c.Set("currentUser", user)
+		c.Set("hideQuoteMargins", !UserCan(user, "quotes:view-margins"))
+		c.Set("hideQuotes", !UserCan(user, "quotes:read"))
+		if user.Role != models.RoleAdmin {
+			var ids []string
+			if err := db.Table("team_members tm").Select("tm.team_id::text").Joins("JOIN teams t ON t.id = tm.team_id AND t.is_active AND t.deleted_at IS NULL").Where("tm.user_id = ?", user.ID).Scan(&ids).Error; err != nil {
+				response.InternalError(c, "Could not verify team access")
+				c.Abort()
+				return
+			}
+			allowed := map[string]bool{}
+			for _, id := range ids {
+				allowed[id] = true
+			}
+			c.Set("quoteTeams", allowed)
+		}
 		claims.Role = user.Role
 		claims.Email = user.Email
 		c.Set("userID", claims.UserID)

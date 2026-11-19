@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import AppDialog from '@/components/shared/AppDialog.vue'
 import QuoteAppendices from '@/components/QuoteAppendices.vue'
+import QuoteSupplierQuotes, { type SupplierLine } from '@/components/QuoteSupplierQuotes.vue'
+import type { SalePrice } from '@/services/customerPricing'
+import ProductPriceHistoryDialog from '@/components/ProductPriceHistoryDialog.vue'
 import RecordAttachments from '@/components/RecordAttachments.vue'
 import { ref, computed, watch, reactive, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
@@ -9,7 +12,7 @@ import {
   Plus, GripVertical, Package, Users, Wrench, ChevronDown, ChevronRight, Calendar,
   Building2, AlertCircle, CircleDot, ArrowLeft, RefreshCw, Eye, EyeOff,
   MessageSquare, Minus, Hash, Zap, FileText, Settings, Copy, MapPin, Clipboard,
-  ShoppingCart, Truck, AlertTriangle, PackageCheck, History, DollarSign, TrendingDown, TrendingUp, Check,
+  ShoppingCart, Truck, AlertTriangle, PackageCheck, History, DollarSign, Check,
 } from 'lucide-vue-next'
 import type { QuoteLineCategory, QuoteStatus, Currency, CustomerSite, FulfilmentSource, PriceBook } from '@/types'
 import { useProcurementStore } from '@/stores/procurement'
@@ -22,14 +25,22 @@ import { priceBooksService } from '@/services'
 import { errorMessage } from '@/services/payload'
 import { useAuthStore } from '@/stores/auth'
 
+import { priceForMargin, inPriceBook, priceFromSale } from '@/services/quotePricing'
+import type { Team } from '@/types'
+import { useFieldVisibility } from '@/composables/useFieldVisibility'
+const visibleColumns = useFieldVisibility('crm-quote-columns', { cost: true, margin: true, discount: true, multiplier: true })
+const teams = ref<Pick<Team, 'id' | 'name' | 'leaderId' | 'isActive'>[]>([])
+const teamId = ref('')
 const auth = useAuthStore()
+const canSeeMargins = computed(() => auth.can('quotes:view-margins'))
+const canPrice = computed(() => auth.can('quotes:pricing'))
 const router = useRouter()
 const route = useRoute()
 
 function uid(): string { return Math.random().toString(36).slice(2, 11) }
 
 function formatSAR(v: number): string {
-  return v.toLocaleString('en-SA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  return (v ?? 0).toLocaleString('en-SA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
 function marginClass(pct: number): string {
@@ -55,26 +66,10 @@ const statusConfig: Record<QuoteStatus, { label: string; badge: string }> = {
   expired: { label: 'Expired', badge: 'badge-gray' },
 }
 
-// ── Price History / Batches ───────────────────────────────────
-interface PriceEntry {
-  id: string
-  source: string
-  supplier: string
-  batchRef?: string
-  date: string
-  cost: number
-  price: number
-  qty: number
-  modifier?: string
-  customer?: string
-  quoteRef?: string
-}
-
 // ── Catalog Data (Products, Services, Recurring) ─────────────
 interface CatalogProduct {
   id: string; sku: string; name: string; manufacturer: string
   unitCost: number; unitPrice: number; stockAvailable: number; leadTimeDays: number
-  priceHistory: PriceEntry[]
 }
 
 interface CatalogService {
@@ -95,6 +90,7 @@ const recurringCatalog = reactive<CatalogRecurring[]>([])
 
 // ── Row Interface ────────────────────────────────────────────
 interface QuoteRow {
+  supplierQuoteItemId?: string
   id: string
   rowType: RowType
   source: ItemSource
@@ -143,6 +139,8 @@ function toQuoteCurrency(sar: number): number {
 
 // ── Price book ───────────────────────────────────────────────
 const priceBookId = ref('')
+const bookItems = ref(new Set<string>())
+const allowedItem = (kind: string, id: string) => inPriceBook(priceBookId.value, bookItems.value, kind, id)
 const priceBooks = ref<PriceBook[]>([])
 const today = new Date().toISOString().slice(0, 10)
 // Books the API accepts for this quote: active, in date, general or this customer's.
@@ -159,11 +157,12 @@ function catalogPrice(kind: string, id?: string): number | undefined {
   return undefined
 }
 async function applyBookPrices(id: string) {
+  const book = id ? (await priceBooksService.get(id)).data : null
+  bookItems.value = new Set((book?.entries ?? []).map(e => `${e.kind ?? 'product'}:${e.productId}`))
   for (const p of productCatalog) p.unitPrice = standardPrices.get(`product:${p.id}`) ?? p.unitPrice
   for (const p of serviceCatalog) p.unitPrice = standardPrices.get(`service:${p.id}`) ?? p.unitPrice
   for (const p of recurringCatalog) p.monthlyPrice = standardPrices.get(`recurring:${p.id}`) ?? p.monthlyPrice
-  if (!id) return
-  const book = (await priceBooksService.get(id)).data
+  if (!book) return
   for (const entry of book.entries) {
     const kind = entry.kind ?? 'product'
     if (kind === 'product') { const p = productCatalog.find(x => x.id === entry.productId); if (p) p.unitPrice = entry.customPrice }
@@ -334,146 +333,65 @@ async function generatePOFromQuote() {
   } catch (error) { window.alert(errorMessage(error)) }
 }
 
-// ── Price History Modal ──────────────────────────────────────
+// ── Accepted sale and supplier price history ──────────────────────────
 const showPriceHistoryModal = ref(false)
 const priceHistoryProductId = ref('')
 const priceHistoryTargetRowId = ref<string | null>(null)
-const priceHistorySortField = ref<'date' | 'cost' | 'price' | 'qty' | 'supplier'>('date')
-const priceHistorySortAsc = ref(false)
-const priceHistoryFilterSource = ref('')
-
-const priceHistoryProduct = computed(() =>
-  productCatalog.find(p => p.id === priceHistoryProductId.value),
-)
-
-const priceHistoryEntries = computed(() => {
-  const product = priceHistoryProduct.value
-  if (!product) return []
-  let entries = [...product.priceHistory]
-
-  if (priceHistoryFilterSource.value) {
-    entries = entries.filter(e => e.source === priceHistoryFilterSource.value)
-  }
-
-  entries.sort((a, b) => {
-    const dir = priceHistorySortAsc.value ? 1 : -1
-    switch (priceHistorySortField.value) {
-      case 'date': return dir * a.date.localeCompare(b.date)
-      case 'cost': return dir * (a.cost - b.cost)
-      case 'price': return dir * (a.price - b.price)
-      case 'qty': return dir * (a.qty - b.qty)
-      case 'supplier': return dir * a.supplier.localeCompare(b.supplier)
-      default: return 0
-    }
-  })
-  return entries
-})
-
-const priceHistorySources = computed(() => {
-  const product = priceHistoryProduct.value
-  if (!product) return []
-  return [...new Set(product.priceHistory.map(e => e.source))]
-})
-
-const priceHistoryAvgCost = computed(() => {
-  const entries = priceHistoryEntries.value
-  if (!entries.length) return 0
-  return entries.reduce((s, e) => s + e.cost, 0) / entries.length
-})
-
-const priceHistoryAvgPrice = computed(() => {
-  const entries = priceHistoryEntries.value
-  if (!entries.length) return 0
-  return entries.reduce((s, e) => s + e.price, 0) / entries.length
-})
-
-const priceHistoryLowest = computed(() => {
-  const entries = priceHistoryEntries.value
-  if (!entries.length) return { cost: 0, price: 0 }
-  return {
-    cost: Math.min(...entries.map(e => e.cost)),
-    price: Math.min(...entries.map(e => e.price)),
-  }
-})
-
-const priceHistoryHighest = computed(() => {
-  const entries = priceHistoryEntries.value
-  if (!entries.length) return { cost: 0, price: 0 }
-  return {
-    cost: Math.max(...entries.map(e => e.cost)),
-    price: Math.max(...entries.map(e => e.price)),
-  }
-})
-
-function togglePriceHistorySort(field: typeof priceHistorySortField.value) {
-  if (priceHistorySortField.value === field) {
-    priceHistorySortAsc.value = !priceHistorySortAsc.value
-  } else {
-    priceHistorySortField.value = field
-    priceHistorySortAsc.value = false
-  }
-}
-
+const priceHistoryProduct = computed(() => productCatalog.find(p => p.id === priceHistoryProductId.value))
 function openPriceHistory(productId: string, targetRowId?: string) {
-  priceHistoryProductId.value = productId
-  priceHistoryTargetRowId.value = targetRowId ?? null
-  priceHistoryFilterSource.value = ''
-  priceHistorySortField.value = 'date'
-  priceHistorySortAsc.value = false
-  showPriceHistoryModal.value = true
+ priceHistoryProductId.value = productId
+ priceHistoryTargetRowId.value = targetRowId ?? null
+ showPriceHistoryModal.value = true
 }
-
-function applyPriceFromHistory(entry: PriceEntry) {
+function applyPriceFromHistory(entry: SalePrice) {
+ if (locked.value || !canPrice.value) return
+ try {
   if (priceHistoryTargetRowId.value) {
-    const row = rows.value.find(r => r.id === priceHistoryTargetRowId.value)
-    if (row) {
-      row.unitCost = toQuoteCurrency(entry.cost)
-      row.unitPrice = toQuoteCurrency(entry.price)
-      recalcRow(row)
-      showSaveToast(`Applied ${entry.supplier} pricing (${entry.date})`)
-    }
+   const row = rows.value.find(r => r.id === priceHistoryTargetRowId.value)
+   if (!row) return
+   row.unitPrice = priceFromSale(entry.netUnitPrice, entry.fxRate, fxRate.value, row.discountPercent, discountPercent.value)
+   recalcRow(row)
   } else {
-    const product = priceHistoryProduct.value
-    if (product) {
-      rows.value.push(makeProductRow(
-        product.id, product.sku, product.name, product.manufacturer,
-        product.stockAvailable, product.stockAvailable === 0 ? product.leadTimeDays : undefined,
-        1, entry.cost, entry.price,
-      ))
-      showSaveToast(`Added ${product.sku} with ${entry.supplier} pricing`)
-    }
+   const product = priceHistoryProduct.value
+   if (!product || !allowedItem('product', product.id)) throw new Error('Choose an item in the selected price book.')
+   const price = priceFromSale(entry.netUnitPrice, entry.fxRate, 1, 0, discountPercent.value)
+   rows.value.push(makeProductRow(product.id, product.sku, product.name, product.manufacturer, product.stockAvailable, product.leadTimeDays, 1, product.unitCost, price))
   }
+  showSaveToast(`Applied accepted sale price from ${entry.quoteNumber}. Unit cost unchanged.`)
   showPriceHistoryModal.value = false
+ } catch(e) { window.alert(errorMessage(e)) }
 }
 
-function addWithDefaultPrice() {
-  const product = priceHistoryProduct.value
-  if (!product) return
-  rows.value.push(makeProductRow(
-    product.id, product.sku, product.name, product.manufacturer,
-    product.stockAvailable, product.stockAvailable === 0 ? product.leadTimeDays : undefined,
-    1, product.unitCost, product.unitPrice,
-  ))
-  showSaveToast(`Added ${product.sku} with default pricing`)
-  showPriceHistoryModal.value = false
+function addSupplierPrice(item: SupplierLine, supplierCurrency: string) {
+  if (locked.value || !item.productId || !allowedItem('product', item.productId)) { window.alert('Choose an item in the selected price book.'); return }
+  const product = productCatalog.find(p => p.id === item.productId)
+  if (!product) { window.alert('This product is unavailable in the active catalog.'); return }
+  // The API resolves the supplier currency and pins the authoritative cost on save.
+  const row = makeProductRow(product.id, product.sku, product.name, product.manufacturer, product.stockAvailable, item.leadTimeDays, item.quantity, supplierCurrency === 'SAR' ? item.unitCost : supplierCurrency === currency.value ? item.unitCost * fxRate.value : product.unitCost, product.unitPrice)
+  row.supplierQuoteItemId = item.id
+  rows.value.push(row)
+  showSaveToast('Supplier item added. Save the draft to confirm its converted cost.')
 }
-
 // ── Rows ─────────────────────────────────────────────────────
 const rows = ref<QuoteRow[]>([])
 
 function makeProductRow(pid: string, sku: string, desc: string, mfr: string, stock: number, lead: number | undefined, qty: number, sarCost: number, sarPrice: number): QuoteRow {
-  const cost = toQuoteCurrency(sarCost); const price = toQuoteCurrency(sarPrice)
+  const cost = toQuoteCurrency(sarCost ?? 0); const price = toQuoteCurrency(sarPrice)
   const lt = qty * price
   return { id: uid(), rowType: 'item', source: 'product', productId: pid, sku, description: desc, manufacturer: mfr, stockAvailable: stock > 0 ? stock : undefined, leadTimeDays: lead, quantity: qty, multiplier: 1, unitCost: cost, unitPrice: price, discountPercent: 0, lineTotal: lt, marginPercent: price > 0 ? ((price - cost) / price) * 100 : 0, isOptional: false, isSelected: true, isPrintable: true }
 }
 
 function makeServiceRow(pid: string, sku: string, desc: string, rateType: string, qty: number, sarCost: number, sarPrice: number): QuoteRow {
-  const cost = toQuoteCurrency(sarCost); const price = toQuoteCurrency(sarPrice)
+  const cost = toQuoteCurrency(sarCost ?? 0); const price = toQuoteCurrency(sarPrice)
   const lt = qty * price
   return { id: uid(), rowType: 'item', source: 'service', productId: pid, sku, description: desc, rateType, quantity: qty, multiplier: 1, unitCost: cost, unitPrice: price, discountPercent: 0, lineTotal: lt, marginPercent: price > 0 ? ((price - cost) / price) * 100 : 0, isOptional: false, isSelected: true, isPrintable: true }
 }
 
 // ── Row Computations ─────────────────────────────────────────
+function changeMargin(row: QuoteRow, event: Event) {
+  try { row.unitPrice = priceForMargin(row.unitCost, Number((event.target as HTMLInputElement).value), row.discountPercent); recalcRow(row) }
+  catch (e) { window.alert(errorMessage(e)); (event.target as HTMLInputElement).value = row.marginPercent.toFixed(1) }
+}
 function recalcRow(row: QuoteRow) {
   if (row.rowType !== 'item') return
   const gross = row.quantity * row.multiplier * row.unitPrice
@@ -509,10 +427,10 @@ const categoryBreakdown = computed(() => {
 })
 
 // ── Approval Logic ───────────────────────────────────────────
-const requiresApproval = computed(() => overallMargin.value < 20 || discountPercent.value > 10 || total.value > 500000)
+const requiresApproval = computed(() => (canSeeMargins.value && overallMargin.value < 20) || discountPercent.value > 10 || total.value > 500000)
 const approvalReasons = computed(() => {
   const reasons: string[] = []
-  if (overallMargin.value < 20) reasons.push(`Low margin (${overallMargin.value.toFixed(1)}%)`)
+  if (canSeeMargins.value && overallMargin.value < 20) reasons.push(`Low margin (${overallMargin.value.toFixed(1)}%)`)
   if (discountPercent.value > 10) reasons.push(`High discount (${discountPercent.value}%)`)
   if (total.value > 500000) reasons.push(`High value (${currency.value} ${formatSAR(total.value)})`)
   return reasons
@@ -543,14 +461,14 @@ const catalogOpen = ref(true)
 
 watch(searchQuery, () => { catalogOpen.value = true })
 
-const catalogCounts = computed(() => ({ product: productCatalog.length, service: serviceCatalog.length, recurring: recurringCatalog.length }))
+const catalogCounts = computed(() => ({ product: productCatalog.filter(p => allowedItem('product', p.id)).length, service: serviceCatalog.filter(p => allowedItem('service', p.id)).length, recurring: recurringCatalog.filter(p => allowedItem('recurring', p.id)).length }))
 
 const searchResults = computed<{ id: string; sku: string; name: string; meta: string; price: string; stockLabel?: string; inStock?: boolean }[]>(() => {
   // An empty query browses the catalog; typing narrows it.
   const q = searchQuery.value.toLowerCase().trim()
 
   if (addSource.value === 'product') {
-    return productCatalog.filter(p => !q || p.sku.toLowerCase().includes(q) || p.name.toLowerCase().includes(q) || p.manufacturer.toLowerCase().includes(q)).slice(0, 25).map(p => ({
+    return productCatalog.filter(p => allowedItem('product', p.id)).filter(p => !q || p.sku.toLowerCase().includes(q) || p.name.toLowerCase().includes(q) || p.manufacturer.toLowerCase().includes(q)).slice(0, 25).map(p => ({
       id: p.id, sku: p.sku, name: p.name, meta: p.manufacturer,
       price: `${currency.value} ${formatSAR(toQuoteCurrency(p.unitPrice))}`,
       stockLabel: p.stockAvailable > 0 ? `${p.stockAvailable} in stock` : `${p.leadTimeDays}d lead`,
@@ -558,13 +476,13 @@ const searchResults = computed<{ id: string; sku: string; name: string; meta: st
     }))
   }
   if (addSource.value === 'service') {
-    return serviceCatalog.filter(s => !q || s.sku.toLowerCase().includes(q) || s.name.toLowerCase().includes(q) || s.department.toLowerCase().includes(q)).slice(0, 25).map(s => ({
+    return serviceCatalog.filter(s => allowedItem('service', s.id)).filter(s => !q || s.sku.toLowerCase().includes(q) || s.name.toLowerCase().includes(q) || s.department.toLowerCase().includes(q)).slice(0, 25).map(s => ({
       id: s.id, sku: s.sku, name: s.name, meta: `${s.department} · ${s.rateType}`,
       price: `${currency.value} ${formatSAR(toQuoteCurrency(s.unitPrice))}/${s.rateType}`,
     }))
   }
   if (addSource.value === 'recurring') {
-    return recurringCatalog.filter(r => !q || r.sku.toLowerCase().includes(q) || r.name.toLowerCase().includes(q)).slice(0, 25).map(r => ({
+    return recurringCatalog.filter(r => allowedItem('recurring', r.id)).filter(r => !q || r.sku.toLowerCase().includes(q) || r.name.toLowerCase().includes(q)).slice(0, 25).map(r => ({
       id: r.id, sku: r.sku, name: r.name, meta: r.billingCycle,
       price: `${currency.value} ${formatSAR(toQuoteCurrency(r.monthlyPrice))}/mo`,
     }))
@@ -573,6 +491,7 @@ const searchResults = computed<{ id: string; sku: string; name: string; meta: st
 })
 
 function selectSearchItem(item: { id: string }) {
+  if (locked.value || !allowedItem(addSource.value, item.id)) return
   if (addSource.value === 'product') {
     const p = productCatalog.find(x => x.id === item.id)
     if (!p) return
@@ -584,7 +503,7 @@ function selectSearchItem(item: { id: string }) {
   } else if (addSource.value === 'recurring') {
     const r = recurringCatalog.find(x => x.id === item.id)
     if (!r) return
-    const mc = toQuoteCurrency(r.monthlyCost); const mp = toQuoteCurrency(r.monthlyPrice)
+    const mc = toQuoteCurrency(r.monthlyCost ?? 0); const mp = toQuoteCurrency(r.monthlyPrice)
     const row: QuoteRow = { id: uid(), rowType: 'item', source: 'recurring', productId: r.id, sku: r.sku, description: r.name, billingCycle: r.billingCycle, quantity: 1, multiplier: 12, unitCost: mc, unitPrice: mp, discountPercent: 0, lineTotal: 12 * mp, marginPercent: mp > 0 ? ((mp - mc) / mp) * 100 : 0, isOptional: false, isSelected: true, isPrintable: true }
     rows.value.push(row)
   }
@@ -600,8 +519,8 @@ function handleQuickAdd() {
   const skuPart = (parts[0] ?? '').toUpperCase()
   const qty = parts.length > 1 ? parseInt(parts[1] ?? '1') || 1 : 1
 
-  const found = productCatalog.find(p => p.sku.toUpperCase() === skuPart) ||
-    serviceCatalog.find(s => s.sku.toUpperCase() === skuPart)
+  const found = productCatalog.find(p => allowedItem('product', p.id) && p.sku.toUpperCase() === skuPart) ||
+    serviceCatalog.find(s => allowedItem('service', s.id) && s.sku.toUpperCase() === skuPart)
   if (found && 'manufacturer' in found) {
     const p = found as CatalogProduct
     rows.value.push(makeProductRow(p.id, p.sku, p.name, p.manufacturer, p.stockAvailable, p.stockAvailable === 0 ? p.leadTimeDays : undefined, qty, p.unitCost, p.unitPrice))
@@ -609,9 +528,9 @@ function handleQuickAdd() {
     const s = found as CatalogService
     rows.value.push(makeServiceRow(s.id, s.sku, s.name, s.rateType, qty, s.unitCost, s.unitPrice))
   } else {
-    const recFound = recurringCatalog.find(r => r.sku.toUpperCase() === skuPart)
+    const recFound = recurringCatalog.find(r => allowedItem('recurring', r.id) && r.sku.toUpperCase() === skuPart)
     if (recFound) {
-      const mc = toQuoteCurrency(recFound.monthlyCost); const mp = toQuoteCurrency(recFound.monthlyPrice)
+      const mc = toQuoteCurrency(recFound.monthlyCost ?? 0); const mp = toQuoteCurrency(recFound.monthlyPrice)
       rows.value.push({ id: uid(), rowType: 'item', source: 'recurring', productId: recFound.id, sku: recFound.sku, description: recFound.name, billingCycle: recFound.billingCycle, quantity: qty, multiplier: 12, unitCost: mc, unitPrice: mp, discountPercent: 0, lineTotal: qty * 12 * mp, marginPercent: mp > 0 ? ((mp - mc) / mp) * 100 : 0, isOptional: false, isSelected: true, isPrintable: true })
     } else {
       showSaveToast(`SKU "${skuPart}" not found`)
@@ -672,9 +591,10 @@ const appendices = ref<QuoteAppendix[]>([])
 const pdfError = ref('')
 const loadedQuote = ref<BuilderQuote | null>(null)
 const locked = computed(() => !loadedQuote.value || !auth.can('quotes:update') || quoteStatus.value !== 'draft' || !isCurrent.value || saving.value || exportingPdf.value)
-const canApprove = computed(() => auth.can('quotes:approve'))
+const canApprove = computed(() => auth.can('quotes:approve') && (!teamId.value || auth.user?.role === 'admin' || teams.value.find(t => t.id === teamId.value)?.leaderId === auth.user?.id))
 function applyQuote(q: BuilderQuote) {
   loadedQuote.value = q
+  teamId.value = q.teamId ?? ''
   appendices.value = q.appendices ?? []
   quoteNumber.value = q.quoteNumber; customerId.value = q.customerId; customerName.value = q.customerName
   quoteStatus.value = q.status; validUntil.value = q.validUntil?.slice(0, 10) ?? ''; currency.value = q.currency
@@ -686,7 +606,7 @@ function applyQuote(q: BuilderQuote) {
   soldTo.value = q.soldTo; shipTo.value = q.shipTo
   priceBookId.value = q.priceBookId ?? ''
   if (!soldTo.value.company) soldTo.value.company = q.customerName
-  rows.value = q.lineItems.map(line => ({ ...line, sku: line.sku ?? '', productId: line.productId || line.serviceId || line.recurringServiceId, manufacturer: line.manufacturerName, siteId: line.siteId ?? '', fulfilmentSource: (line.fulfilmentSource ?? '') as FulfilmentSource }))
+  rows.value = q.lineItems.map(line => ({ ...line, unitCost: line.unitCost ?? 0, marginPercent: line.marginPercent ?? 0, sku: line.sku ?? '', productId: line.productId || line.serviceId || line.recurringServiceId, manufacturer: line.manufacturerName, siteId: line.siteId ?? '', fulfilmentSource: (line.fulfilmentSource ?? '') as FulfilmentSource }))
 }
 const catalogError = ref('')
 
@@ -726,6 +646,7 @@ onMounted(async () => {
   } catch (error) {
     catalogError.value = 'The product and service catalog could not be loaded: ' + errorMessage(error)
   }
+  try { teams.value = (await http.get<ApiResponse<typeof teams.value>>('/quotes/team-options')).data.data } catch (error) { catalogError.value = 'Quotation teams could not be loaded: ' + errorMessage(error) }
   await loadQuote()
 })
 watch(() => route.params.id, (id, previous) => {
@@ -738,13 +659,14 @@ async function saveDraft(): Promise<boolean> {
   try {
     const payload: BuilderInput = {
       lockVersion: loadedQuote.value.lockVersion, customerId: customerId.value, opportunityId: loadedQuote.value.opportunityId || null,
-      priceBookId: priceBookId.value || null,
+      priceBookId: priceBookId.value || null, teamId: teamId.value || null,
       currency: currency.value, validUntil: validUntil.value || null, discountPercent: discountPercent.value, vatPercent: vatPercent.value,
       notes: notes.value, paymentTerms: paymentTerms.value, deliveryTerms: deliveryTerms.value,
       introductionText: introductionText.value, closingText: closingText.value, internalNotes: internalNotes.value,
       purchasingNotes: purchasingNotes.value, statementOfWork: statementOfWork.value, soldTo: soldTo.value, shipTo: shipTo.value,
       appendices: appendices.value.map(item => ({documentVersionId:item.documentVersionId,label:item.label.trim()})),
       rows: rows.value.map(row => ({
+        supplierQuoteItemId: row.supplierQuoteItemId,
         id: row.id, rowType: row.rowType, source: row.source,
         productId: row.source === 'product' ? row.productId : undefined,
         serviceId: row.source === 'service' ? row.productId : undefined,
@@ -937,16 +859,16 @@ function exportExcel() {
         </div>
       </div>
       <div class="builder-header-actions">
-<button class="btn btn-secondary btn-sm" @click="printQuote" :disabled="exportingPdf || saving || appendixBusy || !loadedQuote"><Printer :size="14" /> {{ exportingPdf ? 'Preparing PDF…' : 'Export PDF' }}</button>
+<button v-if="auth.can('quotes:export')" class="btn btn-secondary btn-sm" @click="printQuote" :disabled="exportingPdf || saving || appendixBusy || !loadedQuote"><Printer :size="14" /> {{ exportingPdf ? 'Preparing PDF…' : 'Export PDF' }}</button>
         <button v-if="quoteStatus === 'pending-approval' && canApprove" class="btn btn-sm" :disabled="saving" @click="transition('approve')">Approve</button>
         <button v-if="quoteStatus === 'pending-approval' && canApprove" class="btn btn-sm" :disabled="saving" @click="transition('reject')">Return to draft</button>
-        <button v-if="quoteStatus === 'approved' && auth.can('quotes:update')" class="btn btn-sm" :disabled="saving" @click="transition('send')">Mark sent</button>
-        <button v-if="quoteStatus === 'sent' && auth.can('quotes:update')" class="btn btn-sm" :disabled="saving" @click="transition('accept')">Mark accepted</button>
-        <button v-if="quoteStatus === 'sent' && auth.can('quotes:update')" class="btn btn-sm" :disabled="saving" @click="transition('decline')">Mark declined</button>
+        <button v-if="quoteStatus === 'approved' && auth.can('quotes:send')" class="btn btn-sm" :disabled="saving" @click="transition('send')">Mark sent</button>
+        <button v-if="quoteStatus === 'sent' && auth.can('quotes:accept')" class="btn btn-sm" :disabled="saving" @click="transition('accept')">Mark accepted</button>
+        <button v-if="quoteStatus === 'sent' && auth.can('quotes:accept')" class="btn btn-sm" :disabled="saving" @click="transition('decline')">Mark declined</button>
         <button v-if="quoteStatus === 'accepted' && auth.can('contracts:create')" class="btn btn-sm" :disabled="saving" @click="contractError = ''; contractOpen = true">Create contract</button>
-        <button v-if="quoteStatus !== 'draft' && auth.can('quotes:create')" class="btn btn-sm" :disabled="saving" @click="openRevise">Revise</button>
+        <button v-if="['approved', 'sent', 'declined', 'expired'].includes(quoteStatus) && isCurrent && auth.can('quotes:revise')" class="btn btn-sm" :disabled="saving" @click="openRevise">Revise</button>
         <button class="btn btn-secondary btn-sm" @click="saveDraft" :disabled="locked"><Save :size="14" /> Save Draft</button>
-        <button class="btn btn-primary btn-sm" @click="submitForApproval" :disabled="locked"><Send :size="14" /> Submit</button>
+        <button v-if="auth.can('quotes:submit')" class="btn btn-primary btn-sm" @click="submitForApproval" :disabled="locked"><Send :size="14" /> Submit</button>
       </div>
     </div>
 
@@ -958,6 +880,7 @@ function exportExcel() {
 
     <!-- Info Bar -->
     <div class="info-bar">
+      <label class="info-field">Quotation team<select v-model="teamId" :disabled="locked" class="info-select"><option v-if="!loadedQuote?.teamId || auth.user?.role === 'admin'" value="">Unassigned</option><option v-for="team in teams" :key="team.id" :value="team.id">{{ team.name }}</option></select></label>
       <div class="info-field">
         <label class="info-label">Customer</label>
         <span class="info-value"><Building2 :size="14" class="info-icon" /> {{ customerName }}</span>
@@ -980,7 +903,7 @@ function exportExcel() {
       </div>
       <div class="info-field">
         <label class="info-label" for="quote-price-book">Price book</label>
-        <select v-if="!locked" id="quote-price-book" class="info-select" :value="priceBookId" @change="changePriceBook(($event.target as HTMLSelectElement).value)">
+        <select v-if="!locked && canPrice" id="quote-price-book" class="info-select" :value="priceBookId" @change="changePriceBook(($event.target as HTMLSelectElement).value)">
           <option value="">Standard pricing</option>
           <option v-for="b in bookOptions" :key="b.id" :value="b.id">{{ b.name }}{{ b.customerId ? ' · customer' : '' }}</option>
         </select>
@@ -1055,7 +978,7 @@ function exportExcel() {
                 {{ catalogCounts[addSource as 'product' | 'service' | 'recurring'] }} in catalog
               </button>
               <div class="add-special-btns">
-                <button :disabled="locked" class="btn btn-ghost btn-sm" @click="addWriteInRow" title="Write-in (external item)"><FileText :size="14" /> Write-in</button>
+                <button v-if="!priceBookId && canPrice && canSeeMargins" :disabled="locked" class="btn btn-ghost btn-sm" @click="addWriteInRow" title="Write-in (external item)"><FileText :size="14" /> Write-in</button>
                 <button :disabled="locked" class="btn btn-ghost btn-sm" @click="addHeading" title="Section heading"><Hash :size="14" /> Heading</button>
                 <button :disabled="locked" class="btn btn-ghost btn-sm" @click="addComment" title="Comment line"><MessageSquare :size="14" /> Comment</button>
                 <button :disabled="locked" class="btn btn-ghost btn-sm" @click="addSubtotalLine" title="Subtotal line"><Minus :size="14" /> Subtotal</button>
@@ -1085,7 +1008,7 @@ function exportExcel() {
                         </span>
                       </div>
                     </button>
-                    <button v-if="addSource === 'product'" type="button" class="dd-history-btn" title="View price history & batches" @click="openPriceHistory(item.id)">
+                    <button v-if="addSource === 'product'" type="button" class="dd-history-btn" title="View item price history" @click="openPriceHistory(item.id)">
                       <History :size="13" />
                     </button>
                   </div>
@@ -1124,10 +1047,11 @@ function exportExcel() {
           <button v-if="spotlightActive" class="btn btn-ghost btn-icon btn-sm" @click="spotlightQuery = ''"><X :size="14" /></button>
         </div>
 
+        <details class="column-settings"><summary>Customize columns</summary><label v-for="(label, key) in { cost: 'Unit cost', margin: 'Margin', discount: 'Discount', multiplier: 'Multiplier' }" :key="key"><input v-model="visibleColumns[key]" type="checkbox" :disabled="(key === 'cost' || key === 'margin') && !canSeeMargins" /> {{ label }}</label></details>
         <!-- Line Items Table -->
         <div v-if="filteredRows.length" class="card">
-          <div class="table-wrap">
-            <table class="builder-table">
+          <div class="table-wrap" tabindex="0" aria-label="Quotation items, scroll horizontally for more columns">
+            <table class="builder-table" :class="{ 'hide-cost': !visibleColumns.cost || !canSeeMargins, 'hide-margin': !visibleColumns.margin || !canSeeMargins, 'hide-discount': !visibleColumns.discount, 'hide-multiplier': !visibleColumns.multiplier }">
               <thead>
                 <tr>
                   <th class="col-grip"></th>
@@ -1136,7 +1060,7 @@ function exportExcel() {
                   <th>Description / SKU</th>
                   <th class="text-center col-qty">Qty</th>
                   <th class="text-center col-mult">×</th>
-                  <th class="text-right col-price">Unit Cost</th>
+                  <th class="text-right col-price col-cost">Unit Cost</th>
                   <th class="text-right col-price">Unit Price</th>
                   <th class="text-right col-disc">Disc%</th>
                   <th class="text-right col-total">Total</th>
@@ -1151,7 +1075,7 @@ function exportExcel() {
                   <tr v-if="row.rowType === 'heading'" class="heading-row" :class="{ 'item-row--spotlight-dim': spotlightActive && !isSpotlightMatch(row) }">
                     <td class="col-grip"><GripVertical :size="14" class="drag-handle" /></td>
                     <td></td>
-                    <td colspan="9">
+                    <td :colspan="9 - Number(!visibleColumns.cost || !canSeeMargins) - Number(!visibleColumns.margin || !canSeeMargins) - Number(!visibleColumns.discount) - Number(!visibleColumns.multiplier)">
                       <input :disabled="locked" v-model="row.headingText" type="text" class="heading-input" placeholder="Section Title..." />
                     </td>
                     <td></td>
@@ -1162,7 +1086,7 @@ function exportExcel() {
                   <tr v-else-if="row.rowType === 'comment'" class="comment-row" :class="{ 'item-row--spotlight-dim': spotlightActive && !isSpotlightMatch(row) }">
                     <td class="col-grip"><GripVertical :size="14" class="drag-handle" /></td>
                     <td></td>
-                    <td colspan="9">
+                    <td :colspan="9 - Number(!visibleColumns.cost || !canSeeMargins) - Number(!visibleColumns.margin || !canSeeMargins) - Number(!visibleColumns.discount) - Number(!visibleColumns.multiplier)">
                       <input :disabled="locked" v-model="row.commentText" type="text" class="comment-input" placeholder="Add a comment or note..." />
                     </td>
                     <td></td>
@@ -1173,11 +1097,11 @@ function exportExcel() {
                   <tr v-else-if="row.rowType === 'subtotal'" class="subtotal-row" :class="{ 'item-row--spotlight-dim': spotlightActive }">
                     <td class="col-grip"><GripVertical :size="14" class="drag-handle" /></td>
                     <td></td>
-                    <td colspan="7" class="subtotal-label">
+                    <td :colspan="7 - Number(!visibleColumns.cost || !canSeeMargins) - Number(!visibleColumns.discount) - Number(!visibleColumns.multiplier)" class="subtotal-label">
                       <Minus :size="14" /> Running Subtotal
                     </td>
                     <td class="text-right subtotal-value">{{ currency }} {{ formatSAR(computeRunningSubtotal(rows.indexOf(row))) }}</td>
-                    <td></td>
+                    <td class="col-margin"></td>
                     <td></td>
                     <td><button :disabled="locked" class="btn btn-ghost btn-icon btn-sm" @click="removeRow(row.id)"><Trash2 :size="14" /></button></td>
                   </tr>
@@ -1191,7 +1115,7 @@ function exportExcel() {
                     </td>
                     <td>
                       <div class="desc-cell">
-                        <input :disabled="locked" v-model="row.description" type="text" class="inline-input inline-input--desc" :placeholder="row.source === 'write-in' ? 'Enter item description...' : 'Description'" />
+                        <input :disabled="locked" v-model="row.description" type="text" class="inline-input inline-input--desc" :title="row.description" :aria-label="`Description for ${row.sku || 'write-in item'}`" :placeholder="row.source === 'write-in' ? 'Enter item description...' : 'Description'" />
                         <div class="desc-meta">
                           <span v-if="row.sku" class="cell-sku">{{ row.sku }}</span>
                           <span v-if="row.source === 'write-in'" class="cell-writein">Write-in</span>
@@ -1224,21 +1148,21 @@ function exportExcel() {
                     <td class="text-center col-mult">
                       <input :disabled="locked" v-model.number="row.multiplier" type="number" min="1" class="inline-input inline-input--num" @change="recalcRow(row)" />
                     </td>
-                    <td class="text-right col-price">
-                      <input :disabled="locked" v-model.number="row.unitCost" type="number" step="0.01" min="0" class="inline-input inline-input--price" @change="recalcRow(row)" />
+                    <td class="text-right col-price col-cost">
+                      <input v-if="canSeeMargins && row.source === 'write-in' && !loadedQuote?.lineItems.some(line => line.id === row.id)" v-model.number="row.unitCost" :disabled="locked" class="inline-input inline-input--price" type="number" min="0" step="0.01" aria-label="Initial unit cost" @change="recalcRow(row)" /><span v-else-if="canSeeMargins" title="Unit cost is fixed for this line">{{ formatSAR(row.unitCost) }}</span><span v-else>Restricted</span>
                     </td>
                     <td class="text-right col-price">
-                      <input :disabled="locked" v-model.number="row.unitPrice" type="number" step="0.01" min="0" class="inline-input inline-input--price" @change="recalcRow(row)" />
+                      <input :disabled="locked || !canPrice" v-model.number="row.unitPrice" type="number" step="0.01" min="0" class="inline-input inline-input--price" @change="recalcRow(row)" />
                     </td>
                     <td class="text-right col-disc">
                       <div class="disc-wrap">
-                        <input :disabled="locked" v-model.number="row.discountPercent" type="number" step="0.5" min="0" max="100" class="inline-input inline-input--disc" @change="recalcRow(row)" />
+                        <input :disabled="locked || !canPrice" v-model.number="row.discountPercent" type="number" step="0.5" min="0" max="100" class="inline-input inline-input--disc" @change="recalcRow(row)" />
                         <span class="disc-sym">%</span>
                       </div>
                     </td>
                     <td class="text-right col-total whitespace-nowrap font-medium">{{ currency }} {{ formatSAR(row.lineTotal) }}</td>
                     <td class="text-right col-margin">
-                      <span :class="['font-semibold', marginClass(row.marginPercent)]">{{ row.marginPercent.toFixed(1) }}%</span>
+                      <input v-if="canSeeMargins" :disabled="locked || !canPrice" :value="row.marginPercent.toFixed(1)" type="number" step="0.1" max="99.99" class="inline-input inline-input--price" :aria-label="`Margin percentage for ${row.description}`" @change="changeMargin(row, $event)" /><span v-else>Restricted</span>
                     </td>
                     <td class="col-opt">
                       <button :disabled="locked" class="opt-btn" :class="{ 'opt-btn--active': row.isOptional }" :title="row.isOptional ? 'Mark as required' : 'Mark as optional'" @click="toggleOptional(row)">
@@ -1248,7 +1172,7 @@ function exportExcel() {
                     </td>
                     <td class="col-actions">
                       <div class="row-actions">
-                        <button v-if="row.source === 'product' && row.productId" class="btn btn-ghost btn-icon btn-sm price-history-btn" title="Price History / Batches" @click="openPriceHistory(row.productId!, row.id)">
+                        <button v-if="row.source === 'product' && row.productId" class="btn btn-ghost btn-icon btn-sm price-history-btn" title="Item price history" @click="openPriceHistory(row.productId!, row.id)">
                           <History :size="13" />
                         </button>
                         <button :disabled="locked" class="btn btn-ghost btn-icon btn-sm" title="Duplicate" @click="duplicateRow(row)"><Copy :size="13" /></button>
@@ -1298,7 +1222,7 @@ function exportExcel() {
                 <div class="disc-label">
                   <span>Discount</span>
                   <div class="disc-input-wrap">
-                    <input :disabled="locked" v-model.number="discountPercent" type="number" step="0.5" min="0" max="100" class="disc-input" />
+                    <input :disabled="locked || !canPrice" v-model.number="discountPercent" type="number" step="0.5" min="0" max="100" class="disc-input" />
                     <span class="disc-input-sym">%</span>
                   </div>
                 </div>
@@ -1319,7 +1243,7 @@ function exportExcel() {
             </div>
 
             <!-- Cost Breakdown -->
-            <div class="cost-section">
+            <div v-if="canSeeMargins" class="cost-section">
               <h4 class="cost-title">Cost & Margin</h4>
               <div class="summary-rows">
                 <div class="summary-row"><span>Total Cost</span><span class="text-mono">{{ currency }} {{ formatSAR(totalCost) }}</span></div>
@@ -1376,10 +1300,10 @@ function exportExcel() {
             <!-- Actions -->
             <div class="summary-actions">
               <button class="btn btn-primary btn-lg summary-action-btn" @click="saveDraft" :disabled="locked"><Save :size="16" /> Save Draft</button>
-              <button class="btn btn-success summary-action-btn" @click="submitForApproval" :disabled="locked"><CheckCircle2 :size="16" /> Submit for Approval</button>
+              <button v-if="auth.can('quotes:submit')" class="btn btn-success summary-action-btn" @click="submitForApproval" :disabled="locked"><CheckCircle2 :size="16" /> Submit for Approval</button>
               <div class="summary-secondary">
 
-                <button class="btn btn-secondary btn-sm" @click="exportExcel"><FileSpreadsheet :size="14" /> Excel</button>
+                <button v-if="auth.can('quotes:export') && canSeeMargins" class="btn btn-secondary btn-sm" @click="exportExcel"><FileSpreadsheet :size="14" /> Excel</button>
               </div>
             </div>
           </div>
@@ -1389,9 +1313,10 @@ function exportExcel() {
 
     <!-- Tab: Sold To / Ship To -->
     <div v-show="builderTab === 'documents'" class="tab-content-panel">
-      <QuoteAppendices v-if="loadedQuote" v-model="appendices" :customer-id="customerId" :disabled="locked || exportingPdf" @busy="appendixBusy = $event" />
+      <QuoteSupplierQuotes v-if="loadedQuote && canSeeMargins" :quote-id="loadedQuote.id" :currency="currency" :disabled="locked" @use-price="addSupplierPrice" />
+      <QuoteAppendices v-if="loadedQuote" v-model="appendices" :customer-id="customerId" :disabled="locked || exportingPdf || !auth.can('quotes:documents')" @busy="appendixBusy = $event" />
       <!-- Supplier paperwork behind this quote: kept with the record, not printed into the PDF. -->
-      <RecordAttachments v-if="loadedQuote" class="quote-attachments" entity-type="quote" :entity-id="loadedQuote.id" :entity-label="quoteNumber" />
+      <RecordAttachments v-if="loadedQuote" :disabled="locked || !auth.can('quotes:documents')" class="quote-attachments" entity-type="quote" :entity-id="loadedQuote.id" :entity-label="quoteNumber" />
     </div>
 
     <div v-show="builderTab === 'addresses'" class="tab-content-panel">
@@ -1611,151 +1536,17 @@ function exportExcel() {
           </div>
         </div>
       </div>
-      <!-- Price History / Batch Selection Modal -->
-      <div v-if="showPriceHistoryModal && priceHistoryProduct" class="modal-backdrop" @click.self="showPriceHistoryModal = false">
-        <div class="modal modal-xl">
-          <div class="modal-header">
-            <div class="ph-modal-header-left">
-              <h2 class="modal-title"><History :size="20" /> Product Price History</h2>
-              <div class="ph-product-badge">
-                <span class="ph-sku">{{ priceHistoryProduct.sku }}</span>
-                <span class="ph-name">{{ priceHistoryProduct.name }}</span>
-                <span class="ph-mfr">{{ priceHistoryProduct.manufacturer }}</span>
-              </div>
-            </div>
-            <button class="modal-close" @click="showPriceHistoryModal = false"><X :size="20" /></button>
-          </div>
-          <div class="modal-body">
-            <!-- Stats Cards -->
-            <div class="ph-stats">
-              <div class="ph-stat-card">
-                <div class="ph-stat-label">Average Cost</div>
-                <div class="ph-stat-value">SAR {{ formatSAR(priceHistoryAvgCost) }}</div>
-              </div>
-              <div class="ph-stat-card">
-                <div class="ph-stat-label">Average Price</div>
-                <div class="ph-stat-value">SAR {{ formatSAR(priceHistoryAvgPrice) }}</div>
-              </div>
-              <div class="ph-stat-card ph-stat-card--green">
-                <div class="ph-stat-label"><TrendingDown :size="13" /> Lowest Cost</div>
-                <div class="ph-stat-value">SAR {{ formatSAR(priceHistoryLowest.cost) }}</div>
-              </div>
-              <div class="ph-stat-card ph-stat-card--red">
-                <div class="ph-stat-label"><TrendingUp :size="13" /> Highest Cost</div>
-                <div class="ph-stat-value">SAR {{ formatSAR(priceHistoryHighest.cost) }}</div>
-              </div>
-              <div class="ph-stat-card">
-                <div class="ph-stat-label">Current Default</div>
-                <div class="ph-stat-value">SAR {{ formatSAR(priceHistoryProduct.unitPrice) }}</div>
-              </div>
-            </div>
-
-            <!-- Filter Row -->
-            <div class="ph-filters">
-              <div class="ph-filter-group">
-                <label class="ph-filter-label">Source</label>
-                <select :disabled="locked" v-model="priceHistoryFilterSource" class="form-select form-select--sm">
-                  <option value="">All Sources</option>
-                  <option v-for="src in priceHistorySources" :key="src" :value="src">{{ src }}</option>
-                </select>
-              </div>
-              <div class="ph-filter-info">
-                {{ priceHistoryEntries.length }} {{ priceHistoryEntries.length === 1 ? 'entry' : 'entries' }}
-              </div>
-            </div>
-
-            <!-- Price History Table -->
-            <div class="ph-table-wrap">
-              <table class="table ph-table">
-                <thead>
-                  <tr>
-                    <th class="ph-th-sortable" @click="togglePriceHistorySort('date')">
-                      Date
-                      <ChevronDown v-if="priceHistorySortField === 'date'" :size="12" :class="{ 'sort-asc': priceHistorySortAsc }" />
-                    </th>
-                    <th class="ph-th-sortable" @click="togglePriceHistorySort('supplier')">
-                      Supplier
-                      <ChevronDown v-if="priceHistorySortField === 'supplier'" :size="12" :class="{ 'sort-asc': priceHistorySortAsc }" />
-                    </th>
-                    <th>Source</th>
-                    <th>Batch / Ref</th>
-                    <th class="text-right ph-th-sortable" @click="togglePriceHistorySort('cost')">
-                      Cost
-                      <ChevronDown v-if="priceHistorySortField === 'cost'" :size="12" :class="{ 'sort-asc': priceHistorySortAsc }" />
-                    </th>
-                    <th class="text-right ph-th-sortable" @click="togglePriceHistorySort('price')">
-                      Price
-                      <ChevronDown v-if="priceHistorySortField === 'price'" :size="12" :class="{ 'sort-asc': priceHistorySortAsc }" />
-                    </th>
-                    <th class="text-right">Margin</th>
-                    <th class="text-center ph-th-sortable" @click="togglePriceHistorySort('qty')">
-                      Qty
-                      <ChevronDown v-if="priceHistorySortField === 'qty'" :size="12" :class="{ 'sort-asc': priceHistorySortAsc }" />
-                    </th>
-                    <th>Modifier</th>
-                    <th>Customer / Quote</th>
-                    <th class="text-center">Use</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="entry in priceHistoryEntries" :key="entry.id" class="ph-row">
-                    <td class="whitespace-nowrap">{{ entry.date }}</td>
-                    <td>{{ entry.supplier }}</td>
-                    <td>
-                      <span :class="['ph-source-badge', 'ph-source-badge--' + entry.source.toLowerCase().replace(/\s+/g, '-')]">
-                        {{ entry.source }}
-                      </span>
-                    </td>
-                    <td class="text-mono text-muted" style="font-size:0.75rem">{{ entry.batchRef || '—' }}</td>
-                    <td class="text-right text-mono whitespace-nowrap">
-                      <span :class="{ 'ph-cost-low': entry.cost === priceHistoryLowest.cost, 'ph-cost-high': entry.cost === priceHistoryHighest.cost }">
-                        SAR {{ formatSAR(entry.cost) }}
-                      </span>
-                    </td>
-                    <td class="text-right text-mono whitespace-nowrap font-medium">SAR {{ formatSAR(entry.price) }}</td>
-                    <td class="text-right">
-                      <span :class="['font-semibold', marginClass(entry.price > 0 ? ((entry.price - entry.cost) / entry.price) * 100 : 0)]">
-                        {{ entry.price > 0 ? (((entry.price - entry.cost) / entry.price) * 100).toFixed(1) : '0.0' }}%
-                      </span>
-                    </td>
-                    <td class="text-center">{{ entry.qty }}</td>
-                    <td class="text-muted" style="font-size:0.75rem">{{ entry.modifier || '—' }}</td>
-                    <td>
-                      <div v-if="entry.customer || entry.quoteRef" class="ph-customer-info">
-                        <span v-if="entry.customer" class="ph-customer-name">{{ entry.customer }}</span>
-                        <span v-if="entry.quoteRef" class="ph-quote-ref">{{ entry.quoteRef }}</span>
-                      </div>
-                      <span v-else class="text-muted">—</span>
-                    </td>
-                    <td class="text-center">
-                      <button :disabled="locked" class="btn btn-primary btn-sm ph-apply-btn" title="Apply this price" @click="applyPriceFromHistory(entry)">
-                        <Check :size="13" /> Use
-                      </button>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-          <div class="modal-footer ph-modal-footer">
-            <div class="ph-footer-left">
-              <span class="ph-footer-avg">Avg Cost: <strong>SAR {{ formatSAR(priceHistoryAvgCost) }}</strong></span>
-              <span class="ph-footer-avg">Avg Price: <strong>SAR {{ formatSAR(priceHistoryAvgPrice) }}</strong></span>
-            </div>
-            <div class="ph-footer-right">
-              <button class="btn btn-secondary" @click="showPriceHistoryModal = false">Cancel</button>
-              <button :disabled="locked" v-if="!priceHistoryTargetRowId" class="btn btn-primary" @click="addWithDefaultPrice">
-                <Plus :size="16" /> Add with Default Price
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
     </Teleport>
+    <ProductPriceHistoryDialog v-if="priceHistoryProduct" v-model:open="showPriceHistoryModal" :product-id="priceHistoryProduct.id" :sku="priceHistoryProduct.sku" :product-name="priceHistoryProduct.name" :customer-id="customerId" :customer-name="customerName" :disabled="locked || !canPrice" @use-price="applyPriceFromHistory" />
   </div>
 </template>
 
 <style scoped>
+.column-settings { font-size: var(--text-sm); }
+.column-settings summary { cursor: pointer; }
+.column-settings label { display: inline-flex; align-items: center; gap: var(--space-2); margin: var(--space-3); }
+.hide-cost .col-cost, .hide-margin .col-margin, .hide-discount .col-disc, .hide-multiplier .col-mult { display: none; }
+
 .info-link { color: var(--color-primary); text-decoration: none; }
 .info-link:hover { text-decoration: underline; }
 .version-tag { font-size: var(--text-sm); font-weight: 600; color: var(--color-neutral-500); margin-left: var(--space-2); }
@@ -1788,15 +1579,15 @@ function exportExcel() {
 
 /* Info Bar */
 .info-bar { display: flex; align-items: flex-end; gap: var(--space-4); padding: var(--space-4) var(--space-5); background: var(--content-surface); border: 1px solid var(--color-neutral-200); border-radius: var(--radius-lg); margin-bottom: var(--space-5); flex-wrap: wrap; }
-.info-field { display: flex; flex-direction: column; gap: 2px; }
+.info-field { max-width: 100%; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .info-label { font-size: 0.6875rem; font-weight: 600; color: var(--color-neutral-500); text-transform: uppercase; letter-spacing: .03em; }
-.info-value { display: flex; align-items: center; gap: var(--space-1); font-size: var(--text-sm); color: var(--color-neutral-800); font-weight: 500; }
+.info-value { overflow-wrap: anywhere; display: flex; align-items: center; gap: var(--space-1); font-size: var(--text-sm); color: var(--color-neutral-800); font-weight: 500; }
 .info-icon { color: var(--color-neutral-400); }
 .info-date { font-size: var(--text-sm); border: 1px solid var(--color-neutral-200); border-radius: var(--radius-sm); padding: 4px 8px; background: transparent; font-family: inherit; color: var(--color-neutral-800); }
 .info-select { font-size: var(--text-sm); border: 1px solid var(--color-neutral-200); border-radius: var(--radius-sm); padding: 4px 8px; background: transparent; font-family: inherit; color: var(--color-neutral-800); width: 180px; }
 
 /* Content Layout */
-.builder-content { display: grid; grid-template-columns: 1fr 320px; gap: var(--space-5); align-items: start; }
+.builder-content { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: var(--space-5); align-items: start; }
 .builder-main { min-width: 0; display: flex; flex-direction: column; gap: var(--space-4); }
 
 /* Add Panel */
@@ -1809,21 +1600,21 @@ function exportExcel() {
 .source-tab--active { background: var(--color-primary); color: white; border-color: var(--color-primary); }
 .add-special-btns { display: flex; gap: var(--space-1); }
 .add-search-row { display: flex; gap: var(--space-3); align-items: stretch; }
-.add-search-wrapper { flex: 1; position: relative; }
-.quick-add { display: flex; align-items: center; gap: var(--space-1); width: 280px; flex-shrink: 0; position: relative; }
+.add-search-wrapper { flex: 1; min-width: 0; position: relative; }
+.quick-add { min-width: 0; max-width: 100%; display: flex; align-items: center; gap: var(--space-1); width: 280px; flex-shrink: 0; position: relative; }
 .quick-icon { position: absolute; left: 10px; color: var(--color-warning); pointer-events: none; z-index: 1; }
-.quick-input { padding-left: 30px !important; font-family: var(--font-mono); font-size: var(--text-xs); }
+.quick-input { width: 100%; min-width: 0; padding-left: 30px !important; font-family: var(--font-mono); font-size: var(--text-xs); }
 
 /* Dropdown */
 .product-dropdown { position: absolute; top: 100%; left: 0; right: 0; margin-top: 4px; background: var(--content-surface); border: 1px solid var(--color-neutral-200); border-radius: var(--radius-lg); box-shadow: 0 8px 24px rgba(0,0,0,.12); max-height: 360px; overflow-y: auto; z-index: 50; }
-.dd-item { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); width: 100%; padding: var(--space-3) var(--space-4); border: none; background: none; cursor: pointer; text-align: left; transition: background .1s; }
+.dd-item { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-3); width: 100%; min-width: 0; padding: var(--space-3) var(--space-4); border: none; background: none; cursor: pointer; text-align: left; transition: background .1s; }
 .dd-item:hover { background: var(--color-primary-light, #eff6ff); }
 .dd-item:not(:last-child) { border-bottom: 1px solid var(--color-neutral-100); }
-.dd-main { display: flex; align-items: center; gap: var(--space-2); flex: 1; min-width: 0; }
-.dd-sku { font-family: var(--font-mono); font-size: var(--text-xs); font-weight: 600; color: var(--color-primary); background: var(--color-primary-light, #eff6ff); padding: 2px 6px; border-radius: var(--radius-sm); white-space: nowrap; }
-.dd-name { font-size: var(--text-sm); color: var(--color-neutral-800); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.dd-meta { font-size: var(--text-xs); color: var(--color-neutral-400); white-space: nowrap; }
-.dd-right { display: flex; align-items: center; gap: var(--space-3); flex-shrink: 0; }
+.dd-main { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); flex: 1 1 18rem; min-width: 0; }
+.dd-sku { max-width: 100%; overflow-wrap: anywhere; font-family: var(--font-mono); font-size: var(--text-xs); font-weight: 600; color: var(--color-primary); background: var(--color-primary-light, #eff6ff); padding: 2px 6px; border-radius: var(--radius-sm); }
+.dd-name { flex: 1 1 12rem; min-width: 0; overflow-wrap: anywhere; font-size: var(--text-sm); color: var(--color-neutral-800); }
+.dd-meta { flex-basis: 100%; overflow-wrap: anywhere; font-size: var(--text-xs); color: var(--color-neutral-500); }
+.dd-right { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); }
 .dd-price { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-neutral-600); white-space: nowrap; }
 .dd-stock { display: inline-flex; align-items: center; gap: 4px; font-size: var(--text-xs); white-space: nowrap; }
 .dd-stock-dot { width: 7px; height: 7px; border-radius: 50%; }
@@ -1890,7 +1681,7 @@ function exportExcel() {
 .inline-input { width: 100%; padding: 3px 6px; font-size: var(--text-sm); font-family: var(--font-mono); border: 1px solid transparent; border-radius: var(--radius-sm); background: transparent; color: var(--color-neutral-800); transition: all .15s; outline: none; }
 .inline-input:hover { border-color: var(--color-neutral-200); background: var(--content-surface); }
 .inline-input:focus { border-color: var(--color-primary); background: var(--content-surface); box-shadow: 0 0 0 2px rgba(37,99,235,.15); }
-.inline-input--desc { font-family: inherit; font-weight: 500; }
+.inline-input--desc { min-width: 200px; font-family: inherit; font-weight: 500; }
 .inline-input--num { text-align: center; width: 60px; }
 .inline-input--price { text-align: right; width: 100px; }
 .inline-input--disc { text-align: right; width: 56px; padding-right: 16px; }
@@ -2026,73 +1817,9 @@ function exportExcel() {
 }
 .dd-history-btn:hover { background: var(--color-primary-50); color: var(--color-primary); }
 
-/* Price History Button on rows */
+/* Customer price history Button on rows */
 .price-history-btn { color: var(--color-neutral-400); }
 .price-history-btn:hover { color: var(--color-primary) !important; background: var(--color-primary-50) !important; }
-
-/* Price History Modal */
-.modal-xl { max-width: 1100px; width: 95vw; }
-
-.ph-modal-header-left { display: flex; flex-direction: column; gap: var(--space-2); }
-.ph-product-badge { display: flex; align-items: center; gap: var(--space-3); font-size: var(--text-sm); }
-.ph-sku { font-family: var(--font-mono); color: var(--color-primary); font-weight: 600; background: var(--color-primary-50); padding: 1px 8px; border-radius: var(--radius-sm); }
-.ph-name { color: var(--color-neutral-700); font-weight: 500; }
-.ph-mfr { color: var(--color-neutral-400); }
-
-.ph-stats {
-  display: grid; grid-template-columns: repeat(5, 1fr); gap: var(--space-3); margin-bottom: var(--space-5);
-}
-.ph-stat-card {
-  background: var(--color-neutral-50); border: 1px solid var(--color-neutral-200);
-  border-radius: var(--radius-lg); padding: var(--space-3) var(--space-4); text-align: center;
-}
-.ph-stat-card--green { border-color: var(--color-success); background: rgba(16, 185, 129, .05); }
-.ph-stat-card--red { border-color: var(--color-danger); background: rgba(239, 68, 68, .05); }
-.ph-stat-label { font-size: 0.6875rem; text-transform: uppercase; letter-spacing: .04em; color: var(--color-neutral-500); margin-bottom: 2px; display: flex; align-items: center; justify-content: center; gap: 4px; }
-.ph-stat-value { font-size: var(--text-lg); font-weight: 700; color: var(--color-neutral-900); font-family: var(--font-mono); }
-.ph-stat-card--green .ph-stat-value { color: var(--color-success); }
-.ph-stat-card--red .ph-stat-value { color: var(--color-danger); }
-
-.ph-filters { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-3); }
-.ph-filter-group { display: flex; align-items: center; gap: var(--space-2); }
-.ph-filter-label { font-size: var(--text-xs); font-weight: 600; color: var(--color-neutral-500); text-transform: uppercase; letter-spacing: .04em; }
-.ph-filter-info { font-size: var(--text-sm); color: var(--color-neutral-500); }
-.form-select--sm { padding: 4px 24px 4px 8px; font-size: var(--text-xs); }
-
-.ph-table-wrap { max-height: 360px; overflow-y: auto; border: 1px solid var(--color-neutral-200); border-radius: var(--radius-lg); }
-.ph-table { font-size: var(--text-xs); }
-.ph-table thead th { position: sticky; top: 0; z-index: 2; background: var(--color-neutral-50); font-size: 0.6875rem; text-transform: uppercase; letter-spacing: .04em; white-space: nowrap; }
-.ph-th-sortable { cursor: pointer; user-select: none; }
-.ph-th-sortable:hover { color: var(--color-primary); }
-.ph-th-sortable svg { display: inline-block; vertical-align: middle; margin-left: 2px; transition: transform .15s; }
-.ph-th-sortable .sort-asc { transform: rotate(180deg); }
-
-.ph-row { transition: background .1s; }
-.ph-row:hover { background: var(--color-primary-50); }
-
-.ph-source-badge {
-  display: inline-block; padding: 1px 8px; border-radius: 9999px;
-  font-size: 0.625rem; font-weight: 600; text-transform: uppercase; letter-spacing: .03em;
-}
-.ph-source-badge--distributor { background: var(--color-primary-50); color: var(--color-primary); }
-.ph-source-badge--direct-import { background: rgba(16, 185, 129, .1); color: var(--color-success); }
-.ph-source-badge--past-quote { background: rgba(245, 158, 11, .1); color: var(--color-warning); }
-.ph-source-badge--local-vendor { background: rgba(139, 92, 246, .1); color: #8b5cf6; }
-
-.ph-cost-low { color: var(--color-success); font-weight: 600; }
-.ph-cost-high { color: var(--color-danger); font-weight: 600; }
-
-.ph-customer-info { display: flex; flex-direction: column; gap: 1px; }
-.ph-customer-name { font-size: 0.6875rem; font-weight: 500; color: var(--color-neutral-700); }
-.ph-quote-ref { font-size: 0.625rem; font-family: var(--font-mono); color: var(--color-primary); }
-
-.ph-apply-btn { padding: 3px 10px; font-size: 0.6875rem; display: inline-flex; align-items: center; gap: 4px; }
-
-.ph-modal-footer { display: flex; justify-content: space-between; align-items: center; }
-.ph-footer-left { display: flex; gap: var(--space-4); }
-.ph-footer-avg { font-size: var(--text-sm); color: var(--color-neutral-500); }
-.ph-footer-avg strong { color: var(--color-neutral-800); font-family: var(--font-mono); }
-.ph-footer-right { display: flex; gap: var(--space-2); }
 
 /* Responsive */
 @media (max-width: 1200px) {
@@ -2100,7 +1827,12 @@ function exportExcel() {
   .builder-summary { position: static; }
 }
 @media (max-width: 768px) {
-  .info-bar { flex-direction: column; }
+  .builder-page { padding: var(--space-3); }
+  .info-bar { flex-direction: column; align-items: stretch; }
+  .info-select { width: 100%; }
+  .tabs { flex-wrap: wrap; }
+  .builder-header-left { min-width: 0; }
+  .builder-subtitle { flex-wrap: wrap; }
   .add-search-row { flex-direction: column; }
   .quick-add { width: 100%; }
   .source-tabs { flex-wrap: wrap; }

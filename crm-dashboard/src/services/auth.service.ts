@@ -15,6 +15,7 @@ export interface AuthUser {
   phone?: string
   teamId?: string
   permissions?: string[]
+  quotePermissions?: Record<string, boolean>
   isActive: boolean
   lastLoginAt?: string
 }

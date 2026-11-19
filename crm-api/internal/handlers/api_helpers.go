@@ -28,11 +28,23 @@ type inputError string
 func (e inputError) Error() string { return string(e) }
 func invalid(message string) error { return inputError(message) }
 
+var errDuplicateVendor = errors.New("vendor already exists")
+
 func apiError(c *gin.Context, err error) {
+	if errors.Is(err, errDuplicateVendor) {
+		response.Conflict(c, "This vendor already exists. Choose the existing record or edit its pricing.")
+		return
+	}
+	if errors.Is(err, errQuotePermission) {
+		response.Forbidden(c, "Your quotation permissions or team assignment do not allow this action")
+		return
+	}
 	var input inputError
 	var stale conflictError
 	var sqlState interface{ SQLState() string }
 	switch {
+	case errors.Is(err, errQuoteState), errors.Is(err, errQuoteSuperseded):
+		response.UnprocessableEntity(c, "Quotation cannot be changed in its current state")
 	case errors.As(err, &stale):
 		response.Conflict(c, string(stale))
 	case errors.As(err, &input):

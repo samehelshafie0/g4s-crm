@@ -28,6 +28,8 @@ import type { UserLookup } from '@/services/workflowDtos'
 const directory = ref<UserLookup[]>([])
 const selectedMemberId = ref('')
 
+import { useAuthStore } from '@/stores/auth'
+const auth = useAuthStore()
 const teamsStore = useTeamsStore()
 onMounted(async()=>{try{teams.value=await allPages(teamsService.list);directory.value=(await usersService.lookup()).data}catch(e){window.alert(errorMessage(e))}})
 
@@ -166,7 +168,7 @@ async function deleteTeam(id:string){try{await teamsService.delete(id);teams.val
         <h1 class="page-header-title">Teams</h1>
         <p class="page-header-subtitle">{{ filteredTeams.length }} team{{ filteredTeams.length !== 1 ? 's' : '' }}</p>
       </div>
-      <button class="btn btn-primary" @click="openAddModal">
+      <button v-if="auth.can('teams:create')" class="btn btn-primary" @click="openAddModal">
         <Plus :size="18" />
         Add Team
       </button>
@@ -245,11 +247,11 @@ async function deleteTeam(id:string){try{await teamsService.delete(id);teams.val
 
           <!-- Actions -->
           <div class="team-card-footer">
-            <button class="btn btn-secondary btn-sm" @click="openEditModal(team)">
+            <button class="btn btn-secondary btn-sm" v-if="auth.can('teams:update')" @click="openEditModal(team)">
               <Pencil :size="14" />
               Edit
             </button>
-            <button class="btn btn-ghost btn-sm btn-danger" @click="deleteTeam(team.id)">
+            <button class="btn btn-ghost btn-sm btn-danger" v-if="auth.can('teams:delete')" @click="deleteTeam(team.id)">
               <Trash2 :size="14" />
             </button>
           </div>

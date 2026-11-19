@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"errors"
+	"g4s-crm/api/internal/middleware"
 	"g4s-crm/api/internal/models"
 	"g4s-crm/api/pkg/response"
 	"g4s-crm/api/pkg/seqgen"
@@ -15,31 +16,32 @@ import (
 )
 
 type builderRow struct {
-	ID                 string     `json:"id"`
-	RowType            string     `json:"rowType" validate:"required,oneof=item heading comment subtotal discount"`
-	Source             string     `json:"source" validate:"required,oneof=product service recurring write-in"`
-	ProductID          *uuid.UUID `json:"productId"`
-	ServiceID          *uuid.UUID `json:"serviceId"`
-	RecurringServiceID *uuid.UUID `json:"recurringServiceId"`
-	SKU                string     `json:"sku" validate:"max=100"`
-	Description        string     `json:"description" validate:"max=2000"`
-	Manufacturer       string     `json:"manufacturer" validate:"max=255"`
-	StockAvailable     *int       `json:"stockAvailable"`
-	LeadTimeDays       *int       `json:"leadTimeDays"`
-	Quantity           float64    `json:"quantity" validate:"gte=0,lte=1000000"`
-	Multiplier         float64    `json:"multiplier" validate:"gt=0,lte=1000000"`
-	UnitCost           float64    `json:"unitCost" validate:"gte=0,lte=1000000000"`
-	UnitPrice          float64    `json:"unitPrice" validate:"gte=0,lte=1000000000"`
-	DiscountPercent    float64    `json:"discountPercent" validate:"gte=0,lte=100"`
-	IsOptional         bool       `json:"isOptional"`
-	IsSelected         bool       `json:"isSelected"`
-	IsPrintable        bool       `json:"isPrintable"`
-	HeadingText        string     `json:"headingText" validate:"max=2000"`
-	CommentText        string     `json:"commentText" validate:"max=20000"`
-	RateType           string     `json:"rateType" validate:"max=100"`
-	BillingCycle       string     `json:"billingCycle" validate:"max=100"`
-	SiteID             *uuid.UUID `json:"siteId"`
-	FulfilmentSource   *string    `json:"fulfilmentSource" validate:"omitempty,oneof=stock purchase service"`
+	SupplierQuoteItemID *uuid.UUID `json:"supplierQuoteItemId"`
+	ID                  string     `json:"id"`
+	RowType             string     `json:"rowType" validate:"required,oneof=item heading comment subtotal discount"`
+	Source              string     `json:"source" validate:"required,oneof=product service recurring write-in"`
+	ProductID           *uuid.UUID `json:"productId"`
+	ServiceID           *uuid.UUID `json:"serviceId"`
+	RecurringServiceID  *uuid.UUID `json:"recurringServiceId"`
+	SKU                 string     `json:"sku" validate:"max=100"`
+	Description         string     `json:"description" validate:"max=2000"`
+	Manufacturer        string     `json:"manufacturer" validate:"max=255"`
+	StockAvailable      *int       `json:"stockAvailable"`
+	LeadTimeDays        *int       `json:"leadTimeDays"`
+	Quantity            float64    `json:"quantity" validate:"gte=0,lte=1000000"`
+	Multiplier          float64    `json:"multiplier" validate:"gt=0,lte=1000000"`
+	UnitCost            float64    `json:"unitCost" validate:"gte=0,lte=1000000000"`
+	UnitPrice           float64    `json:"unitPrice" validate:"gte=0,lte=1000000000"`
+	DiscountPercent     float64    `json:"discountPercent" validate:"gte=0,lte=100"`
+	IsOptional          bool       `json:"isOptional"`
+	IsSelected          bool       `json:"isSelected"`
+	IsPrintable         bool       `json:"isPrintable"`
+	HeadingText         string     `json:"headingText" validate:"max=2000"`
+	CommentText         string     `json:"commentText" validate:"max=20000"`
+	RateType            string     `json:"rateType" validate:"max=100"`
+	BillingCycle        string     `json:"billingCycle" validate:"max=100"`
+	SiteID              *uuid.UUID `json:"siteId"`
+	FulfilmentSource    *string    `json:"fulfilmentSource" validate:"omitempty,oneof=stock purchase service"`
 }
 
 var errStaleQuote = errors.New("quote changed")
@@ -67,6 +69,7 @@ func (h *QuoteHandler) SaveBuilder(c *gin.Context) {
 		Rows             []builderRow        `json:"rows" validate:"max=1000,dive"`
 		// Absent leaves the price book as it is; null means standard pricing.
 		PriceBookID json.RawMessage `json:"priceBookId"`
+		TeamID      json.RawMessage `json:"teamId"`
 	}
 	if !v.BindStrict(c, &req) {
 		return
@@ -110,6 +113,22 @@ func (h *QuoteHandler) SaveBuilder(c *gin.Context) {
 		if req.Currency != quote.Currency {
 			return invalid("Change the currency with the currency switch, so prices are converted at a pinned rate")
 		}
+		if len(req.TeamID) > 0 {
+			var teamID *uuid.UUID
+			if err := json.Unmarshal(req.TeamID, &teamID); err != nil {
+				return invalid("Invalid team")
+			}
+			if quote.TeamID != nil && teamID == nil && middleware.GetCurrentUserRole(c) != models.RoleAdmin {
+				return errQuotePermission
+			}
+			if err := validateQuoteTeam(tx, c, teamID); err != nil {
+				return err
+			}
+			quote.TeamID = teamID
+		}
+		if !middleware.Can(c, "quotes:pricing") && (req.DiscountPercent != quote.DiscountPercent || req.VATPercent != quote.VATPercent || (changeBook && !sameID(quote.PriceBookID, priceBookID))) {
+			return errQuotePermission
+		}
 		if changeBook {
 			if err := eligiblePriceBook(tx, priceBookID, quote.CustomerID); err != nil {
 				return invalid("That price book is not active, not in date or not for this customer")
@@ -120,10 +139,32 @@ func (h *QuoteHandler) SaveBuilder(c *gin.Context) {
 		if err != nil {
 			return err
 		}
+		if req.Appendices != nil && !middleware.Can(c, "quotes:documents") {
+			var current []models.QuoteAppendix
+			if err := tx.Where("quote_id = ?", quote.ID).Order("sort_order ASC").Find(&current).Error; err != nil {
+				return err
+			}
+			if len(current) != len(*req.Appendices) {
+				return errQuotePermission
+			}
+			for i, item := range *req.Appendices {
+				if current[i].DocumentVersionID != item.DocumentVersionID || current[i].Label != item.Label {
+					return errQuotePermission
+				}
+			}
+		}
 		if req.Appendices != nil {
 			if err := replaceAppendices(tx, c, &quote, *req.Appendices); err != nil {
 				return err
 			}
+		}
+		var previous []models.QuoteLineItem
+		if err := tx.Where("quote_id = ?", quote.ID).Find(&previous).Error; err != nil {
+			return err
+		}
+		oldRows := map[string]models.QuoteLineItem{}
+		for _, row := range previous {
+			oldRows[row.ID.String()] = row
 		}
 		lines := []models.QuoteLineItem{}
 		for index, row := range req.Rows {
@@ -151,7 +192,58 @@ func (h *QuoteHandler) SaveBuilder(c *gin.Context) {
 			} else if row.Source != "product" {
 				category = models.QuoteLineMiscellaneous
 			}
-			line := models.QuoteLineItem{QuoteID: quote.ID, Category: category, RowType: row.RowType, Source: row.Source, ProductID: row.ProductID, ServiceID: row.ServiceID, RecurringServiceID: row.RecurringServiceID, SKU: row.SKU, Description: row.Description, ManufacturerName: row.Manufacturer, Quantity: row.Quantity, Multiplier: row.Multiplier, UnitCost: row.UnitCost, UnitPrice: row.UnitPrice, DiscountPercent: row.DiscountPercent, IsOptional: row.IsOptional, IsSelected: row.IsSelected, IsPrintable: row.IsPrintable, HeadingText: row.HeadingText, CommentText: row.CommentText, RateType: row.RateType, BillingCycle: row.BillingCycle, LeadTimeDays: row.LeadTimeDays, SortOrder: index, SiteID: row.SiteID, FulfilmentSource: row.FulfilmentSource}
+			line := models.QuoteLineItem{SupplierQuoteItemID: row.SupplierQuoteItemID, QuoteID: quote.ID, Category: category, RowType: row.RowType, Source: row.Source, ProductID: row.ProductID, ServiceID: row.ServiceID, RecurringServiceID: row.RecurringServiceID, SKU: row.SKU, Description: row.Description, ManufacturerName: row.Manufacturer, Quantity: row.Quantity, Multiplier: row.Multiplier, UnitCost: row.UnitCost, UnitPrice: row.UnitPrice, DiscountPercent: row.DiscountPercent, IsOptional: row.IsOptional, IsSelected: row.IsSelected, IsPrintable: row.IsPrintable, HeadingText: row.HeadingText, CommentText: row.CommentText, RateType: row.RateType, BillingCycle: row.BillingCycle, LeadTimeDays: row.LeadTimeDays, SortOrder: index, SiteID: row.SiteID, FulfilmentSource: row.FulfilmentSource}
+			old, exists := oldRows[row.ID]
+			sameItem := exists && old.Source == row.Source && sameID(old.ProductID, row.ProductID) && sameID(old.ServiceID, row.ServiceID) && sameID(old.RecurringServiceID, row.RecurringServiceID)
+			if sameItem {
+				line.ID = old.ID
+				// Cost is a snapshot. Editing selling price or margin never changes it.
+				line.UnitCost = old.UnitCost
+				line.SupplierQuoteItemID = old.SupplierQuoteItemID
+				if !middleware.Can(c, "quotes:pricing") && (line.UnitPrice != old.UnitPrice || line.DiscountPercent != old.DiscountPercent) {
+					return errQuotePermission
+				}
+			} else if row.RowType == "item" {
+				if err := validateBookItem(tx, quote.PriceBookID, row.Source, row.ProductID, row.ServiceID, row.RecurringServiceID); err != nil {
+					return err
+				}
+				if !middleware.Can(c, "quotes:view-margins") || !middleware.Can(c, "quotes:pricing") {
+					cost, price, err := quoteCatalogPrice(tx, &quote, &line)
+					if err != nil {
+						return err
+					}
+					line.UnitCost = cost
+					if !middleware.Can(c, "quotes:pricing") {
+						line.UnitPrice = price
+						line.DiscountPercent = 0
+					}
+				}
+			}
+			if row.RowType == "item" && !sameItem && row.SupplierQuoteItemID != nil {
+				if !middleware.Can(c, "quotes:pricing") || !middleware.Can(c, "quotes:view-margins") {
+					return errQuotePermission
+				}
+				var item models.SupplierQuoteItem
+				if err := tx.First(&item, "id = ?", row.SupplierQuoteItemID).Error; err != nil {
+					return invalid("Supplier line no longer exists; choose a current offer")
+				}
+				if !sameID(item.ProductID, row.ProductID) || row.ProductID == nil {
+					return invalid("Supplier offer does not match this product")
+				}
+				var supplier models.SupplierQuote
+				if err := tx.First(&supplier, "id = ? AND source_quote_id IN (SELECT id FROM quotes WHERE quote_number = ? AND deleted_at IS NULL)", item.SupplierQuoteID, quote.QuoteNumber).Error; err != nil {
+					return invalid("Link the supplier quotation to this job first")
+				}
+				rate := 1.0
+				if supplier.Currency != models.CurrencySAR {
+					var fx models.ExchangeRate
+					if err := tx.Where("from_currency = ? AND to_currency = 'SAR'", supplier.Currency).First(&fx).Error; err != nil {
+						return invalid("Add an exchange rate for the supplier currency first")
+					}
+					rate = fx.CurrentRate
+				}
+				line.UnitCost = models.RoundMoney(item.UnitCost * rate / quote.FXRate)
+			}
 			line.Calculate()
 			lines = append(lines, line)
 		}

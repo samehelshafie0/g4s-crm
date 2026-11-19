@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { exchangeRatesService } from '@/services'
 import { errorMessage } from '@/services/payload'
-import { onMounted, ref, computed } from 'vue'
+import { onMounted, onUnmounted, ref, computed } from 'vue'
+import { useAuthStore } from '@/stores/auth'
+const auth = useAuthStore()
 import {
   TrendingUp,
   TrendingDown,
@@ -21,7 +23,17 @@ async function loadRates() {
   try { rates.value = (await exchangeRatesService.list()).data } catch (e) { window.alert(errorMessage(e)) }
 }
 
-onMounted(loadRates)
+let refreshTimer: ReturnType<typeof setInterval> | undefined
+onMounted(async () => {
+  await loadRates()
+  if (auth.can('exchange-rates:update')) await refreshLiveRates()
+  refreshTimer = setInterval(() => {
+    if (document.visibilityState !== 'visible') return
+    if (auth.can('exchange-rates:update')) void refreshLiveRates()
+    else void loadRates()
+  }, 60 * 60 * 1000)
+})
+onUnmounted(() => { if (refreshTimer) clearInterval(refreshTimer) })
 
 const refreshing = ref(false)
 const refreshNote = ref('')
@@ -114,14 +126,14 @@ async function saveRate() {
     <div class="page-header">
       <div>
         <h1 class="page-header-title">Exchange Rates</h1>
-        <p class="page-header-subtitle">Currency rates against SAR</p>
+        <p class="page-header-subtitle">Currency rates against SAR · automatically refreshed on opening and hourly while visible. The provider publishes daily rates.</p>
       </div>
       <div class="fx-actions">
-        <button class="btn btn-sm" :disabled="refreshing" @click="refreshLiveRates">
+        <button v-if="auth.can('exchange-rates:update')" class="btn btn-sm" :disabled="refreshing" @click="refreshLiveRates">
           <RefreshCw :size="14" :class="{ 'fx-spin': refreshing }" />
           {{ refreshing ? 'Fetching…' : 'Fetch live rates' }}
         </button>
-        <button class="btn btn-primary btn-sm" @click="openCreateModal">Add exchange rate</button>
+        <button v-if="auth.can('exchange-rates:create')" class="btn btn-primary btn-sm" @click="openCreateModal">Add exchange rate</button>
       </div>
     </div>
 
@@ -144,7 +156,7 @@ async function saveRate() {
               <div class="fx-pair-name">{{ currencyNames[rate.fromCurrency] }}</div>
             </div>
           </div>
-          <button class="btn btn-ghost btn-icon btn-sm" @click.stop="openUpdateModal(rate)" title="Update rate">
+          <button v-if="auth.can('exchange-rates:update')" class="btn btn-ghost btn-icon btn-sm" @click.stop="openUpdateModal(rate)" title="Update rate">
             <RefreshCw :size="14" />
           </button>
         </div>

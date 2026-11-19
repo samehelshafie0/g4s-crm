@@ -7,7 +7,7 @@ import { useAuthStore } from '@/stores/auth'
 import { KSA_CITIES, KSA_REGIONS, regionForCity } from '@/utils/ksa'
 import type { CustomerSite, SiteType } from '@/types'
 
-const props = defineProps<{ customerId: string }>()
+const props = defineProps<{ customerId: string; startAdding?: boolean }>()
 const emit = defineEmits<{ (e: 'changed', sites: CustomerSite[]): void }>()
 
 const auth = useAuthStore()
@@ -50,7 +50,7 @@ async function load() {
     loading.value = false
   }
 }
-watch(() => props.customerId, load, { immediate: true })
+watch(() => props.customerId, () => { void load(); if (props.startAdding && canEdit.value) openAdd() }, { immediate: true })
 
 function openAdd() {
   editingId.value = null

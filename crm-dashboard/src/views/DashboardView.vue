@@ -539,7 +539,7 @@ const maxCustomerValue = computed(() => Math.max(...topCustomers.value.map((c) =
                   <td class="text-right num">
                     <span class="margin" :class="{ 'margin--low': quote.margin < 30 }">
                       <i class="margin-dot" aria-hidden="true" />
-                      {{ quote.margin.toFixed(1) }}%
+                      {{ auth.can('quotes:view-margins') ? (quote.margin ?? 0).toFixed(1) + '%' : 'Restricted' }}
                     </span>
                   </td>
                   <td class="text-right text-muted">{{ formatDate(quote.date) }}</td>

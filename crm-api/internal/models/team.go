@@ -9,6 +9,6 @@ type Team struct {
 	Description string     `json:"description"`
 	LeaderID    *uuid.UUID `gorm:"type:uuid" json:"leaderId,omitempty"`
 	Leader      *User      `gorm:"foreignKey:LeaderID" json:"leader,omitempty"`
-	Members     []User     `gorm:"foreignKey:TeamID" json:"members,omitempty"`
+	Members     []User     `gorm:"many2many:team_members" json:"members,omitempty"`
 	IsActive    bool       `gorm:"default:true" json:"isActive"`
 }

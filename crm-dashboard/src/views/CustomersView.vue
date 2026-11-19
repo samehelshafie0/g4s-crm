@@ -19,6 +19,10 @@ import {
 import type { Customer, CustomerStatus, CustomerType, Sector } from '@/types'
 import { useCustomersStore } from '@/stores/customers'
 import CustomerSites from '@/components/CustomerSites.vue'
+import CustomerContacts from '@/components/CustomerContacts.vue'
+import CustomerPriceHistory from '@/components/CustomerPriceHistory.vue'
+import { useAuthStore } from '@/stores/auth'
+const auth = useAuthStore()
 
 const customerStore = useCustomersStore()
 
@@ -31,7 +35,8 @@ const showAddModal = ref(false)
 const showViewModal = ref(false)
 const editingCustomer = ref<Customer | null>(null)
 const viewingCustomer = ref<Customer | null>(null)
-const viewTab = ref<'details' | 'sites'>('details')
+const viewTab = ref<'details' | 'sites' | 'contacts' | 'prices'>('details')
+const startAdding = ref(false)
 const siteCounts = ref<Record<string, number>>({})
 
 const defaultForm = (): Omit<Customer, 'id' | 'createdAt' | 'updatedAt'> => ({
@@ -119,9 +124,10 @@ function openEditModal(c: Customer) {
   showAddModal.value = true
 }
 
-function openViewModal(c: Customer) {
+function openViewModal(c: Customer, tab: 'details' | 'sites' | 'contacts' | 'prices' = 'details', add = false) {
+  startAdding.value = add
   viewingCustomer.value = c
-  viewTab.value = 'details'
+  viewTab.value = tab
   showViewModal.value = true
 }
 
@@ -156,7 +162,7 @@ async function deleteCustomer(id: string) {
         <h1 class="page-header-title">Customers</h1>
         <p class="page-header-subtitle">{{ filteredCustomers.length }} of {{ customers.length }} customers</p>
       </div>
-      <button class="btn btn-primary" @click="openAddModal">
+      <button v-if="auth.can('customers:create')" class="btn btn-primary" @click="openAddModal">
         <Plus :size="16" />
         Add Customer
       </button>
@@ -220,17 +226,17 @@ async function deleteCustomer(id: string) {
             <td>
               <span class="badge" :class="typeBadgeClass(c.type)">{{ c.type.toUpperCase() }}</span>
             </td>
-            <td class="text-center">{{ c.contacts.length }}</td>
-            <td class="text-center">{{ siteCounts[c.id] ?? c.sites?.length ?? 0 }}</td>
+            <td class="text-center"><button class="btn btn-ghost btn-sm" @click="openViewModal(c, 'contacts')">{{ c.contacts.length }} contacts</button><button v-if="auth.can('customers:update')" class="btn btn-ghost btn-sm" :aria-label="`Add contact to ${c.companyName}`" @click="openViewModal(c, 'contacts', true)"><Plus :size="14" /> Add</button></td>
+            <td class="text-center"><button class="btn btn-ghost btn-sm" @click="openViewModal(c, 'sites')">{{ siteCounts[c.id] ?? c.sites?.length ?? 0 }} sites</button><button v-if="auth.can('customers:update')" class="btn btn-ghost btn-sm" :aria-label="`Add site to ${c.companyName}`" @click="openViewModal(c, 'sites', true)"><Plus :size="14" /> Add</button></td>
             <td>
               <div class="table-actions">
                 <button class="btn btn-ghost btn-icon btn-sm" title="View" @click="openViewModal(c)">
                   <Eye :size="15" />
                 </button>
-                <button class="btn btn-ghost btn-icon btn-sm" title="Edit" @click="openEditModal(c)">
+                <button class="btn btn-ghost btn-icon btn-sm" v-if="auth.can('customers:update')" title="Edit" @click="openEditModal(c)">
                   <Pencil :size="15" />
                 </button>
-                <button class="btn btn-ghost btn-icon btn-sm text-danger" title="Delete" @click="deleteCustomer(c.id)">
+                <button class="btn btn-ghost btn-icon btn-sm text-danger" v-if="auth.can('customers:delete')" title="Delete" @click="deleteCustomer(c.id)">
                   <Trash2 :size="15" />
                 </button>
               </div>
@@ -261,7 +267,7 @@ async function deleteCustomer(id: string) {
             <div class="form-row">
               <div class="form-group">
                 <label class="form-label">Company Name <span class="required">*</span></label>
-                <input v-model="form.companyName" type="text" class="form-input" placeholder="Enter company name" />
+                <input list="existing-customers" v-model="form.companyName" type="text" class="form-input" placeholder="Enter company name" />
               </div>
               <div class="form-group">
                 <label class="form-label">Sector</label>
@@ -328,12 +334,16 @@ async function deleteCustomer(id: string) {
             <div class="tabs mb-4">
               <button type="button" class="tab" :class="{ active: viewTab === 'details' }" @click="viewTab = 'details'">Details</button>
               <button type="button" class="tab" :class="{ active: viewTab === 'sites' }" @click="viewTab = 'sites'">Sites</button>
+              <button type="button" class="tab" :class="{ active: viewTab === 'contacts' }" @click="viewTab = 'contacts'">Contacts</button>
+              <button v-if="auth.can('quotes:read')" type="button" class="tab" :class="{ active: viewTab === 'prices' }" @click="viewTab = 'prices'">Price history</button>
             </div>
             <CustomerSites
               v-if="viewTab === 'sites'"
-              :customer-id="viewingCustomer.id"
+              :customer-id="viewingCustomer.id" :start-adding="startAdding"
               @changed="(list) => (siteCounts[viewingCustomer!.id] = list.length)"
             />
+            <CustomerContacts v-else-if="viewTab === 'contacts'" :customer-id="viewingCustomer.id" :start-adding="startAdding" @changed="list => { viewingCustomer!.contacts = list }" />
+            <CustomerPriceHistory v-else-if="viewTab === 'prices'" :customer-id="viewingCustomer.id" :start-adding="startAdding" />
             <template v-else>
             <!-- Top meta -->
             <div class="view-meta-row">
@@ -385,12 +395,13 @@ async function deleteCustomer(id: string) {
           </div>
           <div class="modal-footer">
             <button class="btn btn-secondary" @click="showViewModal = false">Close</button>
-            <button class="btn btn-primary" @click="showViewModal = false; openEditModal(viewingCustomer!)">Edit</button>
+            <button v-if="auth.can('customers:update')" class="btn btn-primary" @click="showViewModal = false; openEditModal(viewingCustomer!)">Edit</button>
           </div>
         </div>
       </div>
     </Teleport>
   </div>
+  <datalist id="existing-customers"><option v-for="customer in customers" :key="customer.id" :value="customer.companyName">{{ customer.crNumber || customer.region }}</option></datalist>
 </template>
 
 <style scoped>

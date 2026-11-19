@@ -74,7 +74,7 @@ func (h *QuoteHandler) Versions(c *gin.Context) {
 			author = version.CreatedBy.FullName()
 		}
 		out = append(out, gin.H{
-			"id": version.ID, "quoteNumber": version.QuoteNumber, "version": version.Version,
+			"id": version.ID, "teamId": version.TeamID, "quoteNumber": version.QuoteNumber, "version": version.Version,
 			"isCurrent": version.IsCurrent, "status": version.Status, "total": version.Total,
 			"currency": version.Currency, "fxRate": version.FXRate, "marginPercent": version.MarginPercent,
 			"revisionReason": version.RevisionReason, "createdAt": version.CreatedAt,

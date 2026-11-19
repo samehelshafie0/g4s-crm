@@ -22,6 +22,8 @@ export type Sector =
 
 export interface CustomerContact {
   id: string
+  customerId?: string
+  siteId?: string | null
   name: string
   email: string
   phone: string
@@ -311,6 +313,7 @@ export interface QuoteLineItem {
 }
 
 export interface Quote extends BaseEntity {
+  teamId?: string
   priceBookId?: string
   quoteNumber: string
   opportunityId?: string

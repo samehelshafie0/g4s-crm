@@ -139,15 +139,27 @@ The API trusts forwarded client addresses only from private and loopback address
 
 ## 8. Updating the test server
 
+For the 19 November meeting-fix/price-history batch, use `feature/opportunity-flow`. Back up before updating, build while the existing app is running, then stop the web/API services while migrations run. Keep PostgreSQL, Redis, uploaded documents and signing keys in place.
+
 ```bash
+set -euo pipefail
+cd /opt/g4s-crm
+test -z "$(git status --porcelain --untracked-files=no)" || { echo "Tracked server files have local edits; stop and review them."; exit 1; }
 ./scripts/backup.sh
-git pull
-docker compose up -d --build
+git fetch origin
+git switch feature/opportunity-flow
+git pull --ff-only origin feature/opportunity-flow
+docker compose build api frontend
+make key-permissions
+docker compose stop frontend api
 make migrate
-docker compose restart api
+docker compose up -d --wait --wait-timeout 180
+docker compose ps
+docker compose exec -T api wget -qO- http://127.0.0.1:8080/ready
+docker compose exec -T frontend wget -qO- http://127.0.0.1/health
 ```
 
-Migrations only move forward. To roll back, restore the backup taken before the update and redeploy the previous commit.
+The new batch requires migrations 19 and 20. If any command fails, stop and inspect the error before continuing. In particular, do not start the new API after a failed migration. Migrations only move forward. To roll back, restore the backup taken before the update and redeploy the previous commit.
 
 ## 9. Health checks
 

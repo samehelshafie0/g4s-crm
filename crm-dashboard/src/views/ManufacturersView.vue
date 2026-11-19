@@ -247,7 +247,7 @@ async function deleteManufacturer(id: string) {
             <div class="form-row">
               <div class="form-group">
                 <label class="form-label">Name <span class="required">*</span></label>
-                <input v-model="form.name" type="text" class="form-input" placeholder="e.g. Hikvision" />
+                <input list="existing-vendors" v-model="form.name" type="text" class="form-input" placeholder="e.g. Hikvision" />
               </div>
               <div class="form-group">
                 <label class="form-label">Code <span class="required">*</span></label>
@@ -327,6 +327,7 @@ async function deleteManufacturer(id: string) {
       </div>
     </Teleport>
   </div>
+  <datalist id="existing-vendors"><option v-for="vendor in manufacturers" :key="vendor.id" :value="vendor.name">{{ vendor.code }}</option></datalist>
 </template>
 
 <style scoped>

@@ -33,18 +33,19 @@ const (
 
 type User struct {
 	Base
-	Permissions  []string   `gorm:"-" json:"permissions,omitempty"`
-	Email        string     `gorm:"uniqueIndex;not null" json:"email"`
-	PasswordHash string     `gorm:"not null" json:"-"`
-	FirstName    string     `gorm:"not null" json:"firstName"`
-	LastName     string     `gorm:"not null" json:"lastName"`
-	Phone        string     `json:"phone"`
-	Role         UserRole   `gorm:"not null;default:'viewer'" json:"role"`
-	Department   Department `json:"department"`
-	TeamID       *uuid.UUID `gorm:"type:uuid" json:"teamId,omitempty"`
-	Team         *Team      `gorm:"foreignKey:TeamID" json:"team,omitempty"`
-	IsActive     bool       `gorm:"default:true" json:"isActive"`
-	LastLoginAt  *time.Time `json:"lastLoginAt,omitempty"`
+	QuotePermissions map[string]bool `gorm:"serializer:json;type:jsonb" json:"quotePermissions"`
+	Permissions      []string        `gorm:"-" json:"permissions,omitempty"`
+	Email            string          `gorm:"uniqueIndex;not null" json:"email"`
+	PasswordHash     string          `gorm:"not null" json:"-"`
+	FirstName        string          `gorm:"not null" json:"firstName"`
+	LastName         string          `gorm:"not null" json:"lastName"`
+	Phone            string          `json:"phone"`
+	Role             UserRole        `gorm:"not null;default:'viewer'" json:"role"`
+	Department       Department      `json:"department"`
+	TeamID           *uuid.UUID      `gorm:"type:uuid" json:"teamId,omitempty"`
+	Team             *Team           `gorm:"foreignKey:TeamID" json:"team,omitempty"`
+	IsActive         bool            `gorm:"default:true" json:"isActive"`
+	LastLoginAt      *time.Time      `json:"lastLoginAt,omitempty"`
 }
 
 func (u *User) FullName() string {

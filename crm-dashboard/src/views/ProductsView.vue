@@ -2,8 +2,8 @@
 import { productsService, manufacturersService, documentsService } from '@/services'
 import { allPages } from '@/services/collections'
 import { errorMessage } from '@/services/payload'
-import { ref, computed, watch, onMounted, reactive } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { ref, computed, watch, onMounted, onUnmounted, reactive } from 'vue'
+import { useRoute, useRouter, onBeforeRouteLeave } from 'vue-router'
 import {
   Plus, Search, Pencil, Trash2, X, Package, Calculator, Eye,
   Building2, History, FileText, Upload, TrendingUp, TrendingDown,
@@ -23,12 +23,20 @@ import type {
 } from '@/types'
 import { matchManufacturers, sameMaster, suggestCode } from '@/services/catalogMasters'
 import ProductCategories from '@/components/ProductCategories.vue'
+import SupplierOfferHistory from '@/components/SupplierOfferHistory.vue'
+import { productQuoteOffers, type QuoteOffer } from '@/services/customerPricing'
+const quoteOffers = ref<QuoteOffer[]>([])
 
 const procStore = useProcurementStore()
 const productsStore = useProductsStore()
 const mfrStore = useManufacturersStore()
 const auth = useAuthStore()
 const showImportDialog = ref(false)
+const hasOpenEntry = () => showModal.value || showAddVendorModal.value || showUploadCatalogModal.value || showImportDialog.value || showAddPriceModal.value || showAddDocModal.value
+function warnBeforeUnload(event: BeforeUnloadEvent) { if (hasOpenEntry()) { event.preventDefault(); event.returnValue = '' } }
+onMounted(() => window.addEventListener('beforeunload', warnBeforeUnload))
+onUnmounted(() => window.removeEventListener('beforeunload', warnBeforeUnload))
+onBeforeRouteLeave(() => !hasOpenEntry() || window.confirm('Leave product entry? Any unsaved changes will be lost.'))
 async function onImported() { products.value = await allPages(productsService.list) }
 
 onMounted(async () => { try { const [items, manufacturers] = await Promise.all([allPages(productsService.list), allPages(manufacturersService.list)]); products.value = items; mfrList.push(...manufacturers); openFromRoute() } catch (e) { window.alert(errorMessage(e)) } })
@@ -238,7 +246,7 @@ const currencies: Currency[] = ['USD', 'EUR', 'GBP', 'AED', 'CNY', 'SAR']
 // ── Product Detail Modal ─────────────────────────────────────
 const showDetailModal = ref(false)
 const detailProduct = ref<Product | null>(null)
-type DetailTab = 'overview' | 'vendors' | 'price-history' | 'documents'
+type DetailTab = 'overview' | 'vendors' | 'price-history' | 'documents' | 'quote-offers'
 const detailTab = ref<DetailTab>('overview')
 
 const route = useRoute()
@@ -258,7 +266,7 @@ function openFromRoute() {
   if (product) void openDetail(product)
 }
 watch(() => route.query.open, openFromRoute)
-async function openDetail(p: Product) { detailProduct.value = p; detailTab.value = 'overview'; showDetailModal.value = true; await refreshDetail() }
+async function openDetail(p: Product) { quoteOffers.value = []; if (auth.can('quotes:read') && auth.can('quotes:view-margins')) { try { quoteOffers.value = await productQuoteOffers(p.id) } catch (e) { window.alert(errorMessage(e)) } } detailProduct.value = p; detailTab.value = 'overview'; showDetailModal.value = true; await refreshDetail() }
 async function refreshDetail() {
  if (!detailProduct.value) return
  try { const p = (await productsService.get(detailProduct.value.id)).data; detailProduct.value = p; vendorCatalogs.value[p.sku] = p.vendorEntries ?? []; priceHistory.value[p.sku] = p.priceHistory ?? []; productDocs.value[p.sku] = p.documents ?? [] }
@@ -470,7 +478,7 @@ async function savePrice() {
     </template>
 
     <!-- ═══ Product Detail Modal ══════════════════════════════ -->
-    <div v-if="showDetailModal && detailProduct" class="modal-backdrop" @click.self="showDetailModal = false">
+    <div v-if="showDetailModal && detailProduct" class="modal-backdrop">
       <div class="modal prod-detail-modal">
         <div class="prod-detail-header">
           <div class="prod-detail-header-left">
@@ -497,11 +505,13 @@ async function savePrice() {
           <button :class="['prod-dtab', detailTab === 'overview' && 'prod-dtab--active']" @click="detailTab = 'overview'"><Package :size="15" /> Overview</button>
           <button :class="['prod-dtab', detailTab === 'vendors' && 'prod-dtab--active']" @click="detailTab = 'vendors'"><Building2 :size="15" /> Vendor Catalog <span class="prod-dtab-ct">{{ detailVendors.length }}</span></button>
           <button :class="['prod-dtab', detailTab === 'price-history' && 'prod-dtab--active']" @click="detailTab = 'price-history'"><History :size="15" /> Price History <span class="prod-dtab-ct">{{ detailPriceHistory.length }}</span></button>
+          <button v-if="auth.can('quotes:read') && auth.can('quotes:view-margins')" :class="['prod-dtab', detailTab === 'quote-offers' && 'prod-dtab--active']" @click="detailTab = 'quote-offers'">Supplier offer history</button>
           <button :class="['prod-dtab', detailTab === 'documents' && 'prod-dtab--active']" @click="detailTab = 'documents'"><FileText :size="15" /> Documents <span class="prod-dtab-ct">{{ detailDocs.length }}</span></button>
         </div>
 
         <div class="modal-body prod-detail-body">
           <!-- OVERVIEW -->
+          <SupplierOfferHistory v-if="detailTab === 'quote-offers'" :items="quoteOffers" />
           <div v-if="detailTab === 'overview'">
             <div class="prod-info-grid">
               <div class="prod-info-card"><span class="prod-info-lbl">SKU</span><span class="prod-info-val text-mono">{{ detailProduct.sku }}</span></div>
@@ -605,7 +615,7 @@ async function savePrice() {
     </div>
 
     <!-- ═══ Add Vendor Modal ══════════════════════════════════ -->
-    <div v-if="showAddVendorModal" class="modal-backdrop" @click.self="showAddVendorModal = false">
+    <div v-if="showAddVendorModal" class="modal-backdrop">
       <div class="modal modal-lg"><div class="modal-header"><h2 class="modal-title"><Building2 :size="18" /> Add Vendor Entry</h2><button class="modal-close" @click="showAddVendorModal = false"><X :size="20" /></button></div>
       <div class="modal-body">
         <div class="form-row"><div class="form-group"><label class="form-label">Vendor Name <span class="required">*</span></label><input v-model="vendorForm.vendorName" type="text" class="form-input" placeholder="e.g. Al Futtaim Trading" /></div><div class="form-group"><label class="form-label">Vendor SKU</label><input v-model="vendorForm.vendorSku" type="text" class="form-input" placeholder="Vendor's part number" /></div></div>
@@ -616,7 +626,7 @@ async function savePrice() {
     </div>
 
     <!-- ═══ Upload Catalog Modal ══════════════════════════════ -->
-    <div v-if="showUploadCatalogModal" class="modal-backdrop" @click.self="showUploadCatalogModal = false">
+    <div v-if="showUploadCatalogModal" class="modal-backdrop">
       <div class="modal modal-xxl">
         <div class="modal-header">
           <h2 class="modal-title"><FileUp :size="20" /> Upload Vendor Catalog</h2>
@@ -748,7 +758,7 @@ async function savePrice() {
 
     <!-- ═══ Create/Edit Product Modal (existing) ══════════════ -->
     <Teleport to="body">
-      <div v-if="showModal" class="modal-backdrop" @click.self="showModal = false">
+      <div v-if="showModal" class="modal-backdrop">
         <div class="modal modal-lg">
           <div class="modal-header"><h2 class="modal-title">{{ editingId ? 'Edit Product' : 'Add Product' }}</h2><button class="modal-close" @click="showModal = false"><X :size="20" /></button></div>
           <div class="modal-body">

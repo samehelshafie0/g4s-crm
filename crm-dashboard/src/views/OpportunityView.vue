@@ -184,7 +184,7 @@ function openQuote() {
                   </td>
                   <td>{{ label(v.status) }}</td>
                   <td class="text-right text-mono">{{ money(v.total, v.currency) }}</td>
-                  <td class="text-right">{{ v.marginPercent.toFixed(1) }}%</td>
+                  <td class="text-right">{{ auth.can('quotes:view-margins') ? (v.marginPercent ?? 0).toFixed(1) + '%' : 'Restricted' }}</td>
                   <td>{{ v.revisionReason || '—' }}</td>
                   <td>{{ stamp(v.createdAt) }}</td>
                 </tr>

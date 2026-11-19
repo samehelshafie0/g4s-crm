@@ -86,6 +86,10 @@ func (h *DocumentHandler) upload(c *gin.Context, newVersion bool) {
 	}
 	category := c.DefaultPostForm("category", "general")
 	docType := c.DefaultPostForm("documentType", "technical")
+	if !newVersion && !middleware.Can(c, "documents:create") && (category != "quote" || !middleware.Can(c, "quotes:read") || !middleware.Can(c, "quotes:documents")) {
+		response.Forbidden(c, "Quotation upload permission and quote category are required")
+		return
+	}
 	if !newVersion && (!oneOf(category, "contract", "quote", "general", "compliance", "legal") || !oneOf(docType, "terms", "delivery", "technical", "warranty", "sla")) {
 		response.BadRequest(c, "Invalid document category or type")
 		return
@@ -244,9 +248,8 @@ func (h *DocumentHandler) AddLink(c *gin.Context) {
 	if !v.BindStrict(c, &req) {
 		return
 	}
-	resource := map[string]string{"customer": "customers", "opportunity": "opportunities", "quote": "quotes", "contract": "contracts", "product": "products", "purchase-order": "procurement", "supplier-quote": "procurement"}[req.EntityType]
-	if !middleware.HasPermission(middleware.GetCurrentUserRole(c), resource+":read") {
-		response.Forbidden(c, "Cannot link records you cannot read")
+	if err := h.linkPermission(c, req.EntityType, req.EntityID); err != nil {
+		apiError(c, err)
 		return
 	}
 	var link models.DocumentLink
@@ -273,6 +276,15 @@ func (h *DocumentHandler) AddLink(c *gin.Context) {
 	response.Created(c, link)
 }
 func (h *DocumentHandler) DeleteLink(c *gin.Context) {
+	var link models.DocumentLink
+	if err := h.db.First(&link, "id = ? AND document_id = ?", c.Param("linkId"), c.Param("id")).Error; err != nil {
+		apiError(c, err)
+		return
+	}
+	if err := h.linkPermission(c, link.EntityType, link.EntityID); err != nil {
+		apiError(c, err)
+		return
+	}
 	result := h.db.Where("document_id = ?", c.Param("id")).Delete(&models.DocumentLink{}, "id = ?", c.Param("linkId"))
 	if result.Error != nil {
 		apiError(c, result.Error)
@@ -283,4 +295,28 @@ func (h *DocumentHandler) DeleteLink(c *gin.Context) {
 		return
 	}
 	response.NoContent(c)
+}
+
+// Quotation document grants do not grant edits to unrelated library links.
+func (h *DocumentHandler) linkPermission(c *gin.Context, kind string, id uuid.UUID) error {
+	if kind == "quote" {
+		return editableQuoteDocuments(h.db, c, id)
+	}
+	if middleware.Can(c, "documents:update") {
+		resource := map[string]string{"customer": "customers", "opportunity": "opportunities", "contract": "contracts", "product": "products", "purchase-order": "procurement", "supplier-quote": "procurement"}[kind]
+		if resource != "" && middleware.Can(c, resource+":read") {
+			return nil
+		}
+		return errQuotePermission
+	}
+	if kind == "supplier-quote" {
+		var supplier models.SupplierQuote
+		if err := h.db.First(&supplier, "id = ?", id).Error; err != nil {
+			return err
+		}
+		if supplier.SourceQuoteID != nil {
+			return editableQuoteDocuments(h.db, c, *supplier.SourceQuoteID)
+		}
+	}
+	return errQuotePermission
 }

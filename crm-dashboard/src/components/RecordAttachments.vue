@@ -18,6 +18,7 @@ const props = defineProps<{
   /** Shown in the uploaded document's name so the library stays readable */
   entityLabel?: string
   disabled?: boolean
+  quoteContext?: boolean
 }>()
 
 const auth = useAuthStore()
@@ -26,7 +27,8 @@ const loading = ref(false)
 const busy = ref(false)
 const error = ref('')
 
-const canAttach = computed(() => auth.can('documents:create') && auth.can('documents:update') && !props.disabled)
+const quoteContext = computed(() => props.entityType === 'quote' || props.quoteContext)
+const canAttach = computed(() => !props.disabled && (quoteContext.value ? auth.can('quotes:read') && auth.can('quotes:documents') : auth.can('documents:create') && auth.can('documents:update')))
 const canRead = computed(() => auth.can('documents:read'))
 
 async function load() {
@@ -56,7 +58,7 @@ async function attach(event: Event) {
     const form = new FormData()
     form.append('file', file)
     form.append('name', props.entityLabel ? `${props.entityLabel} — ${file.name}` : file.name)
-    form.append('category', 'general')
+    form.append('category', quoteContext.value ? 'quote' : 'general')
     form.append('documentType', 'terms')
     const uploaded = await documentsService.upload(form)
     await documentsService.addLink(uploaded.data.id, props.entityType, props.entityId)

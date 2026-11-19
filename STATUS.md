@@ -1,13 +1,44 @@
 # G4S CRM — current status and work plan
 
-**Last updated:** 2026-10-15
-**Current phase:** release hardening for the client's **test server** on `feature/opportunity-flow` (committed). Sales-to-delivery acceptance passes on fresh data and on a migrated copy of live data. [Test-server runbook](docs/TEST_SERVER_DEPLOY.md). Live-data decisions and production release gates remain.
+**Last updated:** 2026-11-19
+**Current phase:** meeting fixes and durable quotation price history prepared for the owner to deploy from `feature/opportunity-flow`; quotation visual follow-up completed. [Test-server runbook](docs/TEST_SERVER_DEPLOY.md). Server deployment and health verification are pending the owner's execution. Live-data decisions and production release gates remain.
 **Release state:** not ready for production.
 **Primary objective:** make customers → opportunities → quotes → contracts work end to end, then finish remaining modules and deploy to the owner's server.
 **Detailed findings:** [docs/CRM_REVIEW.md](docs/CRM_REVIEW.md).
 **Current API coverage:** [docs/API_COVERAGE.md](docs/API_COVERAGE.md); [187-route inventory](docs/API_ENDPOINTS.md).
 
-## Current task — hardening for the client test server (2026-10-15)
+## Current task — quotation price history and lifecycle review (2026-11-13)
+
+**DONE locally — implementation, automated/lifecycle checks and requested visual follow-up completed.** [Price history and review report](docs/QUOTATION_PRICE_HISTORY.md).
+
+- **19 November deployment preparation:** reran the full PostgreSQL/race suite (integration package **77.579s**), **31 frontend tests**, production build/type checking, Go vet and whitespace checks: all passed. Owner will execute the updated droplet commands in the deployment runbook; server verification remains pending.
+- Owner confirmed **Accepted quotation = sale**. Added accepted-sale history for this customer and other accessible customers, plus a separate per-user comparison permission.
+- Migration **000020** preserves supplier offer snapshots across edits/deletion and records quotation acceptance time; older acceptance dates are explicitly estimated. Existing overwritten supplier prices cannot be recovered.
+- Builder history now separates customer sales and supplier offers; reusing net prices accounts for both discounts and pinned currency rates without changing cost. Customer records default to accepted sales; products expose retained supplier offer history.
+- Fixed quote catalog/Quick-add overflow, narrow info layout, long description usability, keyboard-accessible table scrolling and hidden-column subtotal alignment.
+- **PASS:** full PostgreSQL/race suite **160.999s**, **31 frontend tests**, production build/type checking, Go vet and whitespace checks. Existing file-parser bundle warning remains.
+- **Browser lifecycle PASS:** return-to-draft, resubmit, approve, send, decline, revise, resubmit, approve, send, accept → **QT-2026-0001 v3**, preserving cost SAR 225 and sell price SAR 375. Dark history dialog and empty state reviewed; real exported PDF rendered and visually checked.
+- **API comparison fixtures PASS:** this customer's SAR 375; other customer's USD 85.50 after discounts; supplier offer archive retains SAR 225 and SAR 230.
+- **Visual follow-up PASS:** populated history and both Use price sources in Chrome; saved cost SAR 240 / price SAR 320.63 confirmed in Safari. Light/dark, supplier revisions, dark dropdown options, resized/zoomed narrow layout, modal body scrolling and keyboard access to the offscreen Use price action reviewed. Fixed overlapping catalog manufacturer/price/stock labels and hidden history button; rechecked narrow light and desktop dark. Production build/type checking passed again after the CSS fix. Native browser resizing/zoom was used; touch-device behavior was not tested.
+- Isolated future review quote: **http://127.0.0.1:5184/quotes/2a1ec6cf-0660-4683-b115-85a91f8d51ba/builder**. Local fixture IDs and PDF under ignored `crm-api/tmp/meeting-review/`. No live data, deployment, commit or push changed.
+- **Next:** review the local batch and remaining meeting-scope gaps documented below before deployment.
+
+## Previous task — meeting fixes (2026-11-13)
+
+**PARTIAL meeting scope; implemented batch verified locally and uncommitted.** [Full item-by-item report and permission boundaries](docs/MEETING_FIXES.md).
+
+- Customer Contacts/Sites column actions, editable linked contacts and immediate counts.
+- Supplier quotations and attachments linked to customer quotations/projects; product Project prices with provenance; immutable saved unit costs, editable selling price/margin, customer quote-price history and book-only new item selection.
+- Per-user quotation capability overrides, API enforcement/redaction, multiple team memberships, team-scoped quotation access and team-lead/admin approval. A leader also needs approval permission. Manufacturer → Category only, as confirmed by the owner.
+- Normalized vendor duplicate prevention, readable dark select menus/scrollbars, saved builder-column customization, product-form close guards and visible-page exchange-rate refresh.
+- Migration **000019** required before the new API. Preserves primary-team memberships and backfills leaders; no live database changed.
+- **Verification PASS:** disposable PostgreSQL/race suite **151.104s**, response policy tests, **30 frontend tests**, production build/type checks, `go vet ./...`, and `git diff --check`. Existing file-parser bundle-size warning remains (about 509 kB minified); build succeeds.
+- **Browser PASS (fresh isolated data):** contact count 1 → 2; fixed cost SAR 225 with margin 40% → selling price SAR 375; save; dark dropdown; submit → approve → revise to **QT-2026-0001 v2**, preserving prices. Screenshots shown in conversation.
+- **Still open:** unassigned quotes retain legacy role-based approvals; team scheduling/time conflicts need rules; browser-process crash not reproduced; general form-field customization beyond builder columns is not implemented; client's catalog classifications and Wael's follow-ups remain. Automatic FX refresh is page-driven with a daily-rate provider, not a background live feed.
+- Review frontend **http://127.0.0.1:5184**, isolated API **http://127.0.0.1:18089** / database container `g4s-crm-meeting-review`. Temporary credentials and fixture IDs are ignored under `crm-api/tmp/meeting-review/`. Existing local `.claude/` and `outputs/` preserved.
+- **Next:** review the local batch, assign quotation teams and user capabilities for client testing, then follow the existing deployment runbook when deployment is requested.
+
+## Previous task — hardening for the client test server (2026-10-15)
 
 **DONE and committed:**
 - **Dependencies:**

@@ -208,9 +208,9 @@ export const usersService = {
   get: (id: string) =>
     http.get<ApiResponse<AuthUser>>(`/users/${id}`).then((r) => r.data),
   create: (data: Record<string, unknown>) =>
-    http.post<ApiResponse<AuthUser>>('/users', editable(data, ['firstName', 'lastName', 'email', 'password', 'role', 'department', 'phone', 'teamId'])).then((r) => r.data),
+    http.post<ApiResponse<AuthUser>>('/users', editable(data, ['firstName', 'lastName', 'email', 'password', 'role', 'department', 'phone', 'teamId', 'quotePermissions'])).then((r) => r.data),
   update: (id: string, data: Record<string, unknown>) =>
-    http.patch<ApiResponse<AuthUser>>(`/users/${id}`, editable(data, ['firstName', 'lastName', 'email', 'role', 'department', 'phone', 'teamId', 'isActive'])).then((r) => r.data),
+    http.patch<ApiResponse<AuthUser>>(`/users/${id}`, editable(data, ['firstName', 'lastName', 'email', 'role', 'department', 'phone', 'teamId', 'isActive', 'quotePermissions'])).then((r) => r.data),
   delete: (id: string) =>
     http.delete<ApiResponse<null>>(`/users/${id}`).then((r) => r.data),
 }

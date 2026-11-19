@@ -35,6 +35,7 @@ type Quote struct {
 	ClosingText      string       `json:"closingText"`
 	PurchasingNotes  string       `json:"purchasingNotes"`
 	StatementOfWork  string       `json:"statementOfWork"`
+	TeamID           *uuid.UUID   `gorm:"type:uuid" json:"teamId,omitempty"`
 	PriceBookID      *uuid.UUID   `gorm:"type:uuid" json:"priceBookId,omitempty"`
 	InternalNotes    string       `json:"internalNotes"`
 	SoldTo           QuoteAddress `gorm:"serializer:json;type:jsonb" json:"soldTo"`
@@ -71,6 +72,8 @@ type Quote struct {
 	Notes                 string          `json:"notes"`
 	ApprovedByID          *uuid.UUID      `gorm:"type:uuid" json:"approvedById,omitempty"`
 	ApprovedBy            *User           `gorm:"foreignKey:ApprovedByID" json:"approvedBy,omitempty"`
+	AcceptedAt            *time.Time      `json:"acceptedAt,omitempty"`
+	AcceptedAtEstimated   bool            `json:"acceptedAtEstimated"`
 	ApprovedAt            *time.Time      `json:"approvedAt,omitempty"`
 	CreatedByID           *uuid.UUID      `gorm:"type:uuid" json:"createdById,omitempty"`
 	CreatedBy             *User           `gorm:"foreignKey:CreatedByID" json:"createdBy,omitempty"`
@@ -126,23 +129,24 @@ type QuoteLineItem struct {
 	ServiceID          *uuid.UUID `gorm:"type:uuid" json:"serviceId,omitempty"`
 	RecurringServiceID *uuid.UUID `gorm:"type:uuid" json:"recurringServiceId,omitempty"`
 
-	QuoteID          uuid.UUID         `gorm:"type:uuid;not null;index" json:"quoteId"`
-	SiteID           *uuid.UUID        `gorm:"type:uuid" json:"siteId,omitempty"`
-	FulfilmentSource *string           `json:"fulfilmentSource,omitempty"`
-	Category         QuoteLineCategory `gorm:"not null" json:"category"`
-	ProductID        *uuid.UUID        `gorm:"type:uuid" json:"productId,omitempty"`
-	Product          *Product          `gorm:"foreignKey:ProductID" json:"product,omitempty"`
-	SKU              string            `json:"sku"`
-	Description      string            `gorm:"not null" json:"description"`
-	ManufacturerName string            `json:"manufacturerName"`
-	StockAvailable   *int              `json:"stockAvailable,omitempty"`
-	LeadTimeDays     *int              `json:"leadTimeDays,omitempty"`
-	Quantity         float64           `gorm:"not null" json:"quantity"`
-	UnitCost         float64           `json:"unitCost"`
-	UnitPrice        float64           `json:"unitPrice"`
-	LineTotal        float64           `json:"lineTotal"`
-	MarginPercent    float64           `json:"marginPercent"`
-	SortOrder        int               `gorm:"default:0" json:"sortOrder"`
+	SupplierQuoteItemID *uuid.UUID        `gorm:"type:uuid" json:"supplierQuoteItemId,omitempty"`
+	QuoteID             uuid.UUID         `gorm:"type:uuid;not null;index" json:"quoteId"`
+	SiteID              *uuid.UUID        `gorm:"type:uuid" json:"siteId,omitempty"`
+	FulfilmentSource    *string           `json:"fulfilmentSource,omitempty"`
+	Category            QuoteLineCategory `gorm:"not null" json:"category"`
+	ProductID           *uuid.UUID        `gorm:"type:uuid" json:"productId,omitempty"`
+	Product             *Product          `gorm:"foreignKey:ProductID" json:"product,omitempty"`
+	SKU                 string            `json:"sku"`
+	Description         string            `gorm:"not null" json:"description"`
+	ManufacturerName    string            `json:"manufacturerName"`
+	StockAvailable      *int              `json:"stockAvailable,omitempty"`
+	LeadTimeDays        *int              `json:"leadTimeDays,omitempty"`
+	Quantity            float64           `gorm:"not null" json:"quantity"`
+	UnitCost            float64           `json:"unitCost"`
+	UnitPrice           float64           `json:"unitPrice"`
+	LineTotal           float64           `json:"lineTotal"`
+	MarginPercent       float64           `json:"marginPercent"`
+	SortOrder           int               `gorm:"default:0" json:"sortOrder"`
 }
 
 func (i *QuoteLineItem) Calculate() {

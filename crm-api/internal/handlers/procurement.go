@@ -383,6 +383,13 @@ func (h *ProcurementHandler) saveSQ(c *gin.Context, create bool) {
 				return invalid("Only received or under-review quotes can be edited")
 			}
 		}
+		if sq.SourceQuoteID != nil {
+			if req.SourceQuoteID != nil && !sameID(req.SourceQuoteID, sq.SourceQuoteID) {
+				return invalid("A linked supplier quotation must stay with its original customer quotation")
+			}
+			req.SourceQuoteID = sq.SourceQuoteID
+			req.OpportunityID = sq.OpportunityID
+		}
 		if err := optionalExists(tx, &models.Manufacturer{}, req.SupplierID); err != nil {
 			return err
 		}
@@ -448,6 +455,9 @@ func (h *ProcurementHandler) saveSQ(c *gin.Context, create bool) {
 			if err := tx.Create(&sq.Items[i]).Error; err != nil {
 				return err
 			}
+		}
+		if err := recordSupplierPrices(tx, &sq); err != nil {
+			return err
 		}
 		return recordActivity(tx, c, "supplier-quote", sq.ID, "saved")
 	})

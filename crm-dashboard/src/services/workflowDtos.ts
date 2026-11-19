@@ -8,6 +8,7 @@ export interface QuoteAddress {
   contactName: string; company: string; address: string; city: string; country: string; phone: string; email: string
 }
 export interface BuilderLine extends QuoteLineItem {
+  supplierQuoteItemId?: string
   rowType: 'item' | 'heading' | 'comment' | 'subtotal' | 'discount'
   source: 'product' | 'service' | 'recurring' | 'write-in'
   serviceId?: string; recurringServiceId?: string; multiplier: number; discountPercent: number
@@ -34,6 +35,7 @@ export interface BuilderInput {
   lockVersion: number; customerId: string; opportunityId?: string | null; currency: string
   // Omit to keep the quote's price book; null switches to standard pricing.
   priceBookId?: string | null
+  teamId?: string | null
   validUntil?: string | null; discountPercent: number; vatPercent: number; notes: string
   paymentTerms: string; deliveryTerms: string; introductionText: string; closingText: string
   internalNotes: string; purchasingNotes: string; statementOfWork: string; soldTo: QuoteAddress; shipTo: QuoteAddress

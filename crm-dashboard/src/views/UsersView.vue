@@ -25,7 +25,12 @@ const showDeactivate = ref(false)
 const target = ref<AuthUser | null>(null)
 const formError = ref('')
 const reset = ref({password:'', confirmation:''})
-const blank = () => ({firstName:'', lastName:'', email:'', phone:'', role:'sales_executive', department:'sales', teamId:'', password:'', confirmation:'', isActive:true})
+const quoteCapabilities = [['read','View quotations'], ['create','Create quotations'], ['update','Edit draft details and items'], ['pricing','Change selling prices and discounts'], ['view-margins','View costs and margins'], ['compare-prices','Compare other customers’ sale prices'], ['submit','Submit for approval'], ['approve','Approve / return to draft'], ['send','Mark sent'], ['accept','Accept / decline'], ['revise','Create revisions'], ['export','Export quotations'], ['documents','Change quotation attachments'], ['delete','Delete draft quotations']] as const
+function setQuotePermission(key: string, value: string) {
+ if (value === 'inherit') delete form.value.quotePermissions[key]
+ else form.value.quotePermissions[key] = value === 'allow'
+}
+const blank = () => ({quotePermissions: {} as Record<string, boolean>, firstName:'', lastName:'', email:'', phone:'', role:'sales_executive', department:'sales', teamId:'', password:'', confirmation:'', isActive:true})
 const form = ref(blank())
 const filtered = computed(() => users.value.filter(user => `${user.firstName} ${user.lastName} ${user.email}`.toLowerCase().includes(search.value.trim().toLowerCase()) && (!role.value || user.role === role.value) && (!status.value || user.isActive === (status.value === 'active'))))
 const lastAdmin = computed(() => editing.value?.role === 'admin' && editing.value.isActive && users.value.filter(u => u.role === 'admin' && u.isActive).length === 1)
@@ -37,7 +42,7 @@ async function load() {
 onMounted(load)
 function edit(user?: AuthUser) {
  editing.value = user ?? null
- form.value = user ? {...blank(), ...user, phone:user.phone ?? '', teamId:user.teamId ?? ''} : blank()
+ form.value = user ? {...blank(), ...user, phone:user.phone ?? '', teamId:user.teamId ?? '', quotePermissions: {...user.quotePermissions}} : blank()
  formError.value = ''; showEditor.value = true
 }
 async function save() {
@@ -82,7 +87,7 @@ async function confirmDeactivate() {
   </div>
   <p v-if="loading" role="status">Loading users…</p>
   <div v-else-if="filtered.length" class="table-container"><table class="table"><thead><tr><th>Name / email</th><th>Role</th><th>Department</th><th>Team</th><th>Status</th><th>Actions</th></tr></thead><tbody>
-   <tr v-for="user in filtered" :key="user.id"><td><strong>{{ user.firstName }} {{ user.lastName }}</strong><div>{{ user.email }}</div></td><td>{{ roleLabel(user.role) }}</td><td>{{ user.department }}</td><td>{{ teams.find(t => t.id === user.teamId)?.name ?? 'Unassigned' }}</td><td>{{ user.isActive ? 'Active' : 'Inactive' }}</td><td><div class="user-actions"><button class="btn btn-sm" @click="edit(user)">Edit</button><button v-if="user.id !== auth.user?.id" class="btn btn-sm" @click="openReset(user)">Reset password</button><button v-if="user.isActive && user.id !== auth.user?.id" class="btn btn-sm" @click="deactivate(user)">Deactivate</button></div></td></tr>
+   <tr v-for="user in filtered" :key="user.id"><td><strong>{{ user.firstName }} {{ user.lastName }}</strong><div>{{ user.email }}</div></td><td>{{ roleLabel(user.role) }}</td><td>{{ user.department }}</td><td>{{ teams.filter(t => t.members.some(m => m.id === user.id)).map(t => t.name).join(', ') || 'Unassigned' }}</td><td>{{ user.isActive ? 'Active' : 'Inactive' }}</td><td><div class="user-actions"><button class="btn btn-sm" @click="edit(user)">Edit</button><button v-if="user.id !== auth.user?.id" class="btn btn-sm" @click="openReset(user)">Reset password</button><button v-if="user.isActive && user.id !== auth.user?.id" class="btn btn-sm" @click="deactivate(user)">Deactivate</button></div></td></tr>
   </tbody></table></div>
   <p v-else-if="!error">No users match these filters.</p>
   <AppDialog v-model:open="showEditor" :title="editing ? 'Edit user' : 'Add user'" :busy="busy">
@@ -94,7 +99,10 @@ async function confirmDeactivate() {
     <label>Phone<input v-model.trim="form.phone" class="input form-input" type="tel" maxlength="100" /></label>
     <label>Department<select v-model="form.department" class="select form-select"><option v-for="dept in departments" :key="dept">{{ dept }}</option></select></label>
     <label>Role<select v-model="form.role" class="select form-select" :disabled="lastAdmin"><option v-for="[value,label] in roles" :key="value" :value="value">{{ label }}</option></select></label>
-    <label>Team<select v-model="form.teamId" class="select form-select"><option value="">Unassigned</option><option v-for="team in teams" :key="team.id" :value="team.id">{{ team.name }}</option></select></label>
+    <label>Primary team<select v-model="form.teamId" class="select form-select"><option value="">Unassigned</option><option v-for="team in teams" :key="team.id" :value="team.id">{{ team.name }}</option></select></label>
+    <fieldset class="wide permission-grid"><legend>Quotation permissions</legend><p class="wide form-hint">Role default follows the user's role. Explicit Allow or Deny overrides it. A quotation assigned to a team can be approved by its leader or an administrator with approval permission. Manage additional memberships in Teams.</p>
+      <label v-for="[key, label] in quoteCapabilities" :key="key">{{ label }}<select class="select form-select" :value="form.quotePermissions[`quotes:${key}`] === undefined ? 'inherit' : form.quotePermissions[`quotes:${key}`] ? 'allow' : 'deny'" @change="setQuotePermission(`quotes:${key}`, ($event.target as HTMLSelectElement).value)"><option value="inherit">Role default</option><option value="allow">Allow</option><option value="deny">Deny</option></select></label>
+    </fieldset>
     <template v-if="!editing"><label>Password<input v-model="form.password" class="input form-input" type="password" autocomplete="new-password" required minlength="8" maxlength="72" /></label><label>Confirm password<input v-model="form.confirmation" class="input form-input" type="password" autocomplete="new-password" required /></label></template>
     <label v-else class="wide"><input v-model="form.isActive" type="checkbox" :disabled="lastAdmin || editing.id === auth.user?.id" /> Active account</label>
     <p v-if="lastAdmin" class="form-hint wide">At least one active administrator must remain.</p>
@@ -110,10 +118,12 @@ async function confirmDeactivate() {
  </section>
 </template>
 <style scoped>
+.permission-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: var(--space-3); padding: var(--space-4); border: 1px solid var(--color-neutral-200); }
 .user-filters, .user-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); margin-block: var(--space-5); }
 .user-filters { grid-template-columns: 2fr 1fr 1fr; }
 label { display: grid; gap: var(--space-2); font-size: var(--text-sm); }
 .wide { grid-column: 1 / -1; }
 .user-actions { display: flex; gap: var(--space-2); flex-wrap: wrap; }
-@media (max-width: 700px) { .user-filters, .user-form { grid-template-columns: 1fr; } .page-header { align-items: flex-start; flex-wrap: wrap; gap: var(--space-3); } }
+@media (max-width: 700px) { .permission-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: var(--space-3); padding: var(--space-4); border: 1px solid var(--color-neutral-200); }
+.user-filters, .user-form { grid-template-columns: 1fr; } .page-header { align-items: flex-start; flex-wrap: wrap; gap: var(--space-3); } }
 </style>

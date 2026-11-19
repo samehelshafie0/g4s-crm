@@ -73,7 +73,7 @@ func (s *AuthService) Login(email, password string) (*LoginResponse, error) {
 	now := time.Now()
 	s.db.Model(&user).Update("last_login_at", now)
 
-	user.Permissions = middleware.Permissions(user.Role)
+	user.Permissions = middleware.UserPermissions(user)
 	return &LoginResponse{
 		User:         &user,
 		AccessToken:  accessToken,
@@ -106,7 +106,7 @@ func (s *AuthService) Refresh(rawRefreshToken string) (*LoginResponse, error) {
 		if err := tx.Create(refresh).Error; err != nil {
 			return err
 		}
-		user.Permissions = middleware.Permissions(user.Role)
+		user.Permissions = middleware.UserPermissions(user)
 		result = &LoginResponse{User: &user, AccessToken: access, RefreshToken: raw}
 		return nil
 	})

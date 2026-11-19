@@ -277,6 +277,7 @@ func TestFoundation(t *testing.T) {
 	})
 
 	testModuleAPIs(t, db, r, adminToken, customerID)
+	testMeetingWorkflows(t, db, r, adminToken, customerID)
 	testFulfilmentCloseout(t, db, r, adminToken, customerID)
 	testRoleWorkflows(t, db, r, adminToken)
 	testQuoteAppendices(t, db, r, adminToken, customerID, dir)

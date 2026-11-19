@@ -26,7 +26,7 @@ func (h *QuoteHandler) List(c *gin.Context) {
 	var quotes []models.Quote
 	var total int64
 
-	query := h.db.Model(&models.Quote{}).Preload("Customer").Preload("LineItems", func(db *gorm.DB) *gorm.DB { return db.Order("sort_order ASC") })
+	query := quoteScope(h.db, c).Model(&models.Quote{}).Preload("Customer").Preload("LineItems", func(db *gorm.DB) *gorm.DB { return db.Order("sort_order ASC") })
 	if q := c.Query("q"); q != "" {
 		query = query.Where("quote_number ILIKE ?", "%"+q+"%")
 	}
@@ -77,6 +77,7 @@ type quoteLineRequest struct {
 	UnitPrice   float64                  `json:"unitPrice" validate:"gte=0,lte=1000000000"`
 }
 type createQuoteRequest struct {
+	TeamID          *uuid.UUID         `json:"teamId"`
 	PriceBookID     *uuid.UUID         `json:"priceBookId"`
 	CustomerID      uuid.UUID          `json:"customerId" validate:"required"`
 	OpportunityID   *uuid.UUID         `json:"opportunityId"`
@@ -98,6 +99,10 @@ type updateQuoteRequest struct {
 func (h *QuoteHandler) Create(c *gin.Context) {
 	var req createQuoteRequest
 	if !v.BindStrict(c, &req) {
+		return
+	}
+	if !middleware.Can(c, "quotes:pricing") && (len(req.LineItems) > 0 || req.DiscountPercent != 0) {
+		response.Forbidden(c, "Quotation pricing permission is required")
 		return
 	}
 	var quote models.Quote
@@ -145,8 +150,11 @@ func (h *QuoteHandler) Create(c *gin.Context) {
 		if err := eligiblePriceBook(tx, req.PriceBookID, req.CustomerID); err != nil {
 			return errInvalidRelationship
 		}
+		if err := validateQuoteTeam(tx, c, req.TeamID); err != nil {
+			return err
+		}
 		userID := middleware.GetCurrentUserID(c)
-		quote = models.Quote{PriceBookID: req.PriceBookID, QuoteNumber: number, Version: 1, IsCurrent: true, CustomerID: req.CustomerID, OpportunityID: req.OpportunityID, ContractID: req.ContractID, Status: models.QuoteStatusDraft, Currency: req.Currency, DiscountPercent: req.DiscountPercent, VATPercent: 15, Notes: req.Notes, CreatedByID: &userID}
+		quote = models.Quote{TeamID: req.TeamID, PriceBookID: req.PriceBookID, QuoteNumber: number, Version: 1, IsCurrent: true, CustomerID: req.CustomerID, OpportunityID: req.OpportunityID, ContractID: req.ContractID, Status: models.QuoteStatusDraft, Currency: req.Currency, DiscountPercent: req.DiscountPercent, VATPercent: 15, Notes: req.Notes, CreatedByID: &userID}
 		if quote.Currency == "" {
 			quote.Currency = models.CurrencySAR
 		}
@@ -163,6 +171,9 @@ func (h *QuoteHandler) Create(c *gin.Context) {
 			quote.ValidUntil = &date
 		}
 		for index, input := range req.LineItems {
+			if err := validateBookItem(tx, req.PriceBookID, "product", input.ProductID, nil, nil); err != nil {
+				return err
+			}
 			if input.ProductID != nil {
 				var product models.Product
 				if err := tx.First(&product, "id = ?", input.ProductID).Error; err != nil {
@@ -255,6 +266,10 @@ func (h *QuoteHandler) Update(c *gin.Context) {
 	if !v.BindStrict(c, &req) {
 		return
 	}
+	if !middleware.Can(c, "quotes:pricing") && (req.DiscountPercent != nil || req.VATPercent != nil) {
+		response.Forbidden(c, "Quotation pricing permission is required")
+		return
+	}
 	h.mutate(c, models.QuoteStatusDraft, func(tx *gorm.DB, quote *models.Quote) error {
 		if req.Notes != nil {
 			quote.Notes = *req.Notes
@@ -329,6 +344,20 @@ func (h *QuoteHandler) changeStatus(c *gin.Context, from, to models.QuoteStatus)
 			}
 		}
 		quote.Status = to
+		if to == models.QuoteStatusAccepted {
+			now := time.Now()
+			quote.AcceptedAt = &now
+			quote.AcceptedAtEstimated = false
+		}
+		if (to == models.QuoteStatusApproved || (from == models.QuoteStatusPendingApproval && to == models.QuoteStatusDraft)) && quote.TeamID != nil {
+			var team models.Team
+			if err := tx.Where("is_active = true").First(&team, "id = ?", quote.TeamID).Error; err != nil {
+				return err
+			}
+			if middleware.GetCurrentUserRole(c) != models.RoleAdmin && (team.LeaderID == nil || *team.LeaderID != middleware.GetCurrentUserID(c)) {
+				return errQuotePermission
+			}
+		}
 		if to == models.QuoteStatusApproved {
 			userID := middleware.GetCurrentUserID(c)
 			now := time.Now()

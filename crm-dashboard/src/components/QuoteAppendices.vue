@@ -81,7 +81,7 @@ async function upload() {
       <p v-else-if="!matches.length">No supported documents match. Upload one below or change the search.</p>
       <ul v-else class="library-list"><li v-for="doc in matches" :key="doc.id"><div><strong>{{ doc.name }}</strong><p class="form-hint">{{ doc.fileName }} · Version {{ doc.version }}</p></div><button class="btn btn-sm" :disabled="busy || modelValue.length >= 20 || modelValue.some(item => item.documentId === doc.id && item.version === doc.version)" :aria-label="`Include ${doc.name}`" @click="run(()=>pin(doc))"><Plus :size="14" /> Include</button></li></ul>
       <button v-if="error" class="btn btn-sm" :disabled="loading || busy" @click="load">Reload library</button>
-      <form v-if="auth.can('documents:create')" class="appendix-upload" @submit.prevent="upload">
+      <form v-if="auth.can('documents:create') || auth.can('quotes:documents')" class="appendix-upload" @submit.prevent="upload">
         <h3>Upload a new document</h3><p class="form-hint">PDF, PNG/JPG, Word (DOC/DOCX) or Excel (XLS/XLSX). Up to 50 MB per file, 20 files and 100 MB per quote. Word/Excel pages use the file's print layout.</p>
         <label>Document name<input v-model="uploadName" class="input form-input" maxlength="255" :disabled="busy" /></label><label>File<input ref="uploadInput" class="file-input form-input" type="file" accept=".pdf,.png,.jpg,.jpeg,.doc,.docx,.xls,.xlsx" required :disabled="busy" @change="selectedFile = ($event.target as HTMLInputElement).files?.[0]" /></label><button class="btn btn-primary" :disabled="busy || !selectedFile || modelValue.length >= 20"><Upload :size="16" /> {{ busy ? 'Adding document…' : 'Upload and include' }}</button>
       </form>

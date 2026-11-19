@@ -64,9 +64,6 @@ func (h *TeamHandler) save(c *gin.Context, create bool) {
 			if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("is_active = true").First(&leader, "id = ?", item.LeaderID).Error; err != nil {
 				return err
 			}
-			if leader.TeamID != nil && *leader.TeamID != item.ID {
-				return invalid("Leader already belongs to another team")
-			}
 		}
 		if err := tx.Omit(clause.Associations).Save(&item).Error; err != nil {
 			return err
@@ -75,7 +72,7 @@ func (h *TeamHandler) save(c *gin.Context, create bool) {
 			return err
 		}
 		if item.LeaderID != nil {
-			return tx.Model(&models.User{}).Where("id = ?", item.LeaderID).Update("team_id", item.ID).Error
+			return tx.Exec("INSERT INTO team_members(team_id, user_id) VALUES (?, ?) ON CONFLICT DO NOTHING", item.ID, item.LeaderID).Error
 		}
 		return nil
 	})
@@ -100,6 +97,9 @@ func (h *TeamHandler) Delete(c *gin.Context) {
 			return err
 		}
 		if err := tx.Model(&models.User{}).Where("team_id = ?", team.ID).Update("team_id", nil).Error; err != nil {
+			return err
+		}
+		if err := tx.Exec("DELETE FROM team_members WHERE team_id = ?", team.ID).Error; err != nil {
 			return err
 		}
 		return tx.Delete(&team).Error
@@ -389,10 +389,7 @@ func (h *TeamHandler) AddMember(c *gin.Context) {
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&user, "id = ? AND is_active = true", req.UserID).Error; err != nil {
 			return err
 		}
-		if user.TeamID != nil && *user.TeamID != team.ID {
-			return invalid("User already belongs to another team")
-		}
-		return tx.Model(&user).Update("team_id", team.ID).Error
+		return tx.Exec("INSERT INTO team_members(team_id, user_id) VALUES (?, ?) ON CONFLICT DO NOTHING", team.ID, user.ID).Error
 	})
 	if err != nil {
 		apiError(c, err)
@@ -406,12 +403,15 @@ func (h *TeamHandler) RemoveMember(c *gin.Context) {
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&team, "id = ?", c.Param("id")).Error; err != nil {
 			return err
 		}
-		result := tx.Model(&models.User{}).Where("id = ? AND team_id = ?", c.Param("userId"), team.ID).Update("team_id", nil)
+		result := tx.Exec("DELETE FROM team_members WHERE user_id = ? AND team_id = ?", c.Param("userId"), team.ID)
 		if result.Error != nil {
 			return result.Error
 		}
 		if result.RowsAffected != 1 {
 			return gorm.ErrRecordNotFound
+		}
+		if err := tx.Model(&models.User{}).Where("id = ? AND team_id = ?", c.Param("userId"), team.ID).Update("team_id", nil).Error; err != nil {
+			return err
 		}
 		if team.LeaderID != nil && team.LeaderID.String() == c.Param("userId") {
 			return tx.Model(&team).Update("leader_id", nil).Error

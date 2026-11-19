@@ -278,7 +278,7 @@ func (h *ContractHandler) Quotes(c *gin.Context) {
 		if quote.ContractID == nil {
 			role = "origin"
 		}
-		out = append(out, gin.H{"id": quote.ID, "quoteNumber": quote.QuoteNumber, "version": quote.Version, "status": quote.Status, "total": quote.Total, "currency": quote.Currency, "fxRate": quote.FXRate, "createdAt": quote.CreatedAt, "role": role})
+		out = append(out, gin.H{"id": quote.ID, "quoteNumber": quote.QuoteNumber, "teamId": quote.TeamID, "version": quote.Version, "status": quote.Status, "total": quote.Total, "currency": quote.Currency, "fxRate": quote.FXRate, "createdAt": quote.CreatedAt, "role": role})
 	}
 	response.OK(c, out)
 }

@@ -409,7 +409,7 @@ function formatTimestamp(ts: string): string {
         <div class="kpi-top">
           <div>
             <p class="kpi-label">Average Margin</p>
-            <p class="kpi-value" :class="marginClass(avgMargin)">{{ avgMargin.toFixed(1) }}%</p>
+            <p class="kpi-value" :class="marginClass(avgMargin)">{{ auth.can('quotes:view-margins') ? avgMargin.toFixed(1) + '%' : 'Restricted' }}</p>
           </div>
           <div class="kpi-icon kpi-icon--info">
             <TrendingUp :size="22" />
@@ -491,7 +491,7 @@ function formatTimestamp(ts: string): string {
             <td class="text-right whitespace-nowrap font-bold">SAR {{ formatSAR(q.total) }}</td>
             <td class="text-right">
               <span :class="['font-semibold', marginClass(q.marginPercent)]">
-                {{ q.marginPercent.toFixed(1) }}%
+                {{ auth.can('quotes:view-margins') ? (q.marginPercent ?? 0).toFixed(1) + '%' : 'Restricted' }}
               </span>
             </td>
             <td class="text-muted whitespace-nowrap">{{ formatDate(q.validUntil) }}</td>
@@ -616,7 +616,7 @@ function formatTimestamp(ts: string): string {
                         <td class="text-right whitespace-nowrap font-medium">SAR {{ formatSAR(item.lineTotal) }}</td>
                         <td class="text-right">
                           <span :class="['font-semibold', marginClass(item.marginPercent)]">
-                            {{ item.marginPercent.toFixed(1) }}%
+                            {{ auth.can('quotes:view-margins') ? (item.marginPercent ?? 0).toFixed(1) + '%' : 'Restricted' }}
                           </span>
                         </td>
                       </tr>
@@ -651,16 +651,16 @@ function formatTimestamp(ts: string): string {
               <div class="view-totals-divider" />
               <div class="view-totals-row">
                 <span>Total Cost</span>
-                <span class="text-mono">SAR {{ formatSAR(viewingQuote.totalCost) }}</span>
+                <span class="text-mono">{{ auth.can('quotes:view-margins') ? 'SAR ' + formatSAR(viewingQuote.totalCost) : 'Restricted' }}</span>
               </div>
               <div class="view-totals-row">
                 <span>Margin Amount</span>
-                <span class="text-mono text-success">SAR {{ formatSAR(viewingQuote.marginAmount) }}</span>
+                <span class="text-mono text-success">{{ auth.can('quotes:view-margins') ? 'SAR ' + formatSAR(viewingQuote.marginAmount) : 'Restricted' }}</span>
               </div>
               <div class="view-totals-row">
                 <span>Margin %</span>
                 <span :class="['font-bold', marginClass(viewingQuote.marginPercent)]">
-                  {{ viewingQuote.marginPercent.toFixed(1) }}%
+                  {{ auth.can('quotes:view-margins') ? (viewingQuote.marginPercent ?? 0).toFixed(1) + '%' : 'Restricted' }}
                 </span>
               </div>
             </div>

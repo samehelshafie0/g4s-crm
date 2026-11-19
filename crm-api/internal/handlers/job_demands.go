@@ -31,6 +31,8 @@ type jobDemand struct {
 }
 
 func (h *ProcurementHandler) JobDemands(c *gin.Context) {
+	// This DTO contains operational quantities, never commercial quote pricing.
+	c.Set("operationalQuoteResponse", true)
 	params := pagination.GetParams(c, "quote_number")
 	query := h.db.Model(&models.Quote{}).Where("status = ? AND is_current", models.QuoteStatusAccepted)
 	if id := c.Param("id"); id != "" {

@@ -64,34 +64,40 @@ func (h *UserHandler) Get(c *gin.Context) {
 
 func (h *UserHandler) Create(c *gin.Context) {
 	var req struct {
-		FirstName  string            `json:"firstName" validate:"required"`
-		LastName   string            `json:"lastName" validate:"required"`
-		Email      string            `json:"email" validate:"required,email"`
-		Password   string            `json:"password" validate:"required,min=8,max=72"`
-		Role       models.UserRole   `json:"role" validate:"required,oneof=admin sales_manager sales_executive pre_sales procurement_manager procurement_officer warehouse_manager project_manager viewer"`
-		Department models.Department `json:"department" validate:"required,oneof=sales pre-sales technical support marketing management operations"`
-		Phone      string            `json:"phone" validate:"max=100"`
-		TeamID     *uuid.UUID        `json:"teamId"`
+		FirstName        string            `json:"firstName" validate:"required"`
+		LastName         string            `json:"lastName" validate:"required"`
+		Email            string            `json:"email" validate:"required,email"`
+		Password         string            `json:"password" validate:"required,min=8,max=72"`
+		Role             models.UserRole   `json:"role" validate:"required,oneof=admin sales_manager sales_executive pre_sales procurement_manager procurement_officer warehouse_manager project_manager viewer"`
+		Department       models.Department `json:"department" validate:"required,oneof=sales pre-sales technical support marketing management operations"`
+		Phone            string            `json:"phone" validate:"max=100"`
+		TeamID           *uuid.UUID        `json:"teamId"`
+		QuotePermissions map[string]bool   `json:"quotePermissions"`
 	}
 	if !v.BindStrict(c, &req) {
 		return
 	}
 
+	if err := validateQuotePermissions(req.QuotePermissions); err != nil {
+		apiError(c, err)
+		return
+	}
 	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), 12)
 	if err != nil {
 		apiError(c, err)
 		return
 	}
 	user := &models.User{
-		FirstName:    req.FirstName,
-		LastName:     req.LastName,
-		Email:        strings.ToLower(strings.TrimSpace(req.Email)),
-		PasswordHash: string(hash),
-		Role:         req.Role,
-		Department:   req.Department,
-		Phone:        req.Phone,
-		IsActive:     true,
-		TeamID:       req.TeamID,
+		FirstName:        req.FirstName,
+		LastName:         req.LastName,
+		Email:            strings.ToLower(strings.TrimSpace(req.Email)),
+		PasswordHash:     string(hash),
+		Role:             req.Role,
+		Department:       req.Department,
+		Phone:            req.Phone,
+		IsActive:         true,
+		TeamID:           req.TeamID,
+		QuotePermissions: req.QuotePermissions,
 	}
 
 	if err := h.db.Transaction(func(tx *gorm.DB) error {
@@ -129,7 +135,6 @@ func (h *UserHandler) saveUser(c *gin.Context, profile, deactivate bool) {
 			return err
 		}
 		wasAdmin := user.Role == models.RoleAdmin && user.IsActive
-		originalTeam := user.TeamID
 		if deactivate {
 			user.IsActive = false
 		} else {
@@ -138,17 +143,21 @@ func (h *UserHandler) saveUser(c *gin.Context, profile, deactivate bool) {
 				fields["role"] = roleRule
 				fields["department"] = departmentRule
 				fields["teamId"] = ""
+				fields["quotePermissions"] = ""
 				fields["isActive"] = ""
 			}
 			if !bindFields(c, &user, fields) {
 				return invalid("Invalid user")
 			}
 		}
+		if err := validateQuotePermissions(user.QuotePermissions); err != nil {
+			return err
+		}
 		user.Email = strings.ToLower(strings.TrimSpace(user.Email))
 		if err := optionalExists(tx, &models.Team{}, user.TeamID); err != nil {
 			return err
 		}
-		if originalTeam != nil && (user.TeamID == nil || *originalTeam != *user.TeamID || !user.IsActive) {
+		if !user.IsActive {
 			var leaders int64
 			if err := tx.Model(&models.Team{}).Where("leader_id = ?", user.ID).Count(&leaders).Error; err != nil {
 				return err
@@ -180,7 +189,7 @@ func (h *UserHandler) saveUser(c *gin.Context, profile, deactivate bool) {
 	if deactivate {
 		response.NoContent(c)
 	} else {
-		user.Permissions = middleware.Permissions(user.Role)
+		user.Permissions = middleware.UserPermissions(user)
 		response.OK(c, user)
 	}
 }
@@ -237,4 +246,13 @@ func (h *UserHandler) Lookup(c *gin.Context) {
 	}
 	query.Select("id, first_name, last_name, email, role").Find(&users)
 	response.OK(c, users)
+}
+
+func validateQuotePermissions(permissions map[string]bool) error {
+	for permission := range permissions {
+		if !middleware.ValidQuotePermission(permission) {
+			return invalid("Unknown quotation permission: " + permission)
+		}
+	}
+	return nil
 }

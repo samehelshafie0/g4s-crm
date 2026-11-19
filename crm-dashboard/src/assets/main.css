@@ -2109,3 +2109,9 @@ h6 { font-size: var(--text-base); }
     border: 1px solid #ddd;
   }
 }
+
+/* Native menus must use the same surface and text tokens as their trigger. */
+select, option, optgroup { color: var(--color-neutral-900); background-color: var(--content-surface); }
+:root { color-scheme: light; scrollbar-color: var(--color-neutral-400) var(--content-bg); }
+[data-theme="dark"] { color-scheme: dark; }
+html { scrollbar-gutter: stable; }

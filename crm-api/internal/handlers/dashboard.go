@@ -18,13 +18,13 @@ func (h *DashboardHandler) KPIs(c *gin.Context) {
 	var totalRevenue, openQuotesValue, undeliveredValue float64
 	var activeOpps, openQuotes, activeContracts, expiringContracts, undelivered int64
 
-	h.db.Model(&models.Quote{}).Where("status = 'accepted'").Select("COALESCE(SUM(total * fx_rate), 0)").Scan(&totalRevenue)
+	quoteScope(h.db, c).Model(&models.Quote{}).Where("status = 'accepted'").Select("COALESCE(SUM(total * fx_rate), 0)").Scan(&totalRevenue)
 	h.db.Model(&models.Opportunity{}).Where("stage NOT IN ('closed-won','closed-lost')").Count(&activeOpps)
-	h.db.Model(&models.Quote{}).Where("is_current AND status IN ('draft','pending-approval','approved','sent')").Count(&openQuotes)
-	h.db.Model(&models.Quote{}).Where("is_current AND status IN ('draft','pending-approval','approved','sent')").Select("COALESCE(SUM(total * fx_rate), 0)").Scan(&openQuotesValue)
+	quoteScope(h.db, c).Model(&models.Quote{}).Where("is_current AND status IN ('draft','pending-approval','approved','sent')").Count(&openQuotes)
+	quoteScope(h.db, c).Model(&models.Quote{}).Where("is_current AND status IN ('draft','pending-approval','approved','sent')").Select("COALESCE(SUM(total * fx_rate), 0)").Scan(&openQuotesValue)
 	// Won but not yet handed over: what the business owes its customers.
 	h.db.Model(&models.Opportunity{}).Where("stage = 'closed-won' AND delivery_status NOT IN ('completed','cancelled')").Count(&undelivered)
-	h.db.Model(&models.Quote{}).Joins("JOIN opportunities o ON o.id = quotes.opportunity_id AND o.deleted_at IS NULL").
+	quoteScope(h.db, c).Model(&models.Quote{}).Joins("JOIN opportunities o ON o.id = quotes.opportunity_id AND o.deleted_at IS NULL").
 		Where("quotes.status = 'accepted' AND o.stage = 'closed-won' AND o.delivery_status NOT IN ('completed','cancelled')").
 		Select("COALESCE(SUM(quotes.total * quotes.fx_rate), 0)").Scan(&undeliveredValue)
 	h.db.Model(&models.Contract{}).Where("status = 'active'").Count(&activeContracts)
@@ -68,7 +68,7 @@ func (h *DashboardHandler) TopCustomers(c *gin.Context) {
 		QuoteCount   int64   `json:"quoteCount"`
 	}
 	var results []TopCustomer
-	h.db.Model(&models.Quote{}).
+	quoteScope(h.db, c).Model(&models.Quote{}).
 		Select("customer_id, customers.company_name, SUM(total * fx_rate) as total_revenue, COUNT(*) as quote_count").
 		Joins("JOIN customers ON customers.id = quotes.customer_id").
 		Where("quotes.status = 'accepted' AND customers.deleted_at IS NULL").
@@ -94,7 +94,7 @@ func (h *DashboardHandler) Alerts(c *gin.Context) {
 	}
 
 	var pendingApprovals int64
-	h.db.Model(&models.Quote{}).Where("is_current AND status = 'pending-approval'").Count(&pendingApprovals)
+	quoteScope(h.db, c).Model(&models.Quote{}).Where("is_current AND status = 'pending-approval'").Count(&pendingApprovals)
 	if pendingApprovals > 0 {
 		alerts = append(alerts, gin.H{
 			"type": "pending_approvals", "severity": "action",
@@ -133,7 +133,7 @@ func (h *DashboardHandler) SalesPerformance(c *gin.Context) {
 		WinRate       float64 `json:"winRate"`
 	}
 	items := []entry{}
-	err := h.db.Model(&models.Quote{}).Select("users.first_name || ' ' || users.last_name AS name, COUNT(*) AS quotes_created, COUNT(*) FILTER (WHERE quotes.status = 'accepted') AS quotes_won, COALESCE(SUM(quotes.total * quotes.fx_rate) FILTER (WHERE quotes.status = 'accepted'),0) AS revenue").Joins("JOIN users ON users.id=quotes.created_by_id AND users.deleted_at IS NULL").Where("quotes.is_current AND quotes.created_at >= date_trunc('quarter', CURRENT_DATE)").Group("users.id,users.first_name,users.last_name").Order("revenue DESC").Scan(&items).Error
+	err := quoteScope(h.db, c).Model(&models.Quote{}).Select("users.first_name || ' ' || users.last_name AS name, COUNT(*) AS quotes_created, COUNT(*) FILTER (WHERE quotes.status = 'accepted') AS quotes_won, COALESCE(SUM(quotes.total * quotes.fx_rate) FILTER (WHERE quotes.status = 'accepted'),0) AS revenue").Joins("JOIN users ON users.id=quotes.created_by_id AND users.deleted_at IS NULL").Where("quotes.is_current AND quotes.created_at >= date_trunc('quarter', CURRENT_DATE)").Group("users.id,users.first_name,users.last_name").Order("revenue DESC").Scan(&items).Error
 	if err != nil {
 		apiError(c, err)
 		return

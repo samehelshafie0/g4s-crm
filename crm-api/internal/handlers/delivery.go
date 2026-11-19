@@ -172,6 +172,8 @@ type orderedLine struct {
 // is held in stock, what is on order and what is still open. It reads the
 // accepted version when there is one, otherwise the current version as a plan.
 func (h *OpportunityHandler) Fulfilment(c *gin.Context) {
+	// This DTO contains operational quantities, never commercial quote pricing.
+	c.Set("operationalQuoteResponse", true)
 	var opportunity models.Opportunity
 	if err := h.db.First(&opportunity, "id = ?", c.Param("id")).Error; err != nil {
 		apiError(c, err)

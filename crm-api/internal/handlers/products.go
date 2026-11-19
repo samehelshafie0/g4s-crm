@@ -7,6 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
+	"strings"
 	"time"
 )
 
@@ -181,7 +182,19 @@ func (h *ProductHandler) SaveVendor(c *gin.Context) {
 	item.VendorName = name
 	now := time.Now()
 	item.LastQuoteDate = &now
-	if err := h.db.Save(&item).Error; err != nil {
+	if err := h.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Exec("SELECT pg_advisory_xact_lock(hashtextextended(?, 0))", "product-vendor:"+product.ID.String()+":"+strings.ToLower(item.VendorName)).Error; err != nil {
+			return err
+		}
+		var count int64
+		if err := tx.Model(&models.ProductVendorEntry{}).Where("product_id = ? AND lower(btrim(vendor_name)) = lower(?) AND lower(btrim(vendor_sku)) = lower(?) AND currency = ? AND id <> ?", product.ID, item.VendorName, strings.TrimSpace(item.VendorSKU), item.Currency, item.ID).Count(&count).Error; err != nil {
+			return err
+		}
+		if count > 0 {
+			return errDuplicateVendor
+		}
+		return tx.Save(&item).Error
+	}); err != nil {
 		apiError(c, err)
 		return
 	}

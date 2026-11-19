@@ -55,12 +55,28 @@ func (h *ManufacturerHandler) save(c *gin.Context, create bool) {
 	if !bindFields(c, &item, map[string]string{"name": "required,max=255", "code": "required,max=50", "country": "max=100", "contactEmail": "omitempty,email,max=255", "contactPhone": "max=100", "website": "omitempty,http_url", "vendorType": "required,oneof=manufacturer supplier both", "isActive": ""}) {
 		return
 	}
-	active := item.IsActive
-	if err := h.db.Omit(clause.Associations).Save(&item).Error; err != nil {
-		apiError(c, err)
+	item.Name = strings.Join(strings.Fields(item.Name), " ")
+	if item.Name == "" {
+		response.BadRequest(c, "Name is required")
 		return
 	}
-	if err := h.db.Model(&item).Update("is_active", active).Error; err != nil {
+	active := item.IsActive
+	if err := h.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Exec("SELECT pg_advisory_xact_lock(hashtextextended(?, 0))", "vendor:"+strings.ToLower(item.Name)).Error; err != nil {
+			return err
+		}
+		var count int64
+		if err := tx.Model(&models.Manufacturer{}).Where("lower(regexp_replace(btrim(name), '\\s+', ' ', 'g')) = lower(?) AND id <> ?", item.Name, item.ID).Count(&count).Error; err != nil {
+			return err
+		}
+		if count > 0 {
+			return errDuplicateVendor
+		}
+		if err := tx.Omit(clause.Associations).Save(&item).Error; err != nil {
+			return err
+		}
+		return tx.Model(&item).Update("is_active", active).Error
+	}); err != nil {
 		apiError(c, err)
 		return
 	}

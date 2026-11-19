@@ -103,8 +103,7 @@ func Authorize(permission string) gin.HandlerFunc {
 			return
 		}
 
-		perms, exists := rolePermissions[role]
-		if !exists || !perms[permission] {
+		if !Can(c, permission) {
 			response.Forbidden(c, "You do not have permission to perform this action")
 			c.Abort()
 			return
@@ -125,7 +124,7 @@ func AuthorizeAny(permissions ...string) gin.HandlerFunc {
 			return
 		}
 		for _, permission := range permissions {
-			if HasPermission(role, permission) {
+			if Can(c, permission) {
 				c.Next()
 				return
 			}
@@ -138,7 +137,13 @@ func AuthorizeAny(permissions ...string) gin.HandlerFunc {
 // HasPermission checks if a role has a given permission (for use in services).
 func HasPermission(role models.UserRole, permission string) bool {
 	perms, exists := rolePermissions[role]
-	return exists && perms[permission]
+	if exists && perms[permission] {
+		return true
+	}
+	if inherited, ok := QuotePermissionDefaults[permission]; ok {
+		return exists && perms[inherited]
+	}
+	return false
 }
 
 // Permissions is the same authoritative policy used by Authorize.
@@ -149,6 +154,63 @@ func Permissions(role models.UserRole) []string {
 			permissions = append(permissions, permission)
 		}
 	}
+	for permission := range QuotePermissionDefaults {
+		if HasPermission(role, permission) {
+			permissions = append(permissions, permission)
+		}
+	}
 	sort.Strings(permissions)
 	return permissions
+}
+
+// Existing roles retain their behavior until an administrator sets an override.
+var QuotePermissionDefaults = map[string]string{
+	"quotes:submit": "quotes:update", "quotes:send": "quotes:update",
+	"quotes:accept": "quotes:update", "quotes:revise": "quotes:create",
+	"quotes:pricing": "quotes:update", "quotes:view-margins": "products:read",
+	"quotes:documents": "quotes:update", "quotes:compare-prices": "quotes:read",
+}
+
+func ValidQuotePermission(key string) bool {
+	if _, ok := QuotePermissionDefaults[key]; ok {
+		return true
+	}
+	switch key {
+	case "quotes:read", "quotes:create", "quotes:update", "quotes:delete", "quotes:approve", "quotes:export":
+		return true
+	}
+	return false
+}
+func UserCan(user models.User, permission string) bool {
+	if allowed, exists := user.QuotePermissions[permission]; exists && ValidQuotePermission(permission) {
+		return allowed
+	}
+	return HasPermission(user.Role, permission)
+}
+func UserPermissions(user models.User) []string {
+	found := map[string]bool{}
+	for _, permission := range Permissions(user.Role) {
+		found[permission] = true
+	}
+	for permission, allowed := range user.QuotePermissions {
+		if ValidQuotePermission(permission) {
+			found[permission] = allowed
+		}
+	}
+	out := []string{}
+	for permission, allowed := range found {
+		if allowed {
+			out = append(out, permission)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+func Can(c *gin.Context, permission string) bool {
+	if value, ok := c.Get("currentUser"); ok {
+		if user, ok := value.(models.User); ok {
+			return UserCan(user, permission)
+		}
+	}
+	return HasPermission(GetCurrentUserRole(c), permission)
 }
